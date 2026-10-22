@@ -1,0 +1,22 @@
+{
+  "name": "eka-hosting",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI website builder with a drag-and-drop editor and fast static hosting for customer sites.",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
+    "compression": "^1.8.2",
+    "express": "^4.22.3",
+    "sharp": "^0.35.5"
+  }
+}

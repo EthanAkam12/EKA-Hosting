@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-size='11' font-weight='800' text-anchor='middle' fill='white' font-family='sans-serif'%3EEKA%3C/text%3E%3C/svg%3E">
+<title>Log in · EKA Hosting</title>
+<style>
+  :root { --brand: #4f46e5; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1c2230; background: radial-gradient(circle at 20% 10%, #eef0ff, #f5f6f8 55%); }
+  form { width: min(360px, 100%); background: #fff; padding: 32px; border-radius: 14px; box-shadow: 0 12px 40px -12px rgba(16,24,40,.25); display: grid; gap: 14px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .logo { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--brand); color: #fff; font-weight: 800; margin-bottom: 8px; }
+  label { font-weight: 600; font-size: 13px; }
+  input { width: 100%; padding: 10px 12px; border: 1px solid #cfd4dc; border-radius: 8px; font: inherit; margin-top: 6px; }
+  input:focus { outline: 2px solid var(--brand); border-color: transparent; }
+  button { padding: 11px; border: 0; border-radius: 8px; background: var(--brand); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .6; }
+  .err { color: #b91c1c; font-size: 14px; min-height: 1.5em; margin: 0; }
+  p.sub { margin: 0; color: #6b7385; }
+</style>
+</head>
+<body>
+<form id="f">
+  <div><span class="logo">EKA</span><h1>EKA Hosting</h1><p class="sub">Log in to manage your customers' websites.</p></div>
+  <label>Password<input id="pw" type="password" autocomplete="current-password" required autofocus></label>
+  <button id="go">Log in</button>
+  <p class="err" id="err" role="alert"></p>
+</form>
+<script>
+  const f = document.getElementById("f"), go = document.getElementById("go"), err = document.getElementById("err");
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    go.disabled = true; err.textContent = "";
+    try {
+      const res = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: document.getElementById("pw").value }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Login failed");
+      location.href = "/admin";
+    } catch (e2) { err.textContent = e2.message; go.disabled = false; }
+  });
+</script>
+</body>
+</html>

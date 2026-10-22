@@ -1,0 +1,479 @@
+// Site document model shared by the server, the AI layer and the editor.
+//
+// A site is plain JSON:
+//   site.theme      colours, fonts, corner radius
+//   site.header     logo + nav (nav links are built from pages unless overridden)
+//   site.footer     footer text + links
+//   site.pages[]    each page has sections[]
+//   section         { id, type: "section", props, columns: [{ id, blocks: [] }] }
+//   block           { id, type, props }
+//
+// normalizeSite() is the single gatekeeper: everything that comes from the AI,
+// the editor or disk passes through it, so unknown block types and bad values
+// never reach the renderer.
+
+export const SCHEMA_VERSION = 1;
+
+export function uid(prefix = "b") {
+  const bytes = new Uint8Array(6);
+  globalThis.crypto.getRandomValues(bytes);
+  return prefix + "_" + Array.from(bytes, (b) => (b % 36).toString(36)).join("");
+}
+
+export const FONT_CHOICES = {
+  system: { label: "System (fastest)", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  serif: { label: "Classic serif", stack: 'Georgia, Cambria, "Times New Roman", serif' },
+  rounded: { label: "Rounded", stack: 'ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif' },
+  mono: { label: "Monospace", stack: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' },
+  // Web fonts: loaded from Google Fonts with display=swap. One extra request each.
+  inter: { label: "Inter", stack: '"Inter", system-ui, sans-serif', google: "Inter:wght@400;600;700" },
+  poppins: { label: "Poppins", stack: '"Poppins", system-ui, sans-serif', google: "Poppins:wght@400;600;700" },
+  playfair: { label: "Playfair Display", stack: '"Playfair Display", Georgia, serif', google: "Playfair+Display:wght@400;700" },
+  lora: { label: "Lora", stack: '"Lora", Georgia, serif', google: "Lora:wght@400;600;700" },
+  montserrat: { label: "Montserrat", stack: '"Montserrat", system-ui, sans-serif', google: "Montserrat:wght@400;600;700" },
+  dmsans: { label: "DM Sans", stack: '"DM Sans", system-ui, sans-serif', google: "DM+Sans:wght@400;600;700" },
+};
+
+export const DEFAULT_THEME = {
+  colors: {
+    primary: "#2563eb",
+    accent: "#f59e0b",
+    background: "#ffffff",
+    surface: "#f4f6fb",
+    text: "#111827",
+    muted: "#6b7280",
+    dark: "#0f172a",
+  },
+  fonts: { heading: "system", body: "system" },
+  radius: 10,
+};
+
+// ---------------------------------------------------------------------------
+// Block definitions. `fields` drives the editor's property panel; `defaults`
+// is what a freshly dropped block looks like.
+// ---------------------------------------------------------------------------
+
+const ALIGN = { type: "select", options: ["left", "center", "right"] };
+
+export const BLOCKS = {
+  heading: {
+    label: "Heading", icon: "H", group: "Basic",
+    defaults: () => ({ text: "Your heading here", level: 2, align: "left" }),
+    fields: [
+      { key: "text", label: "Text", type: "text" },
+      { key: "level", label: "Size", type: "select", options: [1, 2, 3, 4], labels: ["H1 – Page title", "H2 – Section", "H3 – Sub-heading", "H4 – Small"] },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  text: {
+    label: "Text", icon: "¶", group: "Basic",
+    defaults: () => ({ html: "<p>Write something great about this business.</p>", align: "left" }),
+    fields: [
+      { key: "html", label: "Text", type: "richtext" },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  buttons: {
+    label: "Buttons", icon: "▭", group: "Basic",
+    defaults: () => ({ items: [{ text: "Get in touch", href: "#contact", style: "primary" }], align: "left" }),
+    fields: [
+      { key: "items", label: "Buttons", type: "list", itemLabel: "text", itemDefaults: () => ({ text: "Button", href: "#", style: "primary" }), itemFields: [
+        { key: "text", label: "Label", type: "text" },
+        { key: "href", label: "Link", type: "url" },
+        { key: "style", label: "Style", type: "select", options: ["primary", "secondary", "outline", "light"] },
+      ] },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  image: {
+    label: "Image", icon: "▣", group: "Basic",
+    defaults: () => ({ src: "", alt: "", ratio: "auto", rounded: true, caption: "" }),
+    fields: [
+      { key: "src", label: "Image", type: "image" },
+      { key: "alt", label: "Alt text (describe the image)", type: "text" },
+      { key: "ratio", label: "Shape", type: "select", options: ["auto", "16:9", "4:3", "1:1", "3:4"] },
+      { key: "rounded", label: "Rounded corners", type: "checkbox" },
+      { key: "caption", label: "Caption", type: "text" },
+    ],
+  },
+  list: {
+    label: "List", icon: "☰", group: "Basic",
+    defaults: () => ({ items: ["First point", "Second point", "Third point"], icon: "check" }),
+    fields: [
+      { key: "items", label: "Items", type: "lines" },
+      { key: "icon", label: "Bullet", type: "select", options: ["check", "dot", "number", "none"] },
+    ],
+  },
+  card: {
+    label: "Card", icon: "▤", group: "Content",
+    defaults: () => ({ icon: "★", image: "", title: "Feature title", text: "A short description of this feature or service.", linkText: "", href: "", style: "surface", align: "left" }),
+    fields: [
+      { key: "icon", label: "Icon (emoji)", type: "text" },
+      { key: "image", label: "Image", type: "image" },
+      { key: "title", label: "Title", type: "text" },
+      { key: "text", label: "Text", type: "textarea" },
+      { key: "linkText", label: "Link text", type: "text" },
+      { key: "href", label: "Link", type: "url" },
+      { key: "style", label: "Style", type: "select", options: ["surface", "outline", "plain", "shadow"] },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  pricing: {
+    label: "Price box", icon: "£", group: "Content",
+    defaults: () => ({ name: "Standard", price: "£49", period: "/month", features: ["Feature one", "Feature two"], buttonText: "Choose plan", href: "#contact", featured: false }),
+    fields: [
+      { key: "name", label: "Plan name", type: "text" },
+      { key: "price", label: "Price", type: "text" },
+      { key: "period", label: "Period", type: "text" },
+      { key: "features", label: "Features", type: "lines" },
+      { key: "buttonText", label: "Button", type: "text" },
+      { key: "href", label: "Button link", type: "url" },
+      { key: "featured", label: "Highlight this plan", type: "checkbox" },
+    ],
+  },
+  testimonial: {
+    label: "Testimonial", icon: "❝", group: "Content",
+    defaults: () => ({ quote: "Fantastic service from start to finish. Highly recommended!", name: "Happy customer", role: "", image: "", rating: 5 }),
+    fields: [
+      { key: "quote", label: "Quote", type: "textarea" },
+      { key: "name", label: "Name", type: "text" },
+      { key: "role", label: "Role / company", type: "text" },
+      { key: "image", label: "Photo", type: "image" },
+      { key: "rating", label: "Stars", type: "select", options: [0, 1, 2, 3, 4, 5] },
+    ],
+  },
+  stats: {
+    label: "Stats", icon: "#", group: "Content",
+    defaults: () => ({ items: [{ value: "10+", label: "Years experience" }, { value: "500", label: "Happy clients" }, { value: "24/7", label: "Support" }] }),
+    fields: [
+      { key: "items", label: "Stats", type: "list", itemLabel: "label", itemDefaults: () => ({ value: "100", label: "Label" }), itemFields: [
+        { key: "value", label: "Number", type: "text" },
+        { key: "label", label: "Label", type: "text" },
+      ] },
+    ],
+  },
+  faq: {
+    label: "FAQ", icon: "?", group: "Content",
+    defaults: () => ({ items: [{ q: "What areas do you cover?", a: "We cover the whole city and surrounding areas." }, { q: "How do I book?", a: "Use the contact form or give us a call." }] }),
+    fields: [
+      { key: "items", label: "Questions", type: "list", itemLabel: "q", itemDefaults: () => ({ q: "Question?", a: "Answer." }), itemFields: [
+        { key: "q", label: "Question", type: "text" },
+        { key: "a", label: "Answer", type: "textarea" },
+      ] },
+    ],
+  },
+  gallery: {
+    label: "Gallery", icon: "▦", group: "Media",
+    defaults: () => ({ images: [], columns: 3 }),
+    fields: [
+      { key: "images", label: "Images", type: "list", itemLabel: "alt", itemDefaults: () => ({ src: "", alt: "" }), itemFields: [
+        { key: "src", label: "Image", type: "image" },
+        { key: "alt", label: "Alt text", type: "text" },
+      ] },
+      { key: "columns", label: "Columns", type: "select", options: [2, 3, 4] },
+    ],
+  },
+  video: {
+    label: "Video", icon: "▶", group: "Media",
+    defaults: () => ({ url: "", title: "Video" }),
+    fields: [
+      { key: "url", label: "YouTube or Vimeo link", type: "url" },
+      { key: "title", label: "Title (for accessibility)", type: "text" },
+    ],
+  },
+  map: {
+    label: "Map", icon: "⌖", group: "Media",
+    defaults: () => ({ address: "London, UK", height: 320 }),
+    fields: [
+      { key: "address", label: "Address", type: "text" },
+      { key: "height", label: "Height (px)", type: "number" },
+    ],
+  },
+  form: {
+    label: "Contact form", icon: "✉", group: "Content",
+    defaults: () => ({
+      fields: [
+        { label: "Name", type: "text", required: true },
+        { label: "Email", type: "email", required: true },
+        { label: "Message", type: "textarea", required: true },
+      ],
+      submitText: "Send message",
+      successMessage: "Thanks! We'll be in touch soon.",
+    }),
+    fields: [
+      { key: "fields", label: "Fields", type: "list", itemLabel: "label", itemDefaults: () => ({ label: "Phone", type: "tel", required: false }), itemFields: [
+        { key: "label", label: "Label", type: "text" },
+        { key: "type", label: "Type", type: "select", options: ["text", "email", "tel", "textarea"] },
+        { key: "required", label: "Required", type: "checkbox" },
+      ] },
+      { key: "submitText", label: "Button text", type: "text" },
+      { key: "successMessage", label: "Thank-you message", type: "text" },
+    ],
+  },
+  spacer: {
+    label: "Spacer", icon: "↕", group: "Layout",
+    defaults: () => ({ size: 32 }),
+    fields: [{ key: "size", label: "Height (px)", type: "number" }],
+  },
+  divider: {
+    label: "Divider", icon: "—", group: "Layout",
+    defaults: () => ({}),
+    fields: [],
+  },
+  html: {
+    label: "Custom code", icon: "</>", group: "Layout",
+    defaults: () => ({ code: "<div style=\"padding:1rem;border:1px dashed currentColor\">Custom HTML</div>" }),
+    fields: [{ key: "code", label: "HTML (rendered as-is)", type: "code" }],
+  },
+};
+
+export const SECTION_FIELDS = [
+  { key: "layout", label: "Columns", type: "select", options: ["1", "1-1", "2-1", "1-2", "1-1-1", "1-1-1-1"], labels: ["1 column", "2 equal", "2 (wide left)", "2 (wide right)", "3 equal", "4 equal"] },
+  { key: "background", label: "Background", type: "select", options: ["default", "surface", "primary", "dark", "image"] },
+  { key: "image", label: "Background image", type: "image", showIf: { background: "image" } },
+  { key: "overlay", label: "Darken image (%)", type: "number", showIf: { background: "image" } },
+  { key: "padding", label: "Spacing", type: "select", options: ["none", "sm", "md", "lg", "xl"] },
+  { key: "width", label: "Content width", type: "select", options: ["narrow", "normal", "wide", "full"] },
+  { key: "align", label: "Text align", type: "select", options: ["left", "center"] },
+  { key: "valign", label: "Vertical align", type: "select", options: ["top", "center"] },
+  { key: "minHeight", label: "Tall section (hero)", type: "checkbox" },
+  { key: "anchor", label: "Anchor id (for #links)", type: "text" },
+];
+
+export const SECTION_DEFAULTS = () => ({
+  layout: "1", background: "default", image: "", overlay: 45, padding: "lg",
+  width: "normal", align: "left", valign: "top", minHeight: false, anchor: "",
+});
+
+export const LAYOUT_COLUMNS = { "1": 1, "1-1": 2, "2-1": 2, "1-2": 2, "1-1-1": 3, "1-1-1-1": 4 };
+
+// ---------------------------------------------------------------------------
+// Constructors
+// ---------------------------------------------------------------------------
+
+export function createBlock(type, props = {}) {
+  const def = BLOCKS[type];
+  if (!def) throw new Error(`Unknown block type: ${type}`);
+  return { id: uid("b"), type, props: { ...def.defaults(), ...props } };
+}
+
+export function createSection(props = {}, columnBlocks = null) {
+  const p = { ...SECTION_DEFAULTS(), ...props };
+  const count = LAYOUT_COLUMNS[p.layout] || 1;
+  const columns = Array.from({ length: count }, (_, i) => ({
+    id: uid("c"),
+    blocks: (columnBlocks && columnBlocks[i]) || [],
+  }));
+  return { id: uid("s"), type: "section", props: p, columns };
+}
+
+export function createPage(title = "New page", slug = "") {
+  return {
+    id: uid("p"),
+    title,
+    slug: slug || slugify(title),
+    seo: { title: "", description: "" },
+    sections: [],
+  };
+}
+
+export function createEmptySite(name = "New site") {
+  const home = createPage("Home", "index");
+  return normalizeSite({
+    name,
+    theme: structuredClone(DEFAULT_THEME),
+    header: { logoText: name, logoImage: "", ctaText: "", ctaHref: "", sticky: true },
+    footer: { text: `© ${new Date().getFullYear()} ${name}. All rights reserved.`, links: [] },
+    pages: [home],
+    customCss: "",
+  });
+}
+
+export function slugify(str) {
+  return String(str || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "page";
+}
+
+// ---------------------------------------------------------------------------
+// Normalisation
+// ---------------------------------------------------------------------------
+
+const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+const str = (v, fallback = "") => (typeof v === "string" ? v : typeof v === "number" ? String(v) : fallback);
+const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function normalizeColor(v, fallback) {
+  return typeof v === "string" && HEX.test(v.trim()) ? v.trim() : fallback;
+}
+
+function normalizeTheme(theme) {
+  const t = isObj(theme) ? theme : {};
+  const colors = isObj(t.colors) ? t.colors : {};
+  const fonts = isObj(t.fonts) ? t.fonts : {};
+  const out = { colors: {}, fonts: {}, radius: DEFAULT_THEME.radius };
+  for (const [k, def] of Object.entries(DEFAULT_THEME.colors)) out.colors[k] = normalizeColor(colors[k], def);
+  for (const k of ["heading", "body"]) out.fonts[k] = FONT_CHOICES[fonts[k]] ? fonts[k] : DEFAULT_THEME.fonts[k];
+  const r = Number(t.radius);
+  out.radius = Number.isFinite(r) ? Math.max(0, Math.min(32, Math.round(r))) : DEFAULT_THEME.radius;
+  return out;
+}
+
+function normalizeField(field, value, fallback) {
+  switch (field.type) {
+    case "select": {
+      const match = field.options.find((o) => String(o) === String(value));
+      return match !== undefined ? match : fallback;
+    }
+    case "checkbox":
+      return typeof value === "boolean" ? value : fallback;
+    case "number": {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+    case "lines":
+      return Array.isArray(value) ? value.map((v) => str(v)).filter((v) => v !== "") : fallback;
+    case "list": {
+      if (!Array.isArray(value)) return fallback;
+      return value.filter(isObj).map((item) => {
+        const defaults = field.itemDefaults();
+        const out = {};
+        for (const f of field.itemFields) out[f.key] = normalizeField(f, item[f.key], defaults[f.key]);
+        return out;
+      });
+    }
+    default:
+      return value === undefined || value === null ? fallback : str(value, fallback);
+  }
+}
+
+export function normalizeBlock(block) {
+  if (!isObj(block) || !BLOCKS[block.type]) return null;
+  const def = BLOCKS[block.type];
+  const defaults = def.defaults();
+  const props = isObj(block.props) ? block.props : {};
+  const out = {};
+  for (const f of def.fields) out[f.key] = normalizeField(f, props[f.key], defaults[f.key]);
+  // Keep defaults for keys without editor fields (none today, but future-proof).
+  for (const k of Object.keys(defaults)) if (!(k in out)) out[k] = defaults[k];
+  return { id: str(block.id) || uid("b"), type: block.type, props: out };
+}
+
+export function normalizeSection(section) {
+  if (!isObj(section)) return null;
+  const defaults = SECTION_DEFAULTS();
+  const props = isObj(section.props) ? section.props : {};
+  const p = {};
+  for (const f of SECTION_FIELDS) p[f.key] = normalizeField(f, props[f.key], defaults[f.key]);
+  p.overlay = Math.max(0, Math.min(90, p.overlay));
+  p.anchor = p.anchor ? slugify(p.anchor) : "";
+
+  const want = LAYOUT_COLUMNS[p.layout] || 1;
+  let cols = Array.isArray(section.columns) ? section.columns.filter(isObj) : [];
+  cols = cols.map((c) => ({
+    id: str(c.id) || uid("c"),
+    blocks: (Array.isArray(c.blocks) ? c.blocks : []).map(normalizeBlock).filter(Boolean),
+  }));
+  // Keep the column count in sync with the layout without losing content:
+  // extra columns are merged into the last kept column.
+  while (cols.length < want) cols.push({ id: uid("c"), blocks: [] });
+  if (cols.length > want) {
+    const extra = cols.splice(want);
+    for (const c of extra) cols[want - 1].blocks.push(...c.blocks);
+  }
+  return { id: str(section.id) || uid("s"), type: "section", props: p, columns: cols };
+}
+
+export function normalizePage(page, index = 0) {
+  if (!isObj(page)) return null;
+  const title = str(page.title, index === 0 ? "Home" : "Page");
+  let slug = index === 0 ? "index" : slugify(page.slug || title);
+  if (index > 0 && slug === "index") slug = slugify(title) === "index" ? "home-2" : slugify(title);
+  const seo = isObj(page.seo) ? page.seo : {};
+  return {
+    id: str(page.id) || uid("p"),
+    title,
+    slug,
+    seo: { title: str(seo.title), description: str(seo.description) },
+    sections: (Array.isArray(page.sections) ? page.sections : []).map(normalizeSection).filter(Boolean),
+  };
+}
+
+export function normalizeSite(site) {
+  const s = isObj(site) ? site : {};
+  const name = str(s.name, "Untitled site").slice(0, 120) || "Untitled site";
+  const header = isObj(s.header) ? s.header : {};
+  const footer = isObj(s.footer) ? s.footer : {};
+  let pages = (Array.isArray(s.pages) ? s.pages : []).map(normalizePage).filter(Boolean);
+  if (!pages.length) pages = [normalizePage(createPage("Home", "index"), 0)];
+  // Unique slugs
+  const seen = new Set();
+  for (const p of pages) {
+    let slug = p.slug, n = 2;
+    while (seen.has(slug)) slug = `${p.slug}-${n++}`;
+    p.slug = slug;
+    seen.add(slug);
+  }
+  const navLinks = Array.isArray(header.links) ? header.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : null;
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    name,
+    theme: normalizeTheme(s.theme),
+    header: {
+      logoText: str(header.logoText, name),
+      logoImage: str(header.logoImage),
+      ctaText: str(header.ctaText),
+      ctaHref: str(header.ctaHref),
+      sticky: typeof header.sticky === "boolean" ? header.sticky : true,
+      // null = build navigation from pages automatically
+      links: navLinks && navLinks.length ? navLinks : null,
+    },
+    footer: {
+      text: str(footer.text, `© ${new Date().getFullYear()} ${name}`),
+      links: Array.isArray(footer.links) ? footer.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : [],
+    },
+    pages,
+    customCss: str(s.customCss),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tree helpers (used by the editor and the AI "edit selected element" flow)
+// ---------------------------------------------------------------------------
+
+export function findNode(site, id) {
+  for (const page of site.pages) {
+    for (let si = 0; si < page.sections.length; si++) {
+      const section = page.sections[si];
+      if (section.id === id) return { kind: "section", node: section, page, index: si, parent: page.sections };
+      for (let ci = 0; ci < section.columns.length; ci++) {
+        const column = section.columns[ci];
+        if (column.id === id) return { kind: "column", node: column, page, section, index: ci, parent: section.columns };
+        for (let bi = 0; bi < column.blocks.length; bi++) {
+          const block = column.blocks[bi];
+          if (block.id === id) return { kind: "block", node: block, page, section, column, index: bi, parent: column.blocks };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Gives every section/column/block in a subtree fresh ids (used for duplicate).
+export function reId(node) {
+  const copy = structuredClone(node);
+  const walk = (n) => {
+    if (n.type === "section") {
+      n.id = uid("s");
+      n.columns.forEach((c) => { c.id = uid("c"); c.blocks.forEach(walk); });
+    } else {
+      n.id = uid("b");
+    }
+  };
+  walk(copy);
+  return copy;
+}

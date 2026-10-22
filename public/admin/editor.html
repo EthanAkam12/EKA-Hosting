@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-size='11' font-weight='800' text-anchor='middle' fill='white' font-family='sans-serif'%3EEKA%3C/text%3E%3C/svg%3E">
+<title>Editor · EKA Hosting</title>
+<link rel="stylesheet" href="/admin/assets/admin.css">
+<link rel="stylesheet" href="/admin/assets/editor/editor.css">
+</head>
+<body class="editor">
+<header class="bar">
+  <a class="icon-btn" href="/admin" title="All websites" aria-label="All websites">←</a>
+  <div class="bar-title"><strong id="site-name">Loading…</strong><span id="site-status" class="badge">Draft</span></div>
+  <select id="page-select" class="select page-select" aria-label="Page"></select>
+  <div class="bar-group" role="group" aria-label="Device preview">
+    <button class="icon-btn active" data-device="desktop" title="Desktop" aria-label="Desktop">🖥</button>
+    <button class="icon-btn" data-device="tablet" title="Tablet" aria-label="Tablet">▭</button>
+    <button class="icon-btn" data-device="mobile" title="Mobile" aria-label="Mobile">📱</button>
+  </div>
+  <div class="bar-group">
+    <button class="icon-btn" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+    <button class="icon-btn" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+  </div>
+  <span class="grow"></span>
+  <span id="save-state" class="small muted">Saved</span>
+  <button class="btn btn-ghost" id="history-btn">History</button>
+  <a class="btn" id="preview-btn" target="_blank" rel="noopener">Preview</a>
+  <a class="btn" id="live-btn" target="_blank" rel="noopener" hidden>View live ↗</a>
+  <button class="btn btn-primary" id="publish-btn">Publish</button>
+</header>
+
+<div class="workspace">
+  <aside class="side side-left">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="add" role="tab">Add</button>
+      <button class="tab" data-tab="ai" role="tab">✦ AI</button>
+      <button class="tab" data-tab="pages" role="tab">Pages</button>
+      <button class="tab" data-tab="theme" role="tab">Style</button>
+      <button class="tab" data-tab="settings" role="tab">Site</button>
+    </nav>
+    <div class="side-body" id="left-panel"></div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="frame-wrap" id="frame-wrap">
+      <div class="frame-scale" id="frame-scale"><iframe id="canvas" title="Page canvas"></iframe></div>
+      <div class="overlay" id="overlay"></div>
+    </div>
+  </main>
+
+  <aside class="side side-right">
+    <div class="side-head" id="inspector-head">Properties</div>
+    <div class="side-body" id="inspector"></div>
+  </aside>
+</div>
+
+<script type="module" src="/admin/assets/editor/main.js"></script>
+</body>
+</html>

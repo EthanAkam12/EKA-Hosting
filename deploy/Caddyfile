@@ -1,0 +1,29 @@
+# Caddy config for EKA Hosting: automatic HTTPS for the builder, every
+# customer subdomain and customers' own domains.
+#
+# Replace ekahosting.com with your domain and you@example.com with your email.
+# The wildcard certificate needs a DNS provider plugin
+# (https://caddyserver.com/docs/automatic-https#dns-challenge). Without one,
+# remove the *.ekahosting.com line: on-demand TLS below covers subdomains too.
+
+{
+	email you@example.com
+	on_demand_tls {
+		# Only issue certificates for domains the app knows about.
+		ask http://127.0.0.1:3000/_tls-check
+	}
+}
+
+ekahosting.com, admin.ekahosting.com, *.ekahosting.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+# Customers' own domains
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}

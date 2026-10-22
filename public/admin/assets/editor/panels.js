@@ -1,0 +1,297 @@
+// Left-hand tabs: Add, AI, Pages, Style, Site.
+
+import { BLOCKS, FONT_CHOICES, createPage, createSection, findNode } from "/admin/shared/schema.js";
+import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "../ui.js";
+import { fieldControl } from "./fields.js";
+import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
+
+const PALETTES = [
+  { name: "Ocean", colors: { primary: "#2563eb", accent: "#f59e0b", background: "#ffffff", surface: "#f1f5fb", text: "#111827", muted: "#6b7280", dark: "#0f172a" } },
+  { name: "Forest", colors: { primary: "#15803d", accent: "#ca8a04", background: "#ffffff", surface: "#f2f7f2", text: "#14201a", muted: "#5f6f66", dark: "#10241a" } },
+  { name: "Sunset", colors: { primary: "#ea580c", accent: "#be185d", background: "#fffdfb", surface: "#fdf3ec", text: "#1f1410", muted: "#7a6a62", dark: "#2a1710" } },
+  { name: "Royal", colors: { primary: "#7c3aed", accent: "#ec4899", background: "#ffffff", surface: "#f6f3fd", text: "#1b1530", muted: "#6c6684", dark: "#1e1530" } },
+  { name: "Mono", colors: { primary: "#111111", accent: "#d4a017", background: "#ffffff", surface: "#f4f4f4", text: "#111111", muted: "#666666", dark: "#111111" } },
+  { name: "Teal", colors: { primary: "#0f766e", accent: "#f97316", background: "#ffffff", surface: "#eff7f6", text: "#102a27", muted: "#5d706d", dark: "#0b2522" } },
+];
+
+const AI_SUGGESTIONS = [
+  "Make the hero headline punchier",
+  "Add a pricing section with 3 plans",
+  "Add an FAQ with 5 common questions",
+  "Make the colours warmer and more premium",
+  "Rewrite all text in a friendlier tone",
+  "Add an About page",
+];
+
+export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChange }) {
+  let active = "add";
+  let aiScope = null;
+  const aiLog = [];
+  let aiBusy = false;
+  let aiProgress = null;
+
+  function show(tab) {
+    active = tab;
+    tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+    render();
+  }
+
+  function render() {
+    root.replaceChildren();
+    ({ add: renderAdd, ai: renderAi, pages: renderPages, theme: renderTheme, settings: renderSettings })[active]();
+  }
+
+  // -------------------------------------------------------------- Add -----
+
+  function renderAdd() {
+    root.append(h("p", { class: "small muted", style: { marginTop: 0 } }, "Drag onto the page, or click to add after the selected item."));
+    const groups = {};
+    for (const [type, def] of Object.entries(BLOCKS)) (groups[def.group] ||= []).push([type, def]);
+    for (const [group, items] of Object.entries(groups)) {
+      root.append(h("div", { class: "group-title" }, group));
+      root.append(h("div", { class: "palette" }, items.map(([type, def]) =>
+        h("div", { class: "pal-item", role: "button", tabindex: "0", title: `Add ${def.label}`,
+          onpointerdown: (e) => canvas.startDrag(e, { kind: "new-block", type }, def.label),
+          onkeydown: (e) => { if (e.key === "Enter") canvas.insertByClick({ kind: "new-block", type }); } },
+          h("span", { class: "ic" }, def.icon), def.label))));
+    }
+    root.append(h("div", { class: "group-title" }, "Ready-made sections"));
+    root.append(h("div", { class: "tpl-list" }, SECTION_TEMPLATES.map((t) =>
+      h("div", { class: "tpl", role: "button", tabindex: "0",
+        onpointerdown: (e) => canvas.startDrag(e, { kind: "new-section", make: t.make }, t.name),
+        onkeydown: (e) => { if (e.key === "Enter") canvas.insertByClick({ kind: "new-section", make: t.make }); } },
+        h("span", { class: "ic" }, t.icon), h("span", {}, t.name, h("small", {}, t.desc))))));
+    root.append(h("div", { class: "group-title" }, "Empty sections"));
+    root.append(h("div", { class: "palette" }, EMPTY_LAYOUTS.map((l) =>
+      h("div", { class: "pal-item", role: "button", tabindex: "0",
+        onpointerdown: (e) => canvas.startDrag(e, { kind: "new-section", make: () => createSection({ layout: l.layout }) }, l.label),
+        onkeydown: (e) => { if (e.key === "Enter") canvas.insertByClick({ kind: "new-section", make: () => createSection({ layout: l.layout }) }); } },
+        h("span", { class: "ic" }, l.layout.split("-").map(() => "▯").join("")), l.label))));
+  }
+
+  // --------------------------------------------------------------- AI -----
+
+  function scopeLabel(id) {
+    const f = findNode(state.get().site, id);
+    if (!f) return null;
+    if (f.kind === "section") return "the selected section";
+    if (f.kind === "block") {
+      const p = f.node.props;
+      const text = p.text || p.title || p.name || p.quote || "";
+      return `${BLOCKS[f.node.type].label}${text ? ` "${String(text).slice(0, 30)}${text.length > 30 ? "…" : ""}"` : ""}`;
+    }
+    return null;
+  }
+
+  function renderAi() {
+    const s = state.get();
+    if (!s.aiEnabled) {
+      root.append(h("div", { class: "notice" }, "AI isn't set up on this server yet. Ask whoever runs it to set ANTHROPIC_API_KEY. You can still change everything by hand."));
+      return;
+    }
+    if (aiScope && !findNode(s.site, aiScope)) aiScope = null;
+    const log = h("div", { class: "ai-log" },
+      aiLog.length ? aiLog.map((m) => h("div", { class: `ai-msg ${m.role}` }, m.text))
+        : h("div", { class: "ai-msg bot" }, "Tell me what to change, like you'd tell a designer. For example: “add a gallery section after the services”, “make the site feel more luxurious” or “translate the home page into Spanish”.\n\nSelect something on the page first to change just that part."),
+    );
+    const input = h("textarea", { class: "textarea", rows: "4", placeholder: aiScope ? "What should change about the selected item?" : "Describe a change to the site…", disabled: aiBusy });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); });
+    const sendBtn = h("button", { class: "btn btn-primary btn-block", onclick: send, disabled: aiBusy }, aiBusy ? h("span", { class: "spinner" }) : null, aiBusy ? "Working…" : "Apply change");
+    const progress = (aiProgress = h("div", { class: "small muted", style: { marginTop: "8px", minHeight: "1.4em" } }));
+
+    root.append(log);
+    const label = aiScope && scopeLabel(aiScope);
+    if (label) root.append(h("div", { class: "ai-scope" }, "Changing: ", h("strong", {}, label), h("button", { class: "icon-btn", title: "Change the whole site instead", "aria-label": "Clear selection", onclick: () => { aiScope = null; render(); } }, "✕")));
+    root.append(input, h("div", { style: { marginTop: "8px" } }, sendBtn), progress);
+    root.append(h("div", { class: "chips" }, AI_SUGGESTIONS.map((t) => h("button", { class: "chip", disabled: aiBusy, onclick: () => { input.value = t; input.focus(); } }, t))));
+    root.append(h("p", { class: "field-hint", style: { marginTop: "14px" } }, "Every AI change can be undone with ↶, and is saved in History."));
+    log.scrollTop = log.scrollHeight;
+    if (!aiBusy) input.focus();
+
+    async function send() {
+      const instruction = input.value.trim();
+      if (!instruction || aiBusy) return;
+      aiBusy = true;
+      aiLog.push({ role: "user", text: instruction });
+      render();
+      try {
+        await state.flush();
+        const st = state.get();
+        const { jobId } = await api(`/sites/${st.siteId}/ai`, { method: "POST", body: { instruction, selectedId: aiScope, pageId: st.pageId, site: st.site } });
+        const result = await waitForJob(jobId, (job) => {
+          if (aiProgress && job.status === "running") aiProgress.textContent = job.progress.chars ? `Writing changes… ${Math.round(job.elapsedMs / 1000)}s` : `Thinking… ${Math.round(job.elapsedMs / 1000)}s`;
+        });
+        if (result.changed) state.replaceSite(result.site);
+        aiLog.push({ role: "bot", text: result.summary });
+      } catch (err) {
+        aiLog.push({ role: "err", text: err.message });
+      } finally {
+        aiBusy = false;
+        if (active === "ai") render();
+      }
+    }
+  }
+
+  function askAi(id) {
+    aiScope = id || null;
+    show("ai");
+  }
+
+  // ------------------------------------------------------------- Pages ----
+
+  function renderPages() {
+    const s = state.get();
+    root.append(h("div", { class: "group-title" }, "Pages"));
+    s.site.pages.forEach((p, i) => {
+      root.append(h("div", { class: `page-row${p.id === s.pageId ? " active" : ""}`, onclick: () => state.setPage(p.id) },
+        h("span", { class: "name" }, p.title),
+        h("span", { class: "slug" }, p.slug === "index" ? "/" : `/${p.slug}`),
+        i > 1 ? h("button", { class: "icon-btn", title: "Move up", onclick: (e) => { e.stopPropagation(); movePage(i, -1); } }, "↑") : null,
+        i > 0 && i < s.site.pages.length - 1 ? h("button", { class: "icon-btn", title: "Move down", onclick: (e) => { e.stopPropagation(); movePage(i, 1); } }, "↓") : null,
+        i > 0 ? h("button", { class: "icon-btn", title: "Duplicate page", onclick: (e) => { e.stopPropagation(); duplicatePage(p.id); } }, "⧉") : null,
+        i > 0 ? h("button", { class: "icon-btn", title: "Delete page", onclick: (e) => { e.stopPropagation(); deletePage(p); } }, "🗑") : null,
+      ));
+    });
+    root.append(h("button", { class: "btn btn-block", style: { marginTop: "12px" }, onclick: addPage }, "+ Add page"));
+    root.append(h("p", { class: "field-hint" }, "Rename a page or set its Google description in the right-hand panel when nothing is selected. The home page always stays first."));
+  }
+
+  function movePage(i, d) {
+    state.mutate((site) => {
+      const j = i + d;
+      if (j < 1 || j >= site.pages.length) return;
+      [site.pages[i], site.pages[j]] = [site.pages[j], site.pages[i]];
+    });
+  }
+
+  function duplicatePage(id) {
+    state.mutate((site) => {
+      const i = site.pages.findIndex((p) => p.id === id);
+      const copy = JSON.parse(JSON.stringify(site.pages[i]).replace(/"id":"[^"]+"/g, () => `"id":""`));
+      copy.title += " (copy)";
+      copy.slug += "-copy";
+      site.pages.splice(i + 1, 0, copy);
+    });
+  }
+
+  async function deletePage(p) {
+    if (!(await confirmDialog(`Delete the "${p.title}" page? You can undo this.`, { okText: "Delete page", danger: true }))) return;
+    state.mutate((site) => { site.pages = site.pages.filter((x) => x.id !== p.id); });
+  }
+
+  function addPage() {
+    const name = h("input", { class: "input", placeholder: "e.g. About us" });
+    const describe = h("textarea", { class: "textarea", rows: "3", placeholder: "Optional: what should be on it? The AI will build it." });
+    const aiOn = state.get().aiEnabled;
+    const m = modal({
+      title: "New page",
+      body: h("div", {},
+        h("div", { class: "field" }, h("label", {}, "Page name"), name),
+        aiOn ? h("div", { class: "field" }, h("label", {}, "Build it with AI"), describe) : null,
+      ),
+      footer: [h("button", { class: "btn", onclick: () => m.close() }, "Cancel"), h("button", { class: "btn btn-primary", onclick: create }, "Create page")],
+    });
+    function create() {
+      const title = name.value.trim() || "New page";
+      const page = createPage(title);
+      state.mutate((site) => { site.pages.push(page); });
+      const added = state.get().site.pages.find((p) => p.id === page.id);
+      if (added) state.setPage(added.id);
+      m.close();
+      if (aiOn && describe.value.trim()) {
+        aiScope = null;
+        show("ai");
+        const input = root.querySelector("textarea");
+        input.value = `Build the "${title}" page (slug "${added?.slug}") with suitable sections. ${describe.value.trim()}`;
+        root.querySelector(".btn-primary")?.click();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ Style -----
+
+  function renderTheme() {
+    const theme = state.get().site.theme;
+    const set = (key, apply, opts) => state.mutate(apply, { key, source: opts?.rebuild ? null : "panel" });
+
+    root.append(h("div", { class: "group-title" }, "Colour presets"));
+    root.append(h("div", { class: "palette" }, PALETTES.map((p) =>
+      h("button", { class: "pal-item", style: { cursor: "pointer" }, onclick: () => set("theme:preset", (site) => { site.theme.colors = { ...p.colors }; }, { rebuild: true }) },
+        h("span", { class: "ic", style: { display: "flex", gap: "2px" } }, ["primary", "accent", "dark"].map((k) => h("span", { style: { width: "12px", height: "18px", borderRadius: "3px", background: p.colors[k] } }))),
+        p.name))));
+
+    root.append(h("div", { class: "group-title" }, "Colours"));
+    const names = { primary: "Main brand colour", accent: "Accent", background: "Page background", surface: "Light panels", text: "Text", muted: "Soft text", dark: "Dark sections & footer" };
+    for (const [k, label] of Object.entries(names)) {
+      root.append(fieldControl({ key: k, label, type: "color" }, theme.colors[k], (v) => set(`theme:c:${k}`, (site) => { site.theme.colors[k] = v; }), {}));
+    }
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Fonts"));
+    const fontField = (key, label) => ({ key, label, type: "select", options: Object.keys(FONT_CHOICES), labels: Object.values(FONT_CHOICES).map((f) => f.label) });
+    root.append(fieldControl(fontField("heading", "Headings"), theme.fonts.heading, (v) => set("theme:fh", (site) => { site.theme.fonts.heading = v; }, { rebuild: true }), {}));
+    root.append(fieldControl(fontField("body", "Body text"), theme.fonts.body, (v) => set("theme:fb", (site) => { site.theme.fonts.body = v; }, { rebuild: true }), {}));
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "System fonts load instantly. Each web font adds one small download."));
+    root.append(fieldControl({ key: "radius", label: "Corner rounding (px)", type: "number" }, theme.radius, (v) => set("theme:r", (site) => { site.theme.radius = v; }), {}));
+  }
+
+  // ------------------------------------------------------------- Site -----
+
+  function renderSettings() {
+    const s = state.get();
+    const meta = s.meta;
+    root.append(fieldControl({ key: "name", label: "Site name", type: "text" }, s.site.name, (v) => state.mutate((site) => { site.name = v; }, { key: "site:name", source: "panel" }), {}));
+
+    const slug = h("input", { class: "input", value: meta.slug });
+    const domains = h("textarea", { class: "textarea", rows: "2", placeholder: "www.customer.com" }, (meta.domains || []).join("\n"));
+    const saveMeta = h("button", { class: "btn btn-sm", onclick: async () => {
+      try {
+        const { meta: m } = await api(`/sites/${s.siteId}/meta`, { method: "PATCH", body: { name: s.site.name, slug: slug.value, domains: domains.value.split(/[\s,]+/).filter(Boolean) } });
+        onMetaChange(m);
+        toast("Address settings saved.");
+        render();
+      } catch (e) { toast(e.message, { error: true }); }
+    } }, "Save address settings");
+
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Address"));
+    root.append(h("div", { class: "field" }, h("label", {}, s.baseDomain ? `Subdomain (.${s.baseDomain})` : "Site address name"), slug,
+      h("div", { class: "field-hint" }, "Live at: ", h("a", { href: meta.liveUrl, target: "_blank", rel: "noopener" }, meta.liveUrl))));
+    root.append(h("div", { class: "field" }, h("label", {}, "Custom domains"), domains,
+      h("div", { class: "field-hint" }, "Point the domain's DNS (A record or CNAME) at this server, then add it here.")));
+    root.append(saveMeta);
+
+    root.append(h("hr", { class: "sep" }));
+    root.append(h("div", { class: "group-title" }, "Publishing"));
+    root.append(h("p", { class: "small", style: { marginTop: 0 } }, meta.publishedAt ? `Live · last published ${timeAgo(meta.publishedAt)}` : "Not published yet. Click Publish at the top when you're ready."));
+    if (meta.publishedAt) root.append(h("button", { class: "btn btn-sm btn-danger", onclick: async () => {
+      if (!(await confirmDialog("Take this site offline? Visitors will see a 'coming soon' page until you publish again.", { okText: "Unpublish", danger: true }))) return;
+      const { meta: m } = await api(`/sites/${s.siteId}/unpublish`, { method: "POST", body: {} });
+      onMetaChange(m);
+      render();
+    } }, "Unpublish"));
+
+    root.append(h("hr", { class: "sep" }));
+    root.append(h("div", { class: "group-title" }, "Contact form messages"));
+    root.append(h("button", { class: "btn btn-sm", onclick: () => showSubmissions(s.siteId) }, "View messages"));
+
+    root.append(h("hr", { class: "sep" }));
+    root.append(h("div", { class: "group-title" }, "Custom CSS"));
+    root.append(fieldControl({ key: "customCss", label: "", type: "code" }, s.site.customCss, (v) => state.mutate((site) => { site.customCss = v; }, { key: "site:css", source: "panel" }), {}));
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-8px" } }, "Applies to every page. Blocks use classes like .eka-btn, .eka-card, .eka-h."));
+  }
+
+  async function showSubmissions(siteId) {
+    const { submissions } = await api(`/sites/${siteId}/submissions`);
+    modal({
+      title: `Form messages (${submissions.length})`,
+      wide: true,
+      body: submissions.length
+        ? h("div", {}, submissions.map((sub) => h("div", { class: "version", style: { display: "block" } },
+          h("div", { class: "small muted" }, `${new Date(sub.at).toLocaleString()} · page: ${sub.page}`),
+          Object.entries(sub.fields).map(([k, v]) => h("div", {}, h("strong", {}, `${k}: `), h("span", { style: { whiteSpace: "pre-wrap" } }, v))))))
+        : h("p", { class: "muted" }, "No messages yet. They'll appear here when visitors use a contact form on the live site."),
+    });
+  }
+
+  tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.tab)));
+
+  return { render, show, askAi, active: () => active };
+}
