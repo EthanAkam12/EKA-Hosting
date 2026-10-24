@@ -8,9 +8,9 @@ export function createAnthropicProvider({ model, effort } = {}) {
   return {
     name: "claude",
     model,
-    async complete({ system, prompt, effort: callEffort, onProgress }) {
+    async complete({ system, prompt, model: callModel, effort: callEffort, onProgress }) {
       const stream = client.beta.messages.stream({
-        model,
+        model: callModel || model,
         max_tokens: 64000,
         system,
         messages: [{ role: "user", content: prompt }],

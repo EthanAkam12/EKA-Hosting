@@ -2,7 +2,7 @@
 // into validated site documents.
 //
 // To add another AI provider, write a module that exports
-//   { name, model, complete({ system, prompt, effort, onProgress }) → Promise<string> }
+//   { name, model, complete({ system, prompt, model, effort, onProgress }) → Promise<string> }
 // and register it in pickProvider() below. Everything else is shared.
 
 import { normalizeSite, normalizeSection, normalizeBlock, findNode } from "../../shared/schema.js";
@@ -26,10 +26,14 @@ function pickProvider() {
 // `provider` can be injected (used by the tests); normally it comes from env.
 export function createAi({ provider = pickProvider() } = {}) {
   const generateEffort = process.env.AI_GENERATE_EFFORT || "high";
+  // New sites use the strongest model; changes use a faster, cheaper one.
+  const generateModel = process.env.AI_MODEL || provider.model;
+  const editModel = process.env.AI_EDIT_MODEL || (provider.name === "claude" ? "claude-sonnet-5-5" : provider.model);
 
   return {
     provider: provider.name,
-    model: provider.model,
+    model: generateModel,
+    editModel,
     enabled: provider.name !== "demo",
 
     async generateSite({ name, prompt, media = [], onProgress }) {
@@ -40,6 +44,7 @@ export function createAi({ provider = pickProvider() } = {}) {
       const text = await provider.complete({
         system: GENERATE_SYSTEM,
         prompt: generatePrompt({ name, prompt, media }),
+        model: generateModel,
         effort: generateEffort,
         onProgress,
       });
@@ -63,6 +68,7 @@ export function createAi({ provider = pickProvider() } = {}) {
           page,
           media,
         }),
+        model: editModel,
         onProgress,
       });
       const data = parseJson(text);

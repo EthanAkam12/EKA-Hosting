@@ -263,7 +263,7 @@ const siteOr404 = (req, res) => {
 const withUrl = (meta) => ({ ...meta, liveUrl: liveUrl(meta), previewPath: `/s/${meta.slug}/` });
 
 api.get("/me", (req, res) => {
-  res.json({ ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model }, baseDomain: BASE_DOMAIN || null });
+  res.json({ ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model, editModel: ai.editModel }, baseDomain: BASE_DOMAIN || null });
 });
 
 api.get("/sites", (req, res) => res.json({ sites: store.list().map(withUrl) }));
@@ -474,6 +474,6 @@ app.use((err, req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`EKA Hosting running on http://localhost:${PORT}/admin`);
-  console.log(`AI: ${ai.enabled ? `${ai.provider} (${ai.model})` : "not configured (template mode) — set ANTHROPIC_API_KEY to enable"}`);
+  console.log(`AI: ${ai.enabled ? `${ai.provider} (new sites: ${ai.model}, changes: ${ai.editModel})` : "not configured (template mode) — set ANTHROPIC_API_KEY to enable"}`);
   if (BASE_DOMAIN) console.log(`Customer sites: https://<slug>.${BASE_DOMAIN}/`);
 });

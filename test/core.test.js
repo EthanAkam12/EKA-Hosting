@@ -104,3 +104,17 @@ test("AI edit with a full site and a no-op", async () => {
   res = await ai.editSite({ site, instruction: "add a shop" });
   assert.equal(res.changed, false);
 });
+
+test("new sites and changes can use different models", async () => {
+  const site = sampleSite();
+  const { provider, calls } = fakeProvider((args) => args.prompt.startsWith("CURRENT SITE JSON")
+    ? JSON.stringify({ summary: "ok", noop: true })
+    : JSON.stringify({ pages: [{ title: "Home", sections: [] }] }));
+  provider.name = "claude";
+  provider.model = "claude-opus-5-5";
+  const ai = createAi({ provider });
+  await ai.generateSite({ name: "A", prompt: "b" });
+  await ai.editSite({ site, instruction: "c" });
+  assert.equal(calls[0].model, "claude-opus-5-5");
+  assert.equal(calls[1].model, "claude-sonnet-5-5");
+});

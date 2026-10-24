@@ -27,7 +27,8 @@ Run the tests with `npm test`.
 | --- | --- |
 | `ADMIN_PASSWORD` | Password for the builder. If unset, one is generated on first run and printed (and saved to `data/.admin-password`). |
 | `ANTHROPIC_API_KEY` | Turns on AI generation and editing (Claude). |
-| `AI_MODEL` | Claude model. Default `claude-opus-5-5`. |
+| `AI_MODEL` | Claude model for building new sites. Default `claude-opus-5-5` (best quality). |
+| `AI_EDIT_MODEL` | Claude model for AI changes to existing sites. Default `claude-sonnet-5-5` (faster and about half the price). |
 | `AI_EFFORT` / `AI_GENERATE_EFFORT` | How hard the AI thinks for edits / new sites (`low`…`max`). Defaults `medium` / `high`. Lower is faster and cheaper. |
 | `AI_PROVIDER` | `claude` (default when a key is set) or `demo` (templates only). |
 | `BASE_DOMAIN` | e.g. `ekahosting.com`. Sites are then served at `https://<site-name>.ekahosting.com`. Without it, sites are served at `/s/<site-name>/` on the builder. |
