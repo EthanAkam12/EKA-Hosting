@@ -1,0 +1,17 @@
+/**
+ * Heirloom colour scheme: Forest Green. Brand ramp only (buttons, links, prices).
+ * The skin is light-only, so no dark-mode block is needed.
+ */
+:root {
+  --cc-brand-50: oklch(97.0% 0.014 155);
+  --cc-brand-100: oklch(93.4% 0.028 155);
+  --cc-brand-200: oklch(86.8% 0.048 155);
+  --cc-brand-300: oklch(77.6% 0.068 155);
+  --cc-brand-400: oklch(65.8% 0.080 155);
+  --cc-brand-500: oklch(54.4% 0.082 155);
+  --cc-brand-600: oklch(44.2% 0.078 155);
+  --cc-brand-700: oklch(37.0% 0.068 155);
+  --cc-brand-800: oklch(31.2% 0.058 155);
+  --cc-brand-900: oklch(26.4% 0.048 155);
+  --cc-brand-950: oklch(19.4% 0.036 155);
+}

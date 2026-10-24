@@ -1,0 +1,273 @@
+<?xml version="1.0"?>
+<skin version="1.0">
+  <info>
+	<uid>heirloom-1.0@ekahosting</uid>
+	<type>skin</type>
+	<category>skin</category>
+	<!-- MUST be byte-identical to the directory name: this string is the key in
+	     GUI::listSkins() (gui.class.php:640), the value stored in config.skin_folder,
+	     and the path segment used for Smarty's template_dir (gui.class.php:137). -->
+	<name><![CDATA[heirloom]]></name>
+	<!-- Leave as atrium if your custom skin derives from this one. -->
+	<original_name><![CDATA[atrium]]></original_name>
+	<display><![CDATA[Heirloom]]></display>
+	<description><![CDATA[A warm, classic skin for antiques and vintage shops, built on Atrium. Every item is treated as one of a kind: no quantity boxes, and sold pieces are clearly marked.]]></description>
+	<version>1.0.0</version>
+	<!-- 6.7.6 is a real floor, not politeness: content.withdraw.php and the
+	     single-gateway hidden-input behaviour arrive in 6.7.4, and element.meta.php
+	     changes in 6.7.6. Core reads this for display only (plugins.index.inc.php:418)
+	     and does NOT enforce it, so main.php also shows an admin-only banner. -->
+	<minVersion>6.8.0</minVersion>
+	<maxVersion>6.*.*</maxVersion>
+	<creator>EKA Hosting (based on Atrium by CubeCart)</creator>
+	<homepage>https://www.cubecart.com</homepage>
+	<layout_type>responsive</layout_type>
+	<framework>tailwind</framework>
+	<!-- Truthy force-writes config.csrf='1' store-wide (gui.class.php:130-134).
+	     GUI::display() then injects the token before every </form> (gui.class.php:340). -->
+	<csrf>true</csrf>
+	<!-- Enforces captcha for anonymous newsletter signup (newsletter.class.php:425). -->
+	<newsletter_recaptcha>true</newsletter_recaptcha>
+	<!-- TRUE skips a blocking per-review cURL HEAD to gravatar.com (catalogue.class.php:442). -->
+	<gravatar_ajax>true</gravatar_ajax>
+	<!-- Admin force-enables disable_mobile_skin on save (gui.class.php:651). -->
+	<responsive>true</responsive>
+  </info>
+  <layout>
+	<products>
+		<perpage amount="12" />
+		<perpage default="true" amount="24" />
+		<perpage amount="48" />
+		<perpage amount="96" />
+	</products>
+  </layout>
+  <styles>
+	<!-- Brand ramp only, from css/cubecart.<directory>.css (must exist). -->
+	<style images="false" default="true">
+	  <directory>default</directory>
+	  <name><![CDATA[Forest Green]]></name>
+	  <description><![CDATA[Deep green with brass accents]]></description>
+	  <default />
+	</style>
+	<style images="false">
+	  <directory>oxblood</directory>
+	  <name><![CDATA[Oxblood]]></name>
+	  <description><![CDATA[Rich burgundy red]]></description>
+	</style>
+	<style images="false">
+	  <directory>navy</directory>
+	  <name><![CDATA[Navy]]></name>
+	  <description><![CDATA[Classic dark blue]]></description>
+	</style>
+	<style images="false">
+	  <directory>walnut</directory>
+	  <name><![CDATA[Walnut]]></name>
+	  <description><![CDATA[Warm brown]]></description>
+	</style>
+  </styles>
+  <!-- Each reference here literally creates $PRODUCT.<reference> and
+       $product['image_tags'][<reference>] (gui.class.php:685-694,
+       catalogue.class.php:1906-1922). Removing one removes that Smarty variable. -->
+  <!-- default="noimage.svg": core serves a vector placeholder straight from the
+       skin instead of through GD. ⚠ Needs 6.8.0 — hence minVersion. -->
+  <images>
+	<image reference="thumbnail" maximum="400" quality="82" default="noimage.svg" />
+	<image reference="category" maximum="1200" quality="82" default="noimage.svg" />
+	<image reference="subcategory" maximum="300" quality="82" default="noimage.svg" />
+	<image reference="gallery" maximum="120" quality="82" default="noimage.svg" />
+	<image reference="checkout" maximum="120" quality="82" default="noimage.svg" />
+	<image reference="normal" maximum="600" quality="82" default="noimage.svg" />
+	<image reference="enlarge" maximum="1600" quality="82" default="noimage.svg" />
+	<image reference="tiny" maximum="64" quality="82" default="noimage.svg" />
+	<image reference="small" maximum="300" quality="82" default="noimage.svg" />
+	<image reference="medium" maximum="800" quality="82" default="noimage.svg" />
+	<image reference="large" maximum="1200" quality="82" default="noimage.svg" />
+  </images>
+  <!-- MERCHANT-EDITABLE settings. Declaring any <setting> here puts a config cog
+       on this skin's card in Manage Extensions; the values are stored in the
+       config table under "skin_atrium" and reach templates as
+       $SKIN_SETTINGS[<name>], cached under skin.atrium.settings.
+
+       Contrast with <custom> below, which is developer-only: it has no admin UI
+       and lives solely in this file.
+
+         name      [a-z0-9_], becomes the config_key and the Smarty key
+         type      bool | select | text   (anything else is treated as text)
+         default   used until the merchant saves; for bool: 1/true/yes/on
+         label     shown in admin; falls back to the name, title-cased
+         options   select only, and a select with none of them is skipped
+
+       bool reaches templates as a real boolean, so {if $SKIN_SETTINGS.x} is
+       safe — a stored "0" would otherwise be a truthy non-empty string. -->
+  <settings>
+	<!-- Empty means "no override": the skin keeps its own palette. One colour is
+	     enough to brand the store; the second is optional and only repaints the
+	     nav/footer band. -->
+	<!-- Keep in step with the whitelist in templates/element.font.php. -->
+	<setting name="google_font" type="select" default="">
+	  <label><![CDATA[Font]]></label>
+	  <description><![CDATA[The typeface for the whole storefront. Skin default is Figtree, which ships with the skin and is served from your own site. Choosing one of the others loads it from Google instead, which adds a request to Google on every page, checkout included, and sends your visitors' IP addresses to them.]]></description>
+	  <options>
+		<option value=""><![CDATA[Skin default (Figtree)]]></option>
+		<option value="Inter"><![CDATA[Inter]]></option>
+		<option value="Roboto"><![CDATA[Roboto]]></option>
+		<option value="Open Sans"><![CDATA[Open Sans]]></option>
+		<option value="Lato"><![CDATA[Lato]]></option>
+		<option value="Montserrat"><![CDATA[Montserrat]]></option>
+		<option value="Poppins"><![CDATA[Poppins]]></option>
+		<option value="Nunito Sans"><![CDATA[Nunito Sans]]></option>
+		<option value="Source Sans 3"><![CDATA[Source Sans 3]]></option>
+		<option value="Work Sans"><![CDATA[Work Sans]]></option>
+		<option value="DM Sans"><![CDATA[DM Sans]]></option>
+		<option value="Figtree"><![CDATA[Figtree]]></option>
+		<option value="Rubik"><![CDATA[Rubik]]></option>
+		<option value="Karla"><![CDATA[Karla]]></option>
+		<option value="Raleway"><![CDATA[Raleway]]></option>
+		<option value="Lora"><![CDATA[Lora]]></option>
+		<option value="Merriweather"><![CDATA[Merriweather]]></option>
+		<option value="Playfair Display"><![CDATA[Playfair Display]]></option>
+	  </options>
+	</setting>
+	<setting name="main_menu_layout" type="select" default="horizontal">
+	  <label><![CDATA[Main Menu]]></label>
+	  <description><![CDATA[Where the category menu sits on desktop. Vertical moves it to a rail down the left of the page instead of the band under the header. Phones and tablets use the slide-out drawer either way.]]></description>
+	  <options>
+		<option value="horizontal"><![CDATA[Horizontal band (Recommended)]]></option>
+		<option value="vertical"><![CDATA[Vertical rail]]></option>
+	  </options>
+	</setting>
+	<setting name="image_fit" type="select" default="cover">
+	  <label><![CDATA[Image Fit]]></label>
+	  <description><![CDATA[How catalogue images fill the square tiles in listings. Crop trims anything that will not fit. Fit shows the whole image with blank space around it. The main product page image is always shown whole.]]></description>
+	  <options>
+		<option value="cover"><![CDATA[Crop to fill the tile (Recommended)]]></option>
+		<option value="contain"><![CDATA[Fit the whole image]]></option>
+	  </options>
+	</setting>
+	<setting name="logo_height" type="select" default="2.5">
+	  <label><![CDATA[Logo Size]]></label>
+	  <description><![CDATA[The tallest your logo can be in the header. The header grows with it from 64px upwards. On phones the logo is also limited to half the screen width, so it never crowds out the menu and basket buttons.]]></description>
+	  <options>
+		<option value="2.5"><![CDATA[40px (Default)]]></option>
+		<option value="3"><![CDATA[48px]]></option>
+		<option value="3.5"><![CDATA[56px]]></option>
+		<option value="4"><![CDATA[64px]]></option>
+		<option value="4.5"><![CDATA[72px]]></option>
+		<option value="5"><![CDATA[80px]]></option>
+	  </options>
+	</setting>
+	<setting name="brand_colour" type="color" default="">
+	  <label><![CDATA[Brand Colour]]></label>
+	  <description><![CDATA[Your brand colour, for buttons, links, focus rings and price accents. This replaces the skin's sub-theme colour, so leave it empty unless none of the sub-themes is close enough to your brand.]]></description>
+	</setting>
+	<!-- Key stays secondary_colour so saved values survive; only the label
+	     changed, because it never was a second accent. -->
+	<setting name="secondary_colour" type="color" default="">
+	  <label><![CDATA[Header Colour]]></label>
+	  <description><![CDATA[Repaints the navigation band under the header, which no sub-theme touches. Leave empty to keep the near-black default.]]></description>
+	</setting>
+	<setting name="footer_colour" type="color" default="">
+	  <label><![CDATA[Footer Colour]]></label>
+	  <description><![CDATA[Repaints the footer band on its own. Leave empty to keep the near-black default, whatever the header is set to.]]></description>
+	</setting>
+	<setting name="show_quick_view" type="bool" default="true">
+	  <label><![CDATA[Show Quick View]]></label>
+	  <description><![CDATA[Show a Quick View button on product listings, which opens the product in a window without leaving the page. Hidden on phones either way, where the product page is a better experience than a modal.]]></description>
+	</setting>
+	<setting name="show_listing_add_to_basket" type="bool" default="true">
+	  <label><![CDATA[Show Add to Basket on Listings]]></label>
+	  <description><![CDATA[Show the quantity box and Add to Basket button on category pages, the home page and other product listings. Turn this off to send customers to the product page first, which suits stores whose products have options or need explaining.]]></description>
+	</setting>
+	<setting name="show_basket_total" type="bool" default="true">
+	  <label><![CDATA[Show Basket Total]]></label>
+	  <description><![CDATA[Show the basket total beside the basket icon in the header. Hidden on small screens either way, where there is no room for it.]]></description>
+	</setting>
+	<setting name="show_basket_count" type="bool" default="true">
+	  <label><![CDATA[Show Basket Item Count]]></label>
+	  <description><![CDATA[Show the number of items as a badge on the basket icon. With this off, a basket with something in it is still shown by a filled icon.]]></description>
+	</setting>
+	<setting name="show_company_name" type="bool" default="true">
+	  <label><![CDATA[Show Company Name]]></label>
+	  <description><![CDATA[Show the company name field on address and checkout forms.]]></description>
+	</setting>
+	<setting name="show_mobile_field" type="bool" default="true">
+	  <label><![CDATA[Show Mobile Number]]></label>
+	  <description><![CDATA[Show the optional mobile number field on checkout and registration.]]></description>
+	</setting>
+	<setting name="show_order_comments" type="bool" default="true">
+	  <label><![CDATA[Show Delivery Notes or Additional Comments]]></label>
+	  <description><![CDATA[Show the free-text comments box at the end of checkout. Existing comments still appear on orders and receipts when this is off.]]></description>
+	</setting>
+	<setting name="show_mailing_list" type="bool" default="true">
+	  <label><![CDATA[Show Subscribe to Mailing List]]></label>
+	  <description><![CDATA[Show the newsletter opt-in on checkout. Has no effect when the store's newsletter is switched off in Store Settings.]]></description>
+	</setting>
+	<setting name="low_stock_threshold" type="select" default="0">
+	  <label><![CDATA[Low Stock Warning]]></label>
+	  <description><![CDATA[Show "Only 2 left in stock" on the product page once the real stock level drops to this number or below. Only ever shows the true figure, and only for products you track stock on. Works on its own: you do not have to switch on Display Stock Levels and publish an exact count on every product.]]></description>
+	  <options>
+		<option value="0"><![CDATA[Do not show]]></option>
+		<option value="3"><![CDATA[3 or fewer]]></option>
+		<option value="5"><![CDATA[5 or fewer]]></option>
+		<option value="10"><![CDATA[10 or fewer]]></option>
+	  </options>
+	</setting>
+	<setting name="show_recently_viewed" type="bool" default="true">
+	  <label><![CDATA[Show Recently Viewed]]></label>
+	  <description><![CDATA[Show a row of the products this visitor looked at recently. The list is kept in their own browser and is never sent to the store or to anyone else.]]></description>
+	</setting>
+	<setting name="celebrate_coupon" type="bool" default="true">
+	  <label><![CDATA[Celebrate Discount Codes]]></label>
+	  <description><![CDATA[Play a short burst of confetti over the basket when a customer successfully applies a discount code. Nothing is shown when a code is rejected, and visitors who ask their device for reduced motion get the highlight without the confetti.]]></description>
+	</setting>
+	<setting name="show_coupon_code" type="bool" default="true">
+	  <label><![CDATA[Show Promo Code Field]]></label>
+	  <description><![CDATA[Show the promo/discount code box on checkout. Codes already applied to the basket still show, so a customer can always see and remove one.]]></description>
+	</setting>
+	<setting name="show_featured" type="bool" default="true">
+	  <label><![CDATA[Show Featured Products]]></label>
+	  <description><![CDATA[Show the Featured Products box in the storefront sidebar.]]></description>
+	</setting>
+	<setting name="show_best_sellers" type="bool" default="true">
+	  <label><![CDATA[Show Best Sellers]]></label>
+	  <description><![CDATA[Show the Best Sellers box in the storefront sidebar.]]></description>
+	</setting>
+	<setting name="show_sale_items" type="bool" default="true">
+	  <label><![CDATA[Show Sale Items]]></label>
+	  <description><![CDATA[Show the Sale Items box in the storefront sidebar. With all three sidebar boxes off the page content takes the full width.]]></description>
+	</setting>
+	<setting name="review_stars" type="select" default="product">
+	  <label><![CDATA[Show Review Stars]]></label>
+	  <description><![CDATA[Where star ratings appear. Listings show one score per card, which can be noisy on a large catalogue, so the default is the product page only.]]></description>
+	  <options>
+		<option value="product"><![CDATA[Product page only]]></option>
+		<option value="all"><![CDATA[Product page and listings]]></option>
+		<option value="none"><![CDATA[Nowhere]]></option>
+	  </options>
+	</setting>
+	<setting name="default_product_view" type="select" default="grid">
+	  <label><![CDATA[Default Product View]]></label>
+	  <description><![CDATA[How category listings first appear. A customer who picks the other view keeps their choice on this device.]]></description>
+	  <options>
+		<option value="grid"><![CDATA[Grid]]></option>
+		<option value="list"><![CDATA[List]]></option>
+	  </options>
+	</setting>
+	<setting name="registration_mode" type="select" default="choice">
+	  <label><![CDATA[Checkout Registration]]></label>
+	  <description><![CDATA[Whether a customer may create an account while checking out. Existing customers can always log in, whichever is chosen.]]></description>
+	  <options>
+		<option value="choice"><![CDATA[Customer chooses]]></option>
+		<option value="guest"><![CDATA[Guest checkout only]]></option>
+		<option value="required"><![CDATA[Registration required]]></option>
+	  </options>
+	</setting>
+  </settings>
+  <!-- Flattened into $SKIN_CUSTOM[<name>], one level only (gui.class.php:1946-1957).
+       Cached under skin.atrium.custom — clear the cache after editing. -->
+  <custom>
+	<recaptcha_badge_position>bottomright</recaptcha_badge_position><!-- bottomright | bottomleft | inline -->
+	<colour_scheme>light</colour_scheme><!-- light | auto -->
+	<container_width>screen-2xl</container_width>
+  </custom>
+</skin>

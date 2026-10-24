@@ -1,0 +1,17 @@
+/**
+ * Heirloom colour scheme: Navy. Brand ramp only (buttons, links, prices).
+ * The skin is light-only, so no dark-mode block is needed.
+ */
+:root {
+  --cc-brand-50: oklch(97.0% 0.018 255);
+  --cc-brand-100: oklch(93.4% 0.035 255);
+  --cc-brand-200: oklch(86.8% 0.060 255);
+  --cc-brand-300: oklch(77.6% 0.085 255);
+  --cc-brand-400: oklch(65.8% 0.100 255);
+  --cc-brand-500: oklch(54.4% 0.103 255);
+  --cc-brand-600: oklch(44.2% 0.098 255);
+  --cc-brand-700: oklch(37.0% 0.085 255);
+  --cc-brand-800: oklch(31.2% 0.073 255);
+  --cc-brand-900: oklch(26.4% 0.060 255);
+  --cc-brand-950: oklch(19.4% 0.045 255);
+}

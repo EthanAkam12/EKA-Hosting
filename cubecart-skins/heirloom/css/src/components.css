@@ -1,0 +1,918 @@
+/**
+ * Atrium skin components.
+ *
+ * Deliberately small. Anything used once lives in the template as utilities;
+ * only genuinely repeated patterns — and anything a PLUGIN might need to target
+ * or reuse — earns a class here.
+ */
+
+@layer components {
+
+  /* ── Layout shell ──────────────────────────────────────────────────────── */
+  .cc-container {
+    width: 100%;
+    margin-inline: auto;
+    padding-inline: 1rem;
+    max-width: 96rem;
+  }
+  @media (min-width: 640px)  { .cc-container { padding-inline: 1.5rem; } }
+  @media (min-width: 1024px) { .cc-container { padding-inline: 2rem; } }
+
+  /* ── Buttons ───────────────────────────────────────────────────────────
+     .cc-btn is also the target of the .button compat rule (compat.css), so
+     plugin-emitted <button class="button"> inherits sane styling. */
+  .cc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-cc);
+    padding: 0.5625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 120ms, color 120ms, border-color 120ms;
+  }
+  .cc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .cc-btn-primary {
+    background-color: var(--color-brand-600);
+    /* Not a hardcoded #fff: a merchant's Brand Colour can be pale, and
+       element.brand_colours.php sets --cc-brand-fg to whichever of black or
+       white actually reads on it. Falls back to white, which is right for the
+       skin's own dark blue. */
+    color: var(--cc-brand-fg, #fff);
+  }
+  .cc-btn-primary:hover:not(:disabled) { background-color: var(--color-brand-700); }
+  /* Confirmation state on add-to-basket (12-basket.js clears it after 2.5s).
+     Green regardless of the merchant's brand colour, and white regardless of
+     --cc-brand-fg: success-600 is dark enough that white is always the readable
+     pairing. The hover selector is repeated or the pointer sitting on the
+     button would paint it brand again mid-confirmation. */
+  .cc-btn-primary.cc-btn-added,
+  .cc-btn-primary.cc-btn-added:hover:not(:disabled) {
+    background-color: var(--color-success-600);
+    border-color: var(--color-success-600);
+    color: #fff;
+  }
+
+  /* The tick draws itself on: the ring sweeps round first, then the check
+     strokes in behind it. x-show toggles display, and an animation replays from
+     the start whenever an element is displayed again, so a second add re-draws
+     rather than appearing finished.
+     Dash lengths are just over each shape: 58 clears the r=9 circumference
+     (~56.5), 20 clears the tick. The ring starts at 12 o'clock rather than
+     3 o'clock, hence the rotate. */
+  .cc-check circle {
+    stroke-dasharray: 58;
+    stroke-dashoffset: 58;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    animation: cc-check-ring 420ms ease-out forwards;
+  }
+  .cc-check path {
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    animation: cc-check-draw 260ms ease-out 300ms forwards;
+  }
+  @keyframes cc-check-ring {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes cc-check-draw {
+    to { stroke-dashoffset: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cc-check circle,
+    .cc-check path { animation: none; stroke-dashoffset: 0; }
+  }
+
+  /* Text sitting ON a brand-600 surface. Templates use this instead of
+     text-white so a merchant's pale Brand Colour flips the label to near-black
+     (--cc-brand-fg, set by element.brand_colours.php) rather than leaving it
+     invisible. Falls back to white for the skin's own dark blue. */
+  .cc-on-brand { color: var(--cc-brand-fg, #fff); }
+
+  .cc-btn-secondary {
+    background-color: var(--color-ink-100);
+    color: var(--color-ink-900);
+    border-color: var(--color-ink-200);
+  }
+  .cc-btn-secondary:hover:not(:disabled) { background-color: var(--color-ink-200); }
+
+  .cc-btn-ghost { background-color: transparent; color: var(--color-ink-700); }
+  .cc-btn-ghost:hover:not(:disabled) { background-color: var(--color-ink-100); }
+
+  /* ── Form controls ─────────────────────────────────────────────────────
+     Applied to bare elements too, because CubeCart core and plugins emit
+     unclassed <input>/<select> into checkout and we cannot reach them. */
+  .cc-input, .cc-select, .cc-textarea,
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="tel"], input[type="number"], input[type="search"],
+  input[type="url"], input[type="date"], select, textarea {
+    display: block;
+    width: 100%;
+    border-radius: var(--radius-cc);
+    border: 1px solid var(--color-ink-300);
+    background-color: var(--color-ink-50);
+    color: var(--color-ink-900);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9375rem;
+    line-height: 1.5rem;
+  }
+  input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus,
+  input[type="tel"]:focus, input[type="number"]:focus, input[type="search"]:focus,
+  select:focus, textarea:focus, .cc-input:focus {
+    border-color: var(--color-brand-600);
+    outline: 2px solid transparent;
+    box-shadow: 0 0 0 1px var(--color-brand-600);
+  }
+  input[type="checkbox"], input[type="radio"] {
+    accent-color: var(--color-brand-600);
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .cc-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-ink-800);
+    margin-bottom: 0.375rem;
+  }
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────── */
+  .cc-card {
+    background-color: var(--color-ink-100);
+    border: 1px solid var(--color-ink-200);
+    border-radius: var(--radius-cc-lg);
+  }
+
+  /* ── Alerts. box.errors.php uses these; keep the names stable so the
+       checkout can detect an error state and auto-open the guest form. ──── */
+  .cc-alert {
+    display: flex;
+    gap: 0.75rem;
+    border-radius: var(--radius-cc);
+    border: 1px solid transparent;
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+  }
+  .cc-alert-error  { background-color: var(--color-danger-50);  border-color: var(--color-danger-200);  color: var(--color-danger-700); }
+  .cc-alert-notice { background-color: var(--color-success-50); border-color: var(--color-success-200); color: var(--color-success-700); }
+  .cc-alert-info   { background-color: var(--color-brand-50);   border-color: var(--color-brand-200);   color: var(--color-brand-800); }
+  .cc-alert-warn   { background-color: var(--color-warn-50);    border-color: var(--color-warn-200);    color: var(--color-warn-700); }
+  .cc-alert a { text-decoration: underline; color: inherit; }
+
+  /* ── Category navigation ───────────────────────────────────────────────
+     element.navigation_tree.php emits identical markup at every depth (PHP
+     renders children before parents, so a template cannot know its own level).
+     All depth-dependent styling therefore lives here, keyed off nesting. */
+
+  .cc-nav > ul { display: flex; flex-wrap: wrap; align-items: center; gap: 0.125rem; }
+
+  .cc-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: var(--radius-cc);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-ink-700);
+    white-space: nowrap;
+  }
+  .cc-nav-link:hover { background-color: var(--color-ink-200); color: var(--color-ink-900); }
+
+  /* The desktop navigation band. Scoped to .cc-navbar rather than .cc-nav
+     because box.navigation.php is included TWICE with identical markup — once
+     here and once inside .cc-nav-mobile, which is a light drawer. Styling
+     .cc-nav directly would black out the mobile drawer too. */
+  /* The top border does the work in DARK mode: there the page is 14.2% L and
+     the band 17.5%, which is only ~1.05:1 — perceptible but weak. In light
+     mode the band separates on its own and the border just reads as an edge. */
+  .cc-navbar {
+    background-color: var(--color-chrome);
+    border-top: 1px solid var(--color-chrome-border);
+  }
+  :is(.cc-navbar, .cc-navrail) .cc-nav-link { color: var(--color-chrome-fg); }
+  :is(.cc-navbar, .cc-navrail) .cc-nav-link:hover {
+    background-color: var(--color-chrome-hover);
+    color: var(--color-chrome-fg);
+  }
+  /* Dropdown panels hang off the dark bar, so they carry the band's colours
+     down with them rather than reverting to the page surface. */
+  /* A panel the same colour as the band merges into it, leaving the rounded
+     corners as the only separation — which is what made them look wrong. Step
+     it toward the FOREGROUND rather than toward white, so it lifts on a dark
+     band and deepens on a light one, and a nested menu steps again. Row hover
+     stays --color-chrome-hover, which is lighter still than either. */
+  :is(.cc-navbar, .cc-navrail) .cc-nav-menu {
+    background-color: color-mix(in oklch, var(--color-chrome) 90%, var(--color-chrome-fg));
+    border-color: var(--color-chrome-border);
+    box-shadow: 0 14px 32px -10px rgb(0 0 0 / 0.55);
+  }
+  :is(.cc-navbar, .cc-navrail) .cc-nav-menu .cc-nav-menu {
+    background-color: color-mix(in oklch, var(--color-chrome) 82%, var(--color-chrome-fg));
+  }
+
+  /* The panel MEETS the band, and its visible top lands exactly on the band's
+     bottom edge — level with a third-level flyout, which is measured from the
+     panel rather than from the link.
+
+     top:100% is the bottom of the LINK, and the band adds py-1 below it, so the
+     panel starts 0.25rem too high. That 0.25rem is a transparent top border
+     rather than an offset: an offset would put 4px of no-man's-land between the
+     link and the panel, and since the panel is absolutely positioned and
+     outside the <li> that carries the hover, crossing it would close the menu.
+     background-clip keeps the background off the border, and what shows through
+     is the band itself, so there is no light strip. */
+  .cc-navbar .cc-nav > ul > .cc-nav-parent > .cc-nav-menu {
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+    border-top: 0.25rem solid transparent;
+    background-clip: padding-box;
+  }
+  :is(.cc-navbar, .cc-navrail) .cc-nav-menu .cc-nav-link { color: var(--color-chrome-fg); }
+  /* The sale link keeps its red signal in both contexts. Declared here rather
+     than as a !text-danger-600 utility in the template, because !important
+     would beat the .cc-navbar override below and paint mid-red on near-black. */
+  .cc-nav-sale, .cc-nav-sale:hover { color: var(--color-danger-600); }
+  :is(.cc-navbar, .cc-navrail) .cc-nav-sale,
+  :is(.cc-navbar, .cc-navrail) .cc-nav-sale:hover { color: var(--color-chrome-sale); }
+
+  /* ── The same nav, vertically ──────────────────────────────────────────
+     Main Menu setting. Same DOM, which is why the colour rules above use :is()
+     rather than being duplicated. Desktop only; below lg the drawer takes over. */
+  .cc-navrail {
+    border-radius: var(--radius-cc-lg);
+    background-color: var(--color-chrome);
+    padding: 0.5rem;
+  }
+  .cc-navrail .cc-nav > ul { display: block; }
+  .cc-navrail .cc-nav-link { width: 100%; justify-content: space-between; }
+  /* Sideways, or it would push the rest of the rail down. */
+  .cc-navrail .cc-nav > ul > .cc-nav-parent > .cc-nav-menu {
+    inset-inline-start: 100%;
+    top: -0.375rem;
+  }
+  /* Points at the flyout, open or closed: there is nothing below. */
+  .cc-navrail .cc-nav-caret,
+  .cc-navrail .cc-nav-caret.is-open { transform: rotate(-90deg); }
+
+  /* Two columns at lg with the sidebar boxes below the content, three at xl.
+     Flex could not do that without duplicating the aside. */
+  .cc-layout-rail { display: grid; gap: 2.5rem; }
+  .cc-layout-rail > .cc-sidebar { margin-top: 0; }
+
+  @media (min-width: 64rem) {
+    .cc-layout-rail {
+      grid-template-columns: 14rem minmax(0, 1fr);
+      align-items: start;
+    }
+    /* Spans both rows so the boxes tuck under the content, not the menu. */
+    .cc-layout-rail > .cc-navrail { grid-row: 1 / -1; }
+    .cc-layout-rail > .cc-sidebar { grid-column: 2; }
+  }
+  @media (min-width: 80rem) {
+    /* auto: with all sidebar boxes off there is no <aside> and no gap. */
+    .cc-layout-rail { grid-template-columns: 14rem minmax(0, 1fr) auto; }
+    .cc-layout-rail > .cc-sidebar { grid-column: 3; grid-row: 1; }
+  }
+
+  /* ── Homepage hero banners ──────────────────────────────────────────────
+     Enhances the .cc-hero block that the INSTALLER writes into the default
+     homepage document (language definitions: default_doc_content_welcome).
+
+     That markup is a CSS scroll-snap carousel with NO JavaScript, and it
+     carries its own layout in a style attribute rather than relying on this
+     rule. It has to: the document is written to the database once at install
+     and then rendered by whatever skin the merchant later applies, so it
+     cannot assume any skin CSS exists. (The pre-6.8.0 default assumed both a
+     slider library and skins/foundation/images/, and broke everywhere else.)
+
+     So these declarations are a fallback for markup whose style attribute a
+     merchant has stripped, plus the two things inline styles can't express:
+     the rounded corners and the WebKit scrollbar. */
+  .cc-hero {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;              /* Firefox */
+    border-radius: var(--radius-cc-lg);
+  }
+  .cc-hero::-webkit-scrollbar { display: none; }
+  /* Direct children are the slides. Each is a positioned wrapper holding the
+     image and its HTML caption - but documents installed before 6.8.0 hold
+     bare <img> children, so this has to match either. */
+  .cc-hero > * {
+    flex: 0 0 100%;
+    scroll-snap-align: center;
+    width: 100%;
+    border-radius: var(--radius-cc-lg);
+    overflow: hidden;
+  }
+  .cc-hero > img,
+  .cc-hero > * > img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 8 / 3;
+    object-fit: cover;
+  }
+  /* A single banner should not look like a carriage that failed to fill. */
+  .cc-hero > *:only-child { flex-basis: 100%; }
+
+  /* ── Star rating chooser (element.product_reviews.php, 22-stars.js) ─────
+     The radio is .cc-sr-only, so it is still focusable but invisible. The
+     focus ring therefore has to be drawn on the LABEL via :focus-visible on
+     the adjacent input — without this the keyboard user tabs into the group
+     and sees nothing at all. */
+  .cc-star {
+    cursor: pointer;
+    line-height: 0;
+    border-radius: var(--radius-cc);
+    transition: color 120ms, transform 120ms;
+  }
+  .cc-star-off { color: var(--color-ink-300); }
+  .cc-star-on  { color: var(--color-star); }
+  .cc-star:hover { transform: scale(1.08); }
+  .rating:focus-visible + .cc-star {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+  /* Pointer-driven scaling is decoration; honour a reduced-motion preference. */
+  @media (prefers-reduced-motion: reduce) {
+    .cc-star { transition: none; }
+    .cc-star:hover { transform: none; }
+  }
+
+  /* ── Social icons (element.social.php) ──────────────────────────────────
+     The marks are inline SVG using fill="currentColor", so the colour comes
+     from this rule and nothing has to be re-exported per theme. Sized by a
+     square hit target rather than the glyph, so Bluesky's 24-grid mark and
+     LinkedIn's 16-grid mark line up optically. */
+  .cc-social-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-cc);
+    color: var(--color-ink-600);
+    transition: color 150ms, background-color 150ms;
+  }
+  .cc-social-link:hover { color: var(--color-ink-900); background-color: var(--color-ink-200); }
+  .cc-social-link:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
+
+  /* On the footer band the surrounding text is white, so the marks follow it. */
+  .cc-footer .cc-social-link { color: var(--color-chrome-fg); }
+  .cc-footer .cc-social-link:hover {
+    color: var(--color-chrome-fg);
+    background-color: var(--color-chrome-hover);
+  }
+
+  /* ── Form validation (js/src/50-validate.js) ────────────────────────────
+     The message element is created by JS, so these class names are a contract
+     with that file — not just decoration. Tailwind cannot see them in any
+     template, hence they live here rather than as utilities. */
+  .cc-field-error {
+    margin-top: 0.375rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--color-danger-700);
+  }
+  /* aria-invalid is what JS sets, so styling keys off it: the visual state and
+     the state announced to a screen reader can never drift apart. */
+  .cc-input[aria-invalid="true"],
+  .cc-select[aria-invalid="true"],
+  .cc-textarea[aria-invalid="true"] {
+    border-color: var(--color-danger-600);
+  }
+  .cc-input[aria-invalid="true"]:focus,
+  .cc-select[aria-invalid="true"]:focus,
+  .cc-textarea[aria-invalid="true"]:focus {
+    outline-color: var(--color-danger-600);
+  }
+
+  /* ── Footer band ────────────────────────────────────────────────────────
+     Same chrome tokens as .cc-navbar.
+
+     box.documents.php, box.newsletter.php and main.php's copyright row set
+     their colours with ink utilities (text-ink-900 on headings, text-ink-600
+     on links, text-ink-500 on the copyright, border-ink-200 on the divider).
+     Those read dark-on-dark here, so each is overridden by name — in the
+     UNLAYERED block at the foot of this file, not here. See the note there
+     before adding another. */
+  .cc-footer {
+    /* INDEPENDENT of the nav band: a coloured header over a black footer is
+       the common case. Remapped locally so every .cc-footer rule below keeps
+       reading --color-chrome-* unchanged. The literals repeat theme.css's
+       chrome defaults on purpose — indirecting through --cc-chrome-* would drag
+       the footer back to the header colour. Keep the two in step. */
+    --color-chrome:        var(--cc-footer,        oklch(17.5% 0.009 250));
+    --color-chrome-hover:  var(--cc-footer-hover,  oklch(26.0% 0.011 250));
+    --color-chrome-border: var(--cc-footer-border, oklch(30.0% 0.011 250));
+    --color-chrome-muted:  var(--cc-footer-muted,  oklch(72.0% 0.010 250));
+    --color-chrome-fg:     var(--cc-footer-fg,     #fff);
+    background-color: var(--color-chrome);
+    color: var(--color-chrome-fg);
+    border-top: 1px solid var(--color-chrome-border);
+  }
+  /* The newsletter field sits on the dark band, so it cannot keep the light
+     page surface it gets from .cc-input. */
+  .cc-footer .cc-input {
+    background-color: color-mix(in oklch, var(--color-chrome) 82%, white);
+    border-color: var(--color-chrome-border);
+    color: var(--color-chrome-fg);
+  }
+  .cc-footer .cc-input::placeholder { color: var(--color-chrome-muted); }
+
+  .cc-nav-caret { width: 1rem; height: 1rem; flex-shrink: 0; transition: transform 150ms; }
+  /* Top level in the band: flips to point back up at its own trigger. */
+  .cc-nav-caret.is-open { transform: rotate(180deg); }
+
+  .cc-nav-item { position: relative; }
+
+  .cc-nav-menu {
+    position: absolute;
+    z-index: 40;
+    min-width: 14rem;
+    padding-block: 0.375rem;
+    border: 1px solid var(--color-ink-200);
+    border-radius: var(--radius-cc);
+    background-color: var(--color-ink-100);
+    box-shadow: 0 12px 28px -8px rgb(0 0 0 / 0.30);
+  }
+
+  /* First-level menu drops BELOW its trigger... */
+  .cc-nav > ul > .cc-nav-parent > .cc-nav-menu {
+    inset-inline-start: 0;
+    top: 100%;
+  }
+  /* ...every deeper menu flies out to the SIDE, or they would stack on top
+     of each other and only the deepest would be reachable. */
+  /* A flyout is an EXTENSION of the panel it came from: flush against it, so
+     only the one free corner is rounded. Logical properties, so end-end is
+     bottom-right in LTR and bottom-left in RTL. The shared edge loses its
+     border too — the lighter background already marks the boundary, and two
+     adjacent borders read as a double line. */
+  .cc-nav-menu .cc-nav-menu {
+    inset-inline-start: 100%;
+    top: -0.375rem;
+    border-radius: 0;
+    border-end-end-radius: var(--radius-cc);
+    border-inline-start: 0;
+  }
+
+  /* Items inside a menu are full-width rows, not inline pills. */
+  .cc-nav-menu .cc-nav-link {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    border-radius: 0;
+    padding: 0.5rem 0.875rem;
+    white-space: normal;
+  }
+  /* Sideways in a flyout, pointing at the menu it opens — open or closed,
+     since there is nothing below to point down to. */
+  .cc-nav-menu .cc-nav-caret,
+  .cc-nav-menu .cc-nav-caret.is-open { transform: rotate(-90deg); }
+
+  /* Long flyouts must fit the window: the sticky header stops the page
+     scrolling them into view. See #4289. */
+  @media (min-width: 64rem) {
+    .cc-nav-menu .cc-nav-item { position: static; }
+    .cc-nav-menu .cc-nav-menu { min-height: calc(100% + 0.75rem); }
+    .cc-nav-menu .cc-nav-menu:has(> li:nth-child(15)) {
+      columns: 2;
+      column-gap: 0;
+      width: max-content;
+    }
+    .cc-nav-menu .cc-nav-menu > li { break-inside: avoid; }
+    .cc-nav-menu .cc-nav-menu:has(> li:nth-child(15)) > .cc-nav-parent { position: relative; }
+    .cc-nav-menu .cc-nav-menu:has(> li:nth-child(15)) > .cc-nav-parent > .cc-nav-menu { min-height: 0; }
+  }
+
+  /* ── The same nav markup, restyled for the mobile drawer ───────────────
+     The drawer includes box.navigation.php a second time rather than shipping
+     a duplicate tree (foundation kept box.off_canvas.left.php in sync by hand
+     and it drifted). Everything below re-lays out the identical DOM as a
+     stacked accordion. */
+
+  .cc-nav-mobile .cc-nav > ul { display: block; }
+  .cc-nav-mobile .cc-nav-item { position: static; }
+
+  .cc-nav-mobile .cc-nav-link {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.625rem 0.5rem;
+    white-space: normal;
+  }
+
+  /* Flyouts become in-flow, indented sub-lists. */
+  .cc-nav-mobile .cc-nav-menu,
+  .cc-nav-mobile .cc-nav-menu .cc-nav-menu {
+    position: static;
+    inset: auto;
+    min-width: 0;
+    margin-inline-start: 0.75rem;
+    padding-block: 0;
+    border: none;
+    border-inline-start: 1px solid var(--color-ink-200);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .cc-nav-mobile .cc-nav-menu .cc-nav-link { padding-inline-start: 0.75rem; }
+  /* Down at every depth here, since nothing flies out sideways, and flipped
+     when the branch is open. */
+  /* The caret toggles its branch here, so give it a thumb-sized target: at
+     16px a near miss lands on the link and leaves the page. The negative
+     margins keep the row the same height. */
+  .cc-nav-mobile .cc-nav-caret {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0.875rem;
+    margin: -0.875rem -0.5rem -0.875rem 0;
+    transform: none;
+  }
+  .cc-nav-mobile .cc-nav-caret.is-open { transform: rotate(180deg); }
+
+
+  /* ── Sidebar ────────────────────────────────────────────────────────────
+     Every sidebar box self-guards on its own data, so on a store with no
+     featured/popular/sale products the <aside> renders empty. Without this it
+     would still reserve its 18rem column and knock the main content off-centre. */
+  .cc-sidebar:empty { display: none; }
+
+  /* ── Merchant-authored HTML ────────────────────────────────────────────
+     Apply .prose-cc to ANY block containing HTML the merchant wrote: CMS
+     documents, product descriptions, category descriptions, email-ish content.
+
+     This is not a nicety. Tailwind's preflight zeroes the margins and font
+     sizes of h1-h6, p, ul and ol, so a product description pasted from Word
+     renders as one undifferentiated wall of text. Foundation had element
+     defaults and never needed this; Atrium does.
+
+     Scoped rather than global so it cannot fight the skin's own layout. */
+  .prose-cc { color: var(--color-ink-700); }
+  .prose-cc > * + * { margin-top: 1em; }
+  .prose-cc h1 { font-size: 1.875rem; line-height: 1.2; margin-top: 1.6em; }
+  .prose-cc h2 { font-size: 1.5rem;   line-height: 1.25; margin-top: 1.6em; }
+  .prose-cc h3 { font-size: 1.25rem;  line-height: 1.3; margin-top: 1.5em; }
+  .prose-cc h4 { font-size: 1.075rem; margin-top: 1.4em; }
+  .prose-cc h1:first-child,
+  .prose-cc h2:first-child,
+  .prose-cc h3:first-child { margin-top: 0; }
+  .prose-cc ul { list-style: disc;    padding-inline-start: 1.5rem; }
+  .prose-cc ol { list-style: decimal; padding-inline-start: 1.5rem; }
+  .prose-cc li + li { margin-top: 0.35em; }
+  .prose-cc a { text-decoration: underline; text-underline-offset: 2px; }
+  .prose-cc img { border-radius: var(--radius-cc); }
+  .prose-cc blockquote {
+    border-inline-start: 3px solid var(--color-ink-300);
+    padding-inline-start: 1rem;
+    color: var(--color-ink-600);
+    font-style: italic;
+  }
+  .prose-cc table { margin-block: 1em; }
+  .prose-cc th, .prose-cc td {
+    border: 1px solid var(--color-ink-200);
+    padding: 0.5rem 0.75rem;
+    text-align: start;
+  }
+  .prose-cc hr { border: none; border-top: 1px solid var(--color-ink-200); margin-block: 2em; }
+
+  /* ── Always-visible scrollbar ───────────────────────────────────────────
+     macOS hides overlay scrollbars until something scrolls, so a capped panel
+     (the mini-basket) looks truncated rather than scrollable. Force a thin
+     visible track instead. */
+  .cc-scroll-y {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-300) transparent;
+  }
+  .cc-scroll-y::-webkit-scrollbar { width: 8px; }
+  .cc-scroll-y::-webkit-scrollbar-track { background: transparent; }
+  .cc-scroll-y::-webkit-scrollbar-thumb {
+    background-color: var(--color-ink-300);
+    border-radius: 4px;
+  }
+  .cc-scroll-y:hover::-webkit-scrollbar-thumb { background-color: var(--color-ink-400); }
+
+  /* ── Visually hidden, but readable by assistive tech ──────────────────── */
+  .cc-sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  /* Skip link: hidden until focused. */
+  .cc-skip {
+    position: absolute;
+    left: 0.5rem; top: -3rem;
+    z-index: 100;
+    background-color: var(--color-brand-600);
+    color: var(--cc-brand-fg, #fff);   /* same reason as .cc-btn-primary */
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-cc);
+    transition: top 120ms;
+  }
+  .cc-skip:focus { top: 0.5rem; color: var(--cc-brand-fg, #fff); }
+
+  /* Modal overlays: over PayPal's buttons (300), under a captcha challenge (2e9).
+     Fallback only, modals take the top layer via popover. Rest resets UA chrome. */
+  .cc-overlay {
+    z-index: 1000;
+    width: auto;
+    height: auto;
+    margin: 0;
+    border: 0;
+    color: inherit;
+  }
+
+  /* The /// that prefixes a what3words address, in their brand red. Sits in
+     front of the input rather than inside its value, because the component
+     writes the value and part of a value cannot be coloured anyway. */
+  .w3w-slashes {
+    color: var(--color-w3w);
+    font-weight: 600;
+    letter-spacing: -0.05em;
+  }
+
+  /* ── Catalogue imagery plate ──────────────────────────────────────────
+     Every surface a product, category or certificate image sits on. White, not
+     an ink token, and the same in both themes: cut-out PNGs are authored
+     against white, so a themed plate turns them into a dark hole in dark mode
+     and a grey-on-grey smudge in light. Applies to the image itself where
+     there is no wrapper to carry it.
+
+     Only for catalogue imagery. Avatars, logos, payment marks and icons are
+     chrome and keep the theme background. */
+  .cc-media { background-color: #fff; }
+
+  /* ── Morphing hamburger ───────────────────────────────────────────────
+     Three bars that fold into an X, so one button both opens and closes the
+     drawer. Bars rather than two SVG paths because the transform origin is
+     predictable at any size and there is no path morphing to get wrong.
+
+     The middle bar fades rather than scaling: scaling it leaves a visible
+     sliver mid-transition at fractional device pixel ratios. Timings are under
+     the blanket reduced-motion rule in @layer base. */
+  .cc-burger {
+    position: relative;
+    display: block;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .cc-burger span {
+    position: absolute;
+    inset-inline: 0;
+    height: 2px;
+    border-radius: 2px;
+    background-color: currentColor;
+    transition: transform 220ms ease, opacity 120ms ease;
+  }
+  .cc-burger span:nth-child(1) { top: 0.3125rem; }
+  .cc-burger span:nth-child(2) { top: 0.6875rem; }
+  .cc-burger span:nth-child(3) { top: 1.0625rem; }
+
+  .cc-burger.is-open span:nth-child(1) { transform: translateY(0.375rem) rotate(45deg); }
+  .cc-burger.is-open span:nth-child(2) { opacity: 0; }
+  .cc-burger.is-open span:nth-child(3) { transform: translateY(-0.375rem) rotate(-45deg); }
+
+  /* ── Async pending states ─────────────────────────────────────────────
+     The mini-basket and the search panel both swap content under the user
+     without a page load. Without a beat of feedback the change either goes
+     unnoticed or reads as a glitch. Everything here is short enough to feel
+     like response rather than decoration, and the blanket reduced-motion rule
+     in @layer base flattens all of it. */
+
+  /* Added by 12-basket.js to the freshly injected #mini-basket fragment, and
+     removed once it has played so a second add replays it. */
+  /* Recently viewed: one row at every width. The script renders four; these
+     trim it. In CSS so it is right on first paint and survives a rotate. */
+  @media (max-width: 63.999rem) {
+    .cc-recent-row > li:nth-child(n+3) { display: none; }
+  }
+  @media (min-width: 64rem) and (max-width: 79.999rem) {
+    .cc-recent-row > li:nth-child(n+4) { display: none; }
+  }
+
+  /* The clone that flies to the basket (13-flight.js). Inert: it crosses the
+     whole page and must not swallow a click. */
+  .cc-flight {
+    position: fixed;
+    z-index: 60;
+    pointer-events: none;
+    border-radius: var(--radius-cc);
+    object-fit: cover;
+    will-change: transform, opacity;
+  }
+
+  /* ── Discount code applied (41-coupon.js) ──────────────────────────────
+     The flash carries the meaning, so it is deliberately outside the
+     reduced-motion opt-out: without it that visitor gets no confirmation. */
+  .cc-coupon-won { animation: cc-coupon-won 1400ms ease-out; }
+
+  @keyframes cc-coupon-won {
+    0%   { transform: scale(1); }
+    12%  { transform: scale(1.06); }
+    26%  { transform: scale(1); }
+  }
+  .cc-coupon-won dd { animation: cc-coupon-flash 1400ms ease-out; }
+
+  @keyframes cc-coupon-flash {
+    0%, 55% { color: var(--color-success-600); font-weight: 700; }
+    100%    { color: var(--color-success-700); font-weight: inherit; }
+  }
+
+  /* Created and removed by JS. Inert, or it would eat the Proceed click. */
+  .cc-confetti {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .cc-basket-updated { animation: cc-basket-settle 200ms ease-out; }
+  .cc-basket-updated .cc-btn { animation: cc-basket-bump 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+
+  @keyframes cc-basket-settle {
+    from { opacity: 0.35; }
+    to   { opacity: 1; }
+  }
+  @keyframes cc-basket-bump {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.09); }
+    100% { transform: scale(1); }
+  }
+
+  /* Search results while a newer query is in flight: dimmed and inert, so the
+     stale list cannot be clicked and the wait is visible. */
+  .cc-pending {
+    opacity: 0.45;
+    pointer-events: none;
+    transition: opacity 120ms ease-out;
+  }
+
+  /* ── Order-status rubber stamp ───────────────────────────────────────
+     Keyed off the core .order_status / .order_status_N classes, so a status
+     added later still gets a stamp, just in the neutral ink. The print
+     invoice keeps its own copy: it never loads this stylesheet. */
+  .order_status {
+    position: relative;
+    display: inline-block;
+    padding: 0.6rem 1.1rem;
+    /* Both frames inside the border box: a mask clips to that box, so an
+       outline would vanish once the speckle mask below is applied. */
+    border: 1px solid currentColor;
+    border-radius: 0.45rem;
+    color: var(--color-ink-500);
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.85;
+    transform: rotate(6deg);
+    /* Worn ink: fine grain plus coarse patches, compounded. intersect is
+       load-bearing: the default (add) unions the layers and each fills the
+       other's gaps. No mask support means a clean stamp, which is fine. */
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='60'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.9'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.3%200.3'/%3E%3C/filter%3E%3Crect%20width='120'%20height='60'%20filter='url%28%23n%29'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='260'%20height='110'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.18'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.2%200.42'/%3E%3C/filter%3E%3Crect%20width='260'%20height='110'%20filter='url%28%23n%29'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='60'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.9'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.3%200.3'/%3E%3C/filter%3E%3Crect%20width='120'%20height='60'%20filter='url%28%23n%29'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='260'%20height='110'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.18'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.2%200.42'/%3E%3C/filter%3E%3Crect%20width='260'%20height='110'%20filter='url%28%23n%29'/%3E%3C/svg%3E");
+    -webkit-mask-size: 120px 60px, 260px 110px;
+    mask-size: 120px 60px, 260px 110px;
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  .order_status::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 3px solid currentColor;
+    border-radius: 0.2rem;
+  }
+  .order_status_1 { color: var(--color-stamp-pending); }
+  .order_status_2 { color: var(--color-stamp-process); }
+  .order_status_3 { color: var(--color-stamp-complete); }
+  .order_status_4,
+  .order_status_5,
+  .order_status_6 { color: var(--color-stamp-declined); }
+}
+
+/* ── Footer band: beating the utilities Tailwind emits ─────────────────────
+   NOT in @layer components, and that is the whole point. Tailwind v4 emits
+   @layer utilities AFTER @layer components, and a cascade layer beats
+   specificity outright: from inside the layer, .cc-footer .text-ink-600 (0,2,0)
+   still loses to .text-ink-600 (0,1,0) and the footer renders dark-on-dark.
+   Unlayered rules beat every layer, so they live out here instead.
+
+   Footer text is white throughout, including the copyright row and the link
+   list — chrome-muted is reserved for the newsletter placeholder, where a
+   dimmer tone is the point. If a footer sub-template starts using a different
+   ink shade, add it here, not to the block above. */
+.cc-footer .text-ink-900,
+.cc-footer .text-ink-600,
+.cc-footer .text-ink-500 { color: var(--color-chrome-fg); }
+.cc-footer .border-ink-200 { border-color: var(--color-chrome-border); }
+.cc-footer a { color: var(--color-chrome-fg); }
+.cc-footer a:hover { color: var(--color-chrome-fg); text-decoration: underline; }
+.cc-footer .hover\:text-ink-900:hover { color: var(--color-chrome-fg); }
+
+/* ── Currency and language menus inside the mobile drawer ─────────────────
+   NOT in @layer components, same reason as the footer block above: the panels
+   carry w-52 / w-56 utilities and Tailwind emits @layer utilities after
+   @layer components, so a layered rule loses however specific it is.
+
+   In the header these open leftwards from a button at the right edge of the
+   viewport (absolute end-0). In the drawer the button sits mid-row, so that
+   same panel hangs off the drawer's edge. Core pre-renders both boxes to one
+   string printed in both places, so the template cannot know where it is.
+
+   Dropping position:relative on the wrapper hands the panel to the drawer
+   itself, which is fixed and therefore a positioned ancestor. It then spans
+   the drawer minus its 1rem padding, and the vertical position is unaffected
+   because top:auto keeps the static position it would have had in flow. */
+.cc-nav-mobile .box-currency > div,
+.cc-nav-mobile .box-language > div { position: static; }
+
+.cc-nav-mobile .box-currency ul,
+.cc-nav-mobile .box-language ul {
+  inset-inline: 1rem;
+  width: auto;
+  max-width: none;
+}
+
+/* ── PayPal express mount on the product page ─────────────────────────────
+   NOT in @layer components, and this one is not about Tailwind: the module
+   injects its own <style> into the body, which is unlayered, and unlayered
+   author styles beat every cascade layer whatever the specificity. A layered
+   rule here would lose to it.
+
+   What it ships: #paypal-button-container div gets max-width 355px and a 5px
+   right padding, but no horizontal centring, so on a wider column the block
+   sits left of centre and the padding pulls it further off. Centre the pair
+   and drop the padding. */
+#pp_product_mount { text-align: center; }
+
+/* The module sets text-align on the container AND its divs from a module
+   setting, so centring the mount alone never reaches them. The button block is
+   inline-level, so it is the CONTAINER's text-align that positions it; the
+   margin-inline is for the case where a future SDK renders it as a block. */
+#pp_product_mount #paypal-button-container,
+#pp_product_mount #paypal-button-container div {
+  text-align: center;
+}
+
+/* The 5px right padding is on the container as well as the divs, and left on
+   the container it narrows the content box, so the centred block lands 2.5px
+   off. Both, or neither. */
+#pp_product_mount #paypal-button-container,
+#pp_product_mount #paypal-button-container div {
+  padding-right: 0;
+}
+
+#pp_product_mount #paypal-button-container div { margin-inline: auto; }
+
+/* ── what3words input ─────────────────────────────────────────────────────
+   NOT in @layer components, and every declaration carries !important. Neither
+   is laziness: the component injects its OWN stylesheet at RUNTIME, so it lands
+   after this file in the cascade and wins every specificity tie. Measured, the
+   field kept the component's 16px padding and its own font size, so it sat
+   visibly apart from every other field on the form.
+
+   These values are copied from the skin's own input rule above; keep the two in
+   step. The only intentional difference is padding-inline-start, which leaves
+   room for the red /// drawn in front of the box.
+
+   .w3w-field is on the wrapper in element.w3w.php purely to out-specify. */
+.w3w-field .what3words-autosuggest-input-wrapper input,
+.w3w-field what3words-autosuggest input {
+  display: block !important;
+  width: 100% !important;
+  border: 1px solid var(--color-ink-300) !important;
+  border-radius: var(--radius-cc) !important;
+  background-color: var(--color-ink-50) !important;
+  color: var(--color-ink-900) !important;
+  padding: 0.5rem 0.75rem !important;
+  padding-inline-start: 1.75rem !important;
+  font-size: 0.9375rem !important;
+  line-height: 1.5rem !important;
+}
+
+.w3w-field .what3words-autosuggest-input-wrapper input:focus,
+.w3w-field what3words-autosuggest input:focus {
+  border-color: var(--color-brand-600) !important;
+  outline: 2px solid transparent !important;
+  box-shadow: 0 0 0 1px var(--color-brand-600) !important;
+}

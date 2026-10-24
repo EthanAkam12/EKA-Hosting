@@ -1,0 +1,311 @@
+/**
+ * Heirloom: a warm, classic skin for antiques shops, layered on Atrium.
+ *
+ * Everything here works through Atrium's --cc-* tokens and a few extra
+ * component rules, so there is no build step. Colour schemes live in
+ * cubecart.<scheme>.css; merchant tweaks belong in custom.css (loaded last).
+ */
+
+/* Heading face: Cormorant Garamond, bundled (SIL OFL, see fonts/). */
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/cormorant-garamond-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/cormorant-garamond-latin-600-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/cormorant-garamond-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  /* Warm "paper" neutrals instead of Atrium's cool greys. */
+  --cc-ink-50:  oklch(97.6% 0.011 85);
+  --cc-ink-100: oklch(95.4% 0.015 83);
+  --cc-ink-200: oklch(90.6% 0.020 80);
+  --cc-ink-300: oklch(84.0% 0.024 78);
+  --cc-ink-400: oklch(68.5% 0.024 72);
+  --cc-ink-500: oklch(55.5% 0.022 68);
+  --cc-ink-600: oklch(46.0% 0.020 65);
+  --cc-ink-700: oklch(38.0% 0.018 62);
+  --cc-ink-800: oklch(29.0% 0.015 60);
+  --cc-ink-900: oklch(22.0% 0.012 58);
+  --cc-ink-950: oklch(16.0% 0.010 55);
+
+  /* Brass: ornaments, rules and the sale colour in the menu. */
+  --hl-brass: oklch(66% 0.095 80);
+  --hl-brass-light: oklch(80% 0.075 85);
+  --hl-mat: oklch(99.2% 0.006 85);   /* the "picture mount" behind photos */
+  --hl-stamp: oklch(44% 0.13 25);    /* sold stamp: faded oxblood ink */
+
+  /* Navigation and footer bands take the deep end of the brand colour. */
+  --cc-chrome:        var(--cc-brand-900);
+  --cc-chrome-hover:  var(--cc-brand-800);
+  --cc-chrome-fg:     oklch(95% 0.02 85);
+  --cc-chrome-muted:  oklch(82% 0.03 85);
+  --cc-chrome-border: var(--cc-brand-800);
+  --cc-chrome-sale:   var(--hl-brass-light);
+  --cc-footer:        var(--cc-brand-950);
+  --cc-footer-fg:     oklch(93% 0.02 85);
+  --cc-footer-muted:  oklch(78% 0.03 85);
+  --cc-footer-border: var(--cc-brand-900);
+  --cc-footer-hover:  var(--hl-brass-light);
+
+  --cc-star: var(--hl-brass);
+  --cc-radius: 0.1875rem;
+  --cc-radius-lg: 0.3125rem;
+  --cc-font-serif: "Cormorant Garamond", "Cormorant", Garamond, "Times New Roman", serif;
+}
+
+/* ---------------------------------------------------------------- type -- */
+
+h1, h2, h3,
+.hl-serif {
+  font-family: var(--cc-font-serif);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+h1 { font-size: clamp(2rem, 3.4vw, 2.75rem); line-height: 1.1; }
+main h2.text-xl, #content_latest_products h2, [id^="content_products_"] h2 { font-size: 1.85rem; }
+
+/* Ornamental rule under section headings. */
+#content_latest_products > div:first-child h2::after,
+[id^="content_products_"] > div:first-child h2::after,
+.category_wrapper h1::after,
+.cc-hl-rule::after {
+  content: "";
+  display: block;
+  width: 3.5rem;
+  height: 2px;
+  margin-top: 0.55rem;
+  background: linear-gradient(90deg, var(--hl-brass), transparent);
+}
+
+/* --------------------------------------------------------------- header -- */
+
+.cc-header {
+  background-color: color-mix(in oklch, var(--cc-ink-50) 96%, transparent);
+  border-bottom: 1px solid var(--cc-ink-300);
+  box-shadow: 0 3px 0 -2px var(--hl-brass-light);
+}
+.hl-wordmark {
+  font-family: var(--cc-font-serif);
+  font-weight: 700;
+  font-size: clamp(1.45rem, 2.4vw, 2rem);
+  line-height: 1;
+  color: var(--cc-ink-950);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Menu band: small capitals with generous spacing. */
+.cc-navbar a,
+.cc-navbar button {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------- listings -- */
+
+/* Photos sit in a cream "mount" with a hairline frame, like a framed print. */
+.cc-media {
+  background-color: var(--hl-mat);
+  border-color: var(--cc-ink-300) !important;
+  padding: 0.5rem;
+  box-shadow: 0 1px 2px oklch(30% 0.03 70 / 0.08), 0 8px 24px -16px oklch(30% 0.03 70 / 0.35);
+  transition: box-shadow 0.25s, border-color 0.25s;
+}
+.cc-media img { border-radius: 1px; }
+a.cc-media:hover { border-color: var(--hl-brass) !important; box-shadow: 0 1px 2px oklch(30% 0.03 70 / 0.1), 0 14px 30px -16px oklch(30% 0.03 70 / 0.45); }
+/* The zoom-on-hover suits gadgets more than antiques: keep it subtle. */
+.cc-media img.group-hover\:scale-105 { transition-duration: 0.6s; }
+.group:hover .cc-media img.group-hover\:scale-105 { transform: scale(1.025); }
+
+/* Product names in listings read like catalogue entries. */
+.add_to_basket h2,
+.add_to_basket h3 {
+  font-family: var(--cc-font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.add_to_basket h2 a, .add_to_basket h3 a { color: var(--cc-ink-950); }
+
+.price {
+  font-family: var(--cc-font-serif);
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+.add_to_basket .price { font-size: 1.2rem; color: var(--cc-brand-800); }
+#call_to_action_block .price { font-size: 2.4rem; color: var(--cc-brand-800); }
+#call_to_action_block .price.line-through { font-size: 1.3rem; color: var(--cc-ink-500); }
+
+/* ------------------------------------------------------------ sold items -- */
+
+.hl-sold-badge {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+  padding: 0.2rem 0.75rem 0.15rem;
+  font-family: var(--cc-font-serif);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hl-stamp);
+  background: color-mix(in oklch, var(--hl-mat) 88%, transparent);
+  border: 2px solid currentColor;
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+  transform: rotate(-7deg);
+  pointer-events: none;
+}
+.group:has(.hl-sold-badge) .cc-media img { filter: grayscale(0.55) sepia(0.15); opacity: 0.8; }
+.hl-sold-btn { font-family: var(--cc-font-serif); letter-spacing: 0.15em; text-transform: uppercase; }
+
+.hl-sold-panel {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--cc-ink-300);
+  border-left: 3px solid var(--hl-stamp);
+  background: var(--hl-mat);
+  font-size: 0.95rem;
+  color: var(--cc-ink-700);
+}
+.hl-sold-panel .hl-sold-title {
+  font-family: var(--cc-font-serif);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--hl-stamp);
+  margin-bottom: 0.25rem;
+}
+.hl-sold-panel a { color: var(--cc-brand-700); text-decoration: underline; }
+
+.hl-unique {
+  margin-top: 0.9rem;
+  font-family: var(--cc-font-serif);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--cc-ink-600);
+}
+.hl-unique span { color: var(--hl-brass); font-style: normal; margin-right: 0.15rem; }
+
+/* -------------------------------------------------------------- buttons -- */
+
+.cc-btn { letter-spacing: 0.03em; }
+.cc-btn-primary { box-shadow: inset 0 -2px 0 oklch(0% 0 0 / 0.18); }
+
+/* ------------------------------------------------------- sidebar boxes -- */
+
+.cc-sidebar .cc-card {
+  background-color: var(--hl-mat);
+  border-color: var(--cc-ink-300);
+}
+.cc-sidebar .cc-card h2,
+.cc-sidebar .cc-card h3 {
+  font-family: var(--cc-font-serif);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--cc-ink-950);
+}
+
+/* ------------------------------------------------------------- homepage -- */
+
+/* The banner on the default homepage content. */
+.cc-hero img { border-radius: var(--cc-radius-lg); }
+.cc-hero h2 { font-family: var(--cc-font-serif) !important; font-weight: 600 !important; letter-spacing: 0.01em; }
+
+/* Optional welcome block for the homepage content (see HOMEPAGE.html). */
+.hl-welcome {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+  padding: clamp(1.75rem, 4vw, 3.5rem);
+  border: 1px solid var(--cc-ink-300);
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in oklch, var(--hl-brass-light) 22%, transparent), transparent 60%),
+    var(--hl-mat);
+  border-radius: var(--cc-radius-lg);
+}
+.hl-welcome .hl-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cc-brand-700);
+}
+.hl-welcome h2 {
+  font-family: var(--cc-font-serif);
+  font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+  line-height: 1.05;
+  margin: 0.4rem 0 0.8rem;
+  color: var(--cc-ink-950);
+}
+.hl-welcome p { max-width: 38rem; color: var(--cc-ink-700); font-size: 1.05rem; }
+.hl-welcome .hl-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.4rem; }
+.hl-welcome .hl-actions a { text-decoration: none; }
+.hl-promises {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cc-ink-300);
+  font-size: 0.9rem;
+  color: var(--cc-ink-700);
+}
+.hl-promises strong { display: block; font-family: var(--cc-font-serif); font-size: 1.15rem; color: var(--cc-ink-950); }
+
+/* --------------------------------------------------------------- footer -- */
+
+.cc-footer h2,
+.cc-footer h3 {
+  font-family: var(--cc-font-serif);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.cc-footer { border-top: 3px double var(--hl-brass); }
+
+/* ------------------------------------------------------- product page -- */
+
+.product_wrapper h1,
+#product_name,
+[itemprop="name"] { font-size: clamp(2rem, 3.6vw, 2.9rem); line-height: 1.08; }
+
+/* ------------------------------------------------------------ refinements -- */
+
+/* Cormorant's default old-style numerals look uneven in prices: use lining. */
+.price,
+.hl-welcome,
+.cc-sidebar,
+#call_to_action_block { font-variant-numeric: lining-nums; }
+.cc-sidebar .price { font-size: 0.95rem; color: var(--cc-brand-800); }
+
+@media (max-width: 639px) {
+  .hl-wordmark { font-size: 1.3rem; }
+}
+body { font-variant-numeric: lining-nums; }
+.hl-qty { display: inline-block; min-width: 2.5rem; font-weight: 600; }
+@media (max-width: 420px) {
+  .hl-wordmark { font-size: 1.12rem; letter-spacing: 0; }
+}

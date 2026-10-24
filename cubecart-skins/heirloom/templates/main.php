@@ -1,0 +1,325 @@
+{*
+ * CubeCart v6 — Atrium skin
+ * ========================================
+ * CubeCart is a registered trade mark of CubeCart Limited
+ * Copyright CubeCart Limited 2026. All rights reserved.
+ * UK Private Limited Company No. 5323904
+ * ========================================
+ * Web:   https://www.cubecart.com
+ * Email:  hello@cubecart.com
+ * License:  GPL-3.0 https://www.gnu.org/licenses/quick-guide-gplv3.html
+ *
+ * ── ⚠ SMARTY / ALPINE HOUSE RULE ─────────────────────────────────────────────
+ * Write every Alpine component as a FUNCTION REFERENCE, never an inline object
+ * literal — Smarty parses the braces and the template dies:
+ *
+ *     GOOD:  x-data="ccDrawer('menuOpen')"
+ *     BAD:   x-data="{open:false}"        <- Smarty parses this, fatal
+ *     BAD:   :class="{'a':b}"             <- same
+ *
+ * Smarty's $auto_literal (true by default in Smarty.class.php, never overridden
+ * here) spares "{" followed by whitespace, so a spaced literal happens to
+ * survive. Do not rely on it. For class toggling use the ternary form:
+ *     :class="open ? 'block' : 'hidden'"
+ * ─────────────────────────────────────────────────────────────────────────────
+ *}
+{* Main Menu setting. Read once: it decides both the header band and the
+   content wrapper. Defaulted, for a store that never saved the settings. *}
+{assign var='cc_menu_vertical' value=(($SKIN_SETTINGS.main_menu_layout|default:'horizontal') == 'vertical')}
+<!DOCTYPE html>
+<html dir="{$TEXT_DIRECTION}" lang="{$HTML_LANG}"{if $SKIN_CUSTOM.colour_scheme == 'dark'} data-theme="dark"{/if}>
+   <head>
+      <title>{$META_TITLE}</title>
+      {include file='templates/element.meta.php'}
+      <link href="{$CANONICAL}" rel="canonical">
+      <link href="{$ROOT_PATH}favicon.ico" rel="shortcut icon" type="image/x-icon">
+      {include file='templates/element.css.php'}
+      {if $SKIN_CUSTOM.colour_scheme == 'auto'}
+      {* Must stay inline and ahead of first paint, or the wrong theme flashes. *}
+      <script>{literal}(function(){try{if(matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();{/literal}</script>
+      {/if}
+      {include file='templates/element.js_head.php'}
+      {* ⚠ Invisible reCAPTCHA (mode 3) bootstrap. Every layout that can contain
+         a protected form needs it, or those forms silently produce no captcha
+         token and every submission is rejected. Must follow element.js_head.php
+         so jQuery exists for plugins that assume it. *}
+      {include file='templates/content.recaptcha.head.php'}
+   </head>
+   <body class="min-h-screen bg-ink-50 text-ink-800 antialiased">
+      {* Polite live region. Everything announced through it is text the server
+         already rendered somewhere on the page, so it needs no strings of its
+         own and stays translated. window.ccAnnounce() in 00-boot.js writes here. *}
+      <div id="cc-live" class="cc-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+      {* MUST be first inside <body>: GUI::__construct() queues the script that
+         writes the cc_browser capability cookie used for bot protection. *}
+      {foreach from=$BODY_JS_TOP item=js}{$js}{/foreach}
+
+      <a class="cc-skip" href="#main_content">{$LANG.common.skip_to_content|default:'Skip to content'}</a>
+
+      {if $STORE_OFFLINE}
+      <div class="bg-warn-600 px-4 py-2 text-center text-sm font-medium text-white" role="status">
+         {$LANG.common.warning_offline}
+      </div>
+      {/if}
+
+      {if $CORE_BELOW_MIN_VERSION}
+      <div class="bg-danger-600 px-4 py-2 text-center text-sm font-medium text-white" role="alert">
+         Atrium requires CubeCart 6.7.6 or newer. This store is running {$CC_VERSION}.
+      </div>
+      {/if}
+
+      <header class="cc-header sticky top-0 z-30 border-b border-ink-200 bg-ink-100/95 backdrop-blur">
+         <div class="cc-container flex h-header min-w-0 items-center gap-3 sm:gap-4">
+
+            {* One control for both directions: the bars fold into an X while the
+               drawer is open (.cc-burger in components.css). Opening the menu
+               closes the search panel, or the drawer would start below a header
+               that has grown taller than it thinks. *}
+            <button type="button"
+                    class="cc-btn cc-btn-ghost -ml-2 p-2 lg:hidden"
+                    x-data="ccDrawer('menuOpen')"
+                    @click="$store.ui.searchOpen = false; open = !open"
+                    :aria-expanded="open ? 'true' : 'false'"
+                    aria-controls="cc-mobile-nav">
+               <span class="cc-sr-only">{$LANG.navigation.expand_for_more}</span>
+               <span class="cc-burger" :class="{ 'is-open': open }" aria-hidden="true">
+                  <span></span><span></span><span></span>
+               </span>
+            </button>
+
+            {* min-w-0 on both, deliberately not shrink-0: a flex item defaults
+               to min-width:auto, so an oversized merchant logo would refuse to
+               shrink and push the header past the viewport. The img needs it
+               too, or it overflows the shrunken link onto the search button. *}
+            <a href="{$ROOT_PATH}" class="flex min-w-0 items-center">
+               {* Heirloom: until a real logo is uploaded, show the store name
+                  as a serif wordmark instead of the placeholder image. *}
+               {if empty($STORE_LOGO) || $STORE_LOGO|strpos:'/images/default/logo/default.png' !== false}
+               <span class="hl-wordmark">{$CONFIG.store_name}</span>
+               {else}
+               <img src="{$STORE_LOGO}" alt="{$CONFIG.store_name}" class="max-h-logo w-auto min-w-0 max-w-[50vw] object-contain sm:max-w-none">
+               {/if}
+            </a>
+
+            <div class="ms-auto hidden w-full max-w-md lg:block">
+               {include file='templates/box.search.php'}
+            </div>
+
+            {* Core pre-renders these boxes to HTML and assigns the result:
+                 $SESSION       <- box.session.php   GUI::_displaySessionBox()
+                 $CURRENCY      <- box.currency.php  GUI::_displayCurrencySwitch()
+                 $LANGUAGE      <- box.language.php  GUI::_displayLanguageSwitch()
+                 $SHOPPING_CART <- box.basket.php    GUI::displaySideBasket()
+               ⚠ All four are templateExists()-guarded except box.basket.php,
+               which is fetched unguarded — that template MUST exist. *}
+            <div class="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+               {* Below lg the search box is not in the header row: this reveals
+                  the panel underneath it. ccToggleSearch() also moves focus. *}
+               <button type="button" class="cc-btn cc-btn-ghost p-2 lg:hidden"
+                       @click="window.ccToggleSearch()"
+                       :aria-expanded="$store.ui.searchOpen ? 'true' : 'false'"
+                       aria-controls="cc-search-panel"
+                       x-data>
+                  <span class="cc-sr-only">{$LANG.common.search}</span>
+                  <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                     <path d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+               </button>
+               {$SESSION}
+               {* Currency and language hide themselves below md and reappear in
+                  the drawer, which is where there is room for them. The wrapper
+                  is what does it, so the boxes themselves stay layout-agnostic
+                  and render correctly in both places. *}
+               <div class="hidden items-center gap-1 md:flex sm:gap-2">
+                  {$CURRENCY}
+                  {$LANGUAGE}
+               </div>
+               {$SHOPPING_CART}
+            </div>
+         </div>
+
+         {* Search panel, below lg only. A second copy of box.search.php with its
+            own id suffix; the desktop one above stays in the header row. *}
+         <div id="cc-search-panel" x-data x-show="$store.ui.searchOpen" x-cloak
+              x-transition.opacity.duration.150ms
+              @keydown.escape.window="$store.ui.searchOpen = false"
+              class="cc-container border-t border-ink-200 pb-3 pt-3 lg:hidden">
+            {include file='templates/box.search.php' uid='mobile'}
+         </div>
+
+         {* ⚠ box.navigation.php must be {include}d, never replaced with
+            {$CATEGORIES}. GUI::_displayNavigation() fetches the template first,
+            while $CATEGORIES is still unset, so the {else} branch builds the
+            tree and assigns it; this include then takes the {if $CATEGORIES}
+            branch and prints it. Printing {$CATEGORIES} on its own renders
+            nothing on a cache miss. *}
+         {* .cc-navbar paints this band from the non-inverting --color-chrome
+            tokens (see theme.css). It is NOT on .cc-nav itself, because the
+            mobile drawer below includes the same box.navigation.php and must
+            stay light.
+
+            Main Menu can move this same include into the content grid as
+            .cc-navrail instead. Only ONE may render: box.navigation.php carries
+            ids and the drawer is already a second copy. *}
+         {if !$cc_menu_vertical}
+         <div class="cc-navbar hidden lg:block">
+            <div class="cc-container py-1">
+               {include file='templates/box.navigation.php'}
+            </div>
+         </div>
+         {/if}
+      </header>
+
+      {* Quick view. One modal per page; the fragment is fetched from
+         ?_g=quickview and injected with x-html, which Alpine initialises. It is
+         cleared on close, not merely hidden, because the fragment carries the
+         product page's ids and only one copy may exist. *}
+      <div x-data x-show="$store.quickView.open" x-cloak
+           x-transition.opacity.duration.150ms
+           @keydown.escape.window="$store.quickView.close()"
+           class="fixed inset-0 z-50 flex items-center justify-center p-4">
+         <div class="absolute inset-0 bg-ink-950/50" @click="$store.quickView.close()" aria-hidden="true"></div>
+         <div class="relative z-10 max-h-[85dvh] w-full max-w-3xl overflow-y-auto rounded-cc-lg border border-ink-200 bg-ink-100 p-5 shadow-lg"
+              role="dialog" aria-modal="true" :aria-label="$store.quickView.title"
+              x-trap.noscroll="$store.quickView.open">
+            <button type="button" class="cc-btn cc-btn-ghost absolute end-2 top-2 p-2"
+                    @click="$store.quickView.close()">
+               <span class="cc-sr-only">{$LANG.common.close|default:'Close'}</span>
+               <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                  <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round"/>
+               </svg>
+            </button>
+
+            <p x-show="$store.quickView.busy" class="py-12 text-center text-sm text-ink-500">
+               <span x-text="$store.quickView.title"></span>
+            </p>
+            {* Deliberately NOT x-html: see the warning in 23-quickview.js. The
+               store writes here with innerHTML and Alpine's observer initialises
+               what lands. *}
+            <div id="cc-quickview-body"></div>
+         </div>
+      </div>
+
+      <div x-data="ccDrawer('menuOpen')" x-cloak>
+         {* Dim starts below the header so the burger stays lit and tappable:
+            it is the close control now. top-header is the --spacing-header
+            token, which also sizes the header row (h-header). *}
+         <div x-show="open" x-transition.opacity
+              class="fixed inset-x-0 bottom-0 top-header z-40 bg-ink-950/50 lg:hidden"
+              @click="close()" aria-hidden="true"></div>
+         <div id="cc-mobile-nav" x-show="open" role="dialog" aria-modal="true"
+              x-trap.noscroll="open"
+              @keydown.escape.window="close()"
+              x-transition:enter="transition ease-out duration-200"
+              x-transition:enter-start="-translate-x-full"
+              x-transition:enter-end="translate-x-0"
+              x-transition:leave="transition ease-in duration-150"
+              x-transition:leave-start="translate-x-0"
+              x-transition:leave-end="-translate-x-full"
+              class="cc-nav-mobile fixed bottom-0 left-0 top-header z-50 w-80 max-w-[85vw] overflow-y-auto border-r border-ink-200 bg-ink-100 p-4 lg:hidden">
+            {* No visible heading or close button: the header's burger is the X.
+               This one is for keyboard users, who are held inside the dialog by
+               x-trap and so cannot reach that burger by tabbing. Escape works
+               too; this is the discoverable equivalent. *}
+            <button type="button" class="cc-sr-only" @click="close()">{$LANG.common.close|default:'Close'}</button>
+
+            {* Same box.navigation.php as the desktop bar; the .cc-nav-mobile
+               class on the drawer is what restyles it into a stacked accordion
+               in components.css. *}
+            <div>
+               {include file='templates/box.navigation.php'}
+            </div>
+
+            {* The only place these are reachable below md: the header hides its
+               own copies there. Search is NOT here any more, it is the
+               magnifier in the header. *}
+            <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-ink-200 pt-4 md:hidden">
+               {$CURRENCY}
+               {$LANGUAGE}
+            </div>
+         </div>
+      </div>
+
+      <div class="{$SECTION_NAME}_wrapper cc-container py-8">
+         {include file='templates/element.breadcrumb.php'}
+         {* Vertical needs a grid, not flex, so the sidebar can drop below the
+            content at lg and return beside it at xl. See .cc-layout-rail. *}
+         <div class="{if $cc_menu_vertical}cc-layout-rail{else}lg:flex lg:gap-10{/if}">
+            {if $cc_menu_vertical}
+            <div class="cc-navrail hidden lg:block">
+               {include file='templates/box.navigation.php'}
+            </div>
+            {/if}
+            <main id="main_content" class="min-w-0 flex-1">
+               {include file='templates/box.errors.php'}
+               {$CHECKOUT_PROGRESS}
+               {$PAGE_CONTENT}
+            </main>
+
+            {* Sidebar visibility is three merchant settings (config.xml
+               <settings>). With all three off the <aside> is not rendered at all
+               and <main>'s flex-1 takes the full width — deliberately not left
+               to .cc-sidebar:empty, which needs ZERO child nodes and would still
+               see the whitespace between these includes.
+
+               That :empty rule still earns its place for the other case: the
+               boxes are on, but each self-guards on its own data, so a store
+               with no featured/popular/sale products renders them all empty. *}
+            {assign var='cc_sb_featured' value=!isset($SKIN_SETTINGS.show_featured) || $SKIN_SETTINGS.show_featured}
+            {assign var='cc_sb_popular'  value=!isset($SKIN_SETTINGS.show_best_sellers) || $SKIN_SETTINGS.show_best_sellers}
+            {assign var='cc_sb_sale'     value=!isset($SKIN_SETTINGS.show_sale_items) || $SKIN_SETTINGS.show_sale_items}
+            {if $cc_sb_featured || $cc_sb_popular || $cc_sb_sale}
+            <aside class="cc-sidebar mt-10 space-y-6 lg:mt-0 lg:w-72 lg:shrink-0">
+               {if $cc_sb_featured}{include file='templates/box.featured.php'}{/if}
+               {if $cc_sb_popular}{include file='templates/box.popular.php'}{/if}
+               {if $cc_sb_sale}{include file='templates/box.sale_items.php'}{/if}
+            </aside>
+            {/if}
+         </div>
+      </div>
+
+      {* Same non-inverting chrome band as the nav; cc-footer restyles the
+         descendants core and the sub-templates emit (headings, links, the
+         newsletter field) which otherwise carry light-surface colours. *}
+      <footer class="cc-footer mt-16">
+         <div class="cc-container py-10">
+            <div class="grid gap-10 md:grid-cols-2">
+               {* $DOCUMENTS (GUI::_displayDocuments()) is a DATA array that
+                  box.documents.php consumes. $SOCIAL_LIST (GUI::_displaySocial())
+                  is already-rendered HTML — print it, and do not also {include}
+                  element.social.php or the block appears twice. *}
+               {include file='templates/box.documents.php'}
+               <div class="space-y-8 md:text-right">
+                  {include file='templates/box.newsletter.php'}
+                  {$SOCIAL_LIST}
+               </div>
+            </div>
+            <div class="mt-10 border-t border-ink-200 pt-6 text-sm text-ink-500">
+               {$COPYRIGHT}
+               {include file='templates/ccpower.php'}
+            </div>
+         </div>
+      </footer>
+
+      {* Product / Offer / AggregateRating / BreadcrumbList structured data.
+         Must stay server-rendered: this is what Google reads for rich results. *}
+      {include file='templates/element.markup.json-ld.php'}
+
+      {* Translated validation strings for 50-validate.js. Must come BEFORE
+         element.js_foot.php: the bundle parses this blob at alpine:init. *}
+      {include file='templates/element.validation_messages.php'}
+
+      {* Labels for the controls 14-controls.js builds. Same ordering rule. *}
+      {include file='templates/element.ui_strings.php'}
+
+      {* Exit-intent newsletter modal. Deliberately absent from
+         main.checkout.php — never interrupt a payment. *}
+      {include file='templates/modal.exit.php'}
+
+      {include file='templates/element.js_foot.php'}
+      {$LIVE_HELP}
+      {$SKIN_SELECT}
+      {$ACP_WIDGET}
+   </body>
+</html>

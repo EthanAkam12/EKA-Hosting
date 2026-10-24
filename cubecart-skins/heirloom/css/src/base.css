@@ -1,0 +1,94 @@
+/**
+ * Atrium base layer — element defaults and global affordances.
+ */
+
+@layer base {
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    /* Explicit background: never inherit the host's ground. */
+    background-color: var(--color-ink-50);
+    color: var(--color-ink-800);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--color-ink-900);
+    font-weight: 600;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  a { color: var(--color-brand-700); }
+  a:hover { color: var(--color-brand-800); }
+
+  /* Keyboard focus must always be visible. Applied globally rather than
+   * per-component so a plugin injecting a bare <button> still gets it. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Alpine renders x-show/x-transition elements before it boots; x-cloak hides
+   * them until then. Without this the mobile menu flashes open on every load. */
+  [x-cloak] { display: none !important; }
+
+  /* Tables carry order lines and invoices — never let one scroll the page body. */
+  table { width: 100%; border-collapse: collapse; }
+
+  img, svg, video { max-width: 100%; height: auto; }
+
+  /* Digits that line up in columns: prices, quantities, order totals. */
+  .tabular, td.price, .price { font-variant-numeric: tabular-nums; }
+
+  /* Tailwind v4 dropped the preflight rule that gave buttons cursor:pointer,
+     so anything not carrying .cc-btn hovers with the plain arrow — including
+     the 28 bare buttons in this skin and every button a plugin injects.
+     :not(:disabled) so .cc-btn:disabled keeps its not-allowed cursor. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) { cursor: pointer; }
+}
+
+/* ── Cross-document view transitions ──────────────────────────────────────
+   Outside @layer base on purpose: @view-transition is a top-level at-rule and
+   a cascade layer would swallow it.
+
+   Navigations cross-fade instead of white-flashing. Chromium and Safari honour
+   it; Firefox ignores the rule and behaves exactly as before, so there is no
+   fallback to write.
+
+   The header is named, which excludes it from the cross-fade and keeps it
+   painted in place while the content changes. That is the part people actually
+   notice. A name must be unique per page or the browser abandons the whole
+   transition, so this is keyed to a class carried by exactly one element rather
+   than to the bare <header> tag, which a plugin could add a second of.
+
+   ::view-transition animations run on the pseudo-element tree, which the
+   blanket reduced-motion rule in @layer base does not reach, hence the
+   explicit opt-out. */
+@view-transition { navigation: auto; }
+
+
+.cc-header { view-transition-name: cc-header; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}

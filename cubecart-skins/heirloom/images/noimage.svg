@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="No image">
+  <!-- No text on purpose: the old one had "NO IMAGE AVAILABLE" in the pixels,
+       which no translation could reach. Colours are theme.css's ink ramp. -->
+  <rect width="512" height="512" fill="#f2f4f5"/>
+  <g fill="none" stroke="#d0d4d8" stroke-width="14" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="128" y="150" width="256" height="212" rx="20"/>
+    <!-- Hills, drawn to sit on the frame's floor so the shape reads as a photo. -->
+    <path d="M128 316 l58-62 44 47 62-74 84 89"/>
+  </g>
+  <circle cx="212" cy="206" r="19" fill="#d0d4d8"/>
+</svg>
