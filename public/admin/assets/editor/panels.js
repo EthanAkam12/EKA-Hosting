@@ -365,6 +365,13 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
         ? h("a", { href: `/api/sites/${s.siteId}/export.zip`, download: "" }, "Download the published site as files")
         : "Publish first, then you can download the site as files.",
       " (a ZIP to upload to any host)."));
+
+    root.append(h("div", { class: "group-title", style: { marginTop: "18px" } }, "Online shop (CubeCart)"));
+    root.append(h("p", { class: "field-hint" },
+      "For a shop: install CubeCart on the hosting, then use this design as its skin. ",
+      "It takes the colours, fonts, rounding and logo, plus a homepage banner from your first page. ",
+      "Upload the ZIP into CubeCart's skins folder, extract it, and pick it in the CubeCart admin (instructions are inside)."));
+    root.append(h("a", { class: "btn btn-sm", href: `/api/sites/${s.siteId}/cubecart-skin.zip`, download: "" }, "Download as CubeCart skin"));
   }
 
   async function showSubmissions(siteId) {

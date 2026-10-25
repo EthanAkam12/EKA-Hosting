@@ -19,6 +19,7 @@ import { createAi } from "./ai/index.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
 import { saveUpload, deleteUpload } from "./media.js";
 import { buildStaticSite } from "./export.js";
+import { buildCubecartSkin } from "./cubecart-skin.js";
 import { fillPlaceholders } from "./placeholders.js";
 import { deploy, testConnection } from "./deploy.js";
 import yazl from "yazl";
@@ -614,6 +615,20 @@ api.get("/sites/:id/export.zip", async (req, res) => {
   zip.end();
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", `attachment; filename="${meta.slug}-website.zip"`);
+  zip.outputStream.pipe(res);
+});
+
+// "Download as CubeCart skin": the design as a skin for a CubeCart shop.
+api.get("/sites/:id/cubecart-skin.zip", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const site = (await store.getPublished(meta.id)) || (await store.getDraft(meta.id));
+  const { folder, files } = await buildCubecartSkin({ site, slug: meta.slug, mediaDir: store.mediaDir(meta.id) });
+  const zip = new yazl.ZipFile();
+  for (const f of files) zip.addBuffer(f.content, f.path);
+  zip.end();
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${folder}-cubecart-skin.zip"`);
   zip.outputStream.pipe(res);
 });
 

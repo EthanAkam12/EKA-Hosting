@@ -74,6 +74,10 @@ Sites don't have to be hosted by the builder. In the editor's **Site** tab, unde
 
 From then on **Publish** uploads the site straight to the host. Only changed files are sent, and the builder only ever removes files it uploaded itself. Contact forms work through a small `contact.php` that emails the owner (the host needs PHP, which almost all do). Prefer to upload by hand? Use **Download the published site as files** for a ZIP.
 
+## Online shops (CubeCart)
+
+The builder makes brochure sites; for a shop, install [CubeCart](https://www.cubecart.com) on the hosting and design the look here. In the editor's **Site** tab, **Download as CubeCart skin** turns the design into a CubeCart 6.8+ skin (built on the Heirloom skin in `cubecart-skins/heirloom`) with the site's colours, fonts, corner rounding and logo, plus a homepage banner from its first page. Upload the ZIP into CubeCart's `skins/` folder, extract it, and choose it in the CubeCart admin; `INSTALL.md` inside has the steps. After changing the design, download the skin again and upload it over the old one.
+
 ## How it fits together
 
 ```
