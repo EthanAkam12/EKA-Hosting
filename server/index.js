@@ -9,6 +9,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { exec } from "node:child_process";
 import express from "express";
 import compression from "compression";
 
@@ -21,7 +22,21 @@ import { renderPage } from "../shared/render.js";
 import { createEmptySite, normalizeSite, findNode } from "../shared/schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// Settings can live in a plain text file next to the code (settings.txt, made
+// from settings.example.txt by start-windows.bat) or in .env. Real environment
+// variables always win over the file.
+for (const name of ["settings.txt", ".env"]) {
+  try {
+    process.loadEnvFile(path.join(ROOT, name));
+    break;
+  } catch {
+    // File not there: fine, use the environment.
+  }
+}
+
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || undefined; // e.g. 127.0.0.1 = only this computer
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, "data"));
 const BASE_DOMAIN = (process.env.BASE_DOMAIN || "").toLowerCase().replace(/^\.+/, "");
 const SECURE_COOKIES = process.env.COOKIE_SECURE === "1" || process.env.NODE_ENV === "production";
@@ -472,8 +487,14 @@ app.use((err, req, res, _next) => {
   res.status(500).type("html").send(simplePage("Something went wrong", "Please try again in a moment."));
 });
 
-app.listen(PORT, () => {
-  console.log(`EKA Hosting running on http://localhost:${PORT}/admin`);
+app.listen(PORT, HOST, () => {
+  const url = `http://localhost:${PORT}/admin`;
+  console.log(`EKA Hosting running on ${url}`);
+  if (process.env.ADMIN_PASSWORD === "change-me") console.log("  Your password is still 'change-me'. Edit settings.txt to choose your own.");
+  if (process.env.OPEN_BROWSER === "1") {
+    const cmd = process.platform === "win32" ? `start "" "${url}"` : process.platform === "darwin" ? `open "${url}"` : `xdg-open "${url}"`;
+    exec(cmd, () => {});
+  }
   console.log(`AI: ${ai.enabled ? `${ai.provider} (new sites: ${ai.model}, changes: ${ai.editModel})` : "not configured (template mode) — set ANTHROPIC_API_KEY to enable"}`);
   if (BASE_DOMAIN) console.log(`Customer sites: https://<slug>.${BASE_DOMAIN}/`);
 });

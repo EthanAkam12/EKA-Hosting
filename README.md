@@ -8,6 +8,17 @@ An AI website builder for making and managing customer websites.
 - **Fast customer sites.** Published pages are plain HTML with the CSS inlined and **no JavaScript at all**. The mobile menu, FAQs and form messages are pure CSS, photos are auto-converted to WebP with phone-sized copies, and YouTube embeds load only a thumbnail until clicked. A typical page is ~20 KB.
 - **Hosting built in.** Each site is served at `<name>.<your-domain>` and/or the customer's own domain, with contact-form messages collected for you.
 
+## Try it on Windows (no coding needed)
+
+1. Install **Node.js** (the "LTS" version) from [nodejs.org](https://nodejs.org/en/download). Click through the installer with the default options.
+2. On this GitHub page, click the green **Code** button, then **Download ZIP**. Right-click the downloaded file, choose **Extract All**, and open the extracted folder.
+3. Double-click **start-windows.bat**. The first time, it installs what it needs (a minute or two), then opens the builder in your browser.
+   If Windows shows a blue "Windows protected your PC" box, click **More info**, then **Run anyway**.
+4. Log in with the password **change-me**.
+5. To choose your own password or turn on AI, open **settings.txt** in the same folder with Notepad, edit it, save, then close the black window and double-click **start-windows.bat** again.
+
+Keep the black window open while you use the builder; closing it stops the builder. Everything you make is saved in the `data` folder.
+
 ## Quick start
 
 ```bash
@@ -18,6 +29,8 @@ ADMIN_PASSWORD=choose-a-password ANTHROPIC_API_KEY=sk-ant-... npm start
 Open http://localhost:3000/admin and log in.
 
 Without `ANTHROPIC_API_KEY` everything still works except AI: new sites start from a template and you edit by hand.
+
+Settings can also go in a `settings.txt` or `.env` file next to the code (see `settings.example.txt`); real environment variables take priority.
 
 Run the tests with `npm test`.
 
@@ -33,6 +46,7 @@ Run the tests with `npm test`.
 | `AI_PROVIDER` | `claude` (default when a key is set) or `demo` (templates only). |
 | `BASE_DOMAIN` | e.g. `ekahosting.com`. Sites are then served at `https://<site-name>.ekahosting.com`. Without it, sites are served at `/s/<site-name>/` on the builder. |
 | `PORT` | Default `3000`. |
+| `HOST` | Set to `127.0.0.1` to accept connections from this computer only (the Windows start file does this). |
 | `DATA_DIR` | Where sites, images and messages are stored. Default `./data`. **Back this folder up.** |
 | `NODE_ENV=production` | Marks login cookies as HTTPS-only. |
 | `TRUST_PROXY` | Set to `1` when running behind a reverse proxy such as Caddy or Nginx, so rate limits see real visitor IPs. |

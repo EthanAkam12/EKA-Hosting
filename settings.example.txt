@@ -1,0 +1,9 @@
+# EKA Hosting settings
+# Edit this file in Notepad, save it, then close and re-open the builder.
+
+# The password you use to log in to the builder.
+ADMIN_PASSWORD=change-me
+
+# To turn on AI, paste your Claude API key after the = sign (it starts with sk-ant-).
+# Leave it empty to use the builder without AI (new sites start from a template).
+ANTHROPIC_API_KEY=
