@@ -62,6 +62,16 @@ The builder is at `https://admin.ekahosting.com/admin` (or the bare domain). A c
 
 **Customer domains:** in the editor go to **Site → Custom domains** and add e.g. `www.brightspark.co.uk`. Then have the customer point their domain at your server (an `A` record to its IP, or a `CNAME` to `<site-name>.ekahosting.com`). Caddy issues the certificate automatically on the first visit.
 
+## Publishing to a customer's own hosting (any normal web host)
+
+Sites don't have to be hosted by the builder. In the editor's **Site** tab, under **Your hosting (FTP)**:
+
+1. Enter the FTP details the host gives you (server, username, password) and the folder (usually `public_html`). Click **Test connection**, then **Save**.
+2. Tick **Upload to this hosting every time I click Publish**.
+3. Under **Contact forms**, enter the email address messages should go to.
+
+From then on **Publish** uploads the site straight to the host. Only changed files are sent, and the builder only ever removes files it uploaded itself. Contact forms work through a small `contact.php` that emails the owner (the host needs PHP, which almost all do). Prefer to upload by hand? Use **Download the published site as files** for a ZIP.
+
 ## How it fits together
 
 ```

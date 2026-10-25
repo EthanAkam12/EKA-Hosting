@@ -6,6 +6,7 @@ import { createCanvas } from "./canvas.js";
 import { createInspector } from "./inspector.js";
 import { createPanels } from "./panels.js";
 import { openMediaPicker } from "./media.js";
+import { followDeploy } from "./deploy-ui.js";
 import { findNode } from "/admin/shared/schema.js";
 
 const siteId = location.pathname.split("/").filter(Boolean)[2];
@@ -106,8 +107,10 @@ $("publish-btn").addEventListener("click", async () => {
   try {
     await state.flush();
     const first = !state.get().meta.publishedAt;
-    const { meta } = await api(`/sites/${siteId}/publish`, { method: "POST", body: {} });
+    const { meta, jobId } = await api(`/sites/${siteId}/publish`, { method: "POST", body: {} });
     state.setMeta(meta);
+    // Sites set to publish to the customer's own hosting upload in the background.
+    if (jobId) followDeploy(siteId, jobId).then((m) => { if (m) state.setMeta(m); });
     if (first) {
       modal({
         title: "Your site is live 🎉",

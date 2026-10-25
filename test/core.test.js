@@ -118,3 +118,21 @@ test("new sites and changes can use different models", async () => {
   assert.equal(calls[0].model, "claude-opus-5-5");
   assert.equal(calls[1].model, "claude-sonnet-5-5");
 });
+
+test("static export rewrites images and adds a contact form handler", async () => {
+  const { buildStaticSite } = await import("../server/export.js");
+  const site = sampleSite();
+  site.pages[0].sections[0].columns[1].blocks[0].props.src = "/_m/abc123def456/photo-o.webp";
+  site.pages[0].sections.push(createSection({}, [[createBlock("form")]]));
+  const files = await buildStaticSite({ site: normalizeSite(site), siteId: "abc123def456", mediaDir: "/nonexistent", formEmail: "owner@example.com", domain: "example.com" });
+  const byPath = Object.fromEntries(files.map((f) => [f.path, f.content.toString()]));
+  assert.ok(byPath["index.html"] && byPath["about/index.html"]);
+  assert.match(byPath["index.html"], /src="\/media\/photo-o\.webp"/);
+  assert.ok(!byPath["index.html"].includes("/_m/"), "no builder URLs left");
+  assert.match(byPath["index.html"], /action="\/contact\.php"/);
+  assert.match(byPath["index.html"], /rel="canonical" href="https:\/\/example\.com\/"/);
+  assert.ok(byPath["contact.php"].startsWith("<?php"));
+  // The recipient is baked in (base64 JSON), never read from the form.
+  assert.ok(byPath["contact.php"].includes(Buffer.from(JSON.stringify("owner@example.com")).toString("base64")));
+  assert.ok(byPath[".htaccess"] && byPath["404.html"]);
+});

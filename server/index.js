@@ -18,6 +18,9 @@ import { createAuth } from "./auth.js";
 import { createAi } from "./ai/index.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
 import { saveUpload, deleteUpload } from "./media.js";
+import { buildStaticSite } from "./export.js";
+import { deploy, testConnection } from "./deploy.js";
+import yazl from "yazl";
 import { renderPage } from "../shared/render.js";
 import { createEmptySite, normalizeSite, findNode } from "../shared/schema.js";
 
@@ -275,7 +278,43 @@ const siteOr404 = (req, res) => {
   return meta;
 };
 
-const withUrl = (meta) => ({ ...meta, liveUrl: liveUrl(meta), previewPath: `/s/${meta.slug}/` });
+// Never send the hosting password to the browser; just say whether one is saved.
+const withUrl = (meta) => {
+  const { deploy: d, ...rest } = meta;
+  const deploySafe = d ? { ...d, password: undefined, hasPassword: !!d.password } : null;
+  return { ...rest, deploy: deploySafe, liveUrl: liveUrl(meta), previewPath: `/s/${meta.slug}/` };
+};
+
+const DEPLOY_FIELDS = ["enabled", "host", "port", "user", "secure", "remoteDir"];
+
+function cleanDeploySettings(input, existing = {}) {
+  const out = { ...existing };
+  for (const k of DEPLOY_FIELDS) if (input[k] !== undefined) out[k] = k === "enabled" ? !!input[k] : String(input[k]).trim().slice(0, 300);
+  // An empty password field means "keep the saved one".
+  if (typeof input.password === "string" && input.password !== "") out.password = input.password;
+  out.host = (out.host || "").replace(/^s?ftps?:\/\//i, "").replace(/\/.*$/, "");
+  if (!["explicit", "none"].includes(out.secure)) out.secure = "explicit";
+  return out;
+}
+
+function startDeployJob(meta) {
+  return startJob("deploy", meta.id, async (progress) => {
+    const current = store.getMeta(meta.id);
+    const site = await store.getPublished(meta.id);
+    if (!site) throw new Error("Publish the site first.");
+    const files = await buildStaticSite({ site, siteId: meta.id, mediaDir: store.mediaDir(meta.id), formEmail: current.formEmail || "", domain: current.domains?.[0] || "" });
+    const previous = await store.getDeployManifest(meta.id);
+    try {
+      const result = await deploy({ settings: current.deploy, files, previous, onProgress: progress });
+      await store.saveDeployManifest(meta.id, result.manifest);
+      await store.updateMeta(meta.id, { deployedAt: new Date().toISOString(), deployError: null });
+      return result;
+    } catch (err) {
+      await store.updateMeta(meta.id, { deployError: err.message });
+      throw err;
+    }
+  });
+}
 
 api.get("/me", (req, res) => {
   res.json({ ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model, editModel: ai.editModel }, baseDomain: BASE_DOMAIN || null });
@@ -353,6 +392,12 @@ api.patch("/sites/:id/meta", async (req, res) => {
   if (typeof req.body.name === "string") patch.name = req.body.name.trim().slice(0, 120) || meta.name;
   if (typeof req.body.slug === "string") patch.slug = req.body.slug;
   if (Array.isArray(req.body.domains)) patch.domains = req.body.domains;
+  if (typeof req.body.formEmail === "string") {
+    const email = req.body.formEmail.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "That email address doesn't look right." });
+    patch.formEmail = email;
+  }
+  if (req.body.deploy && typeof req.body.deploy === "object") patch.deploy = cleanDeploySettings(req.body.deploy, meta.deploy || {});
   const updated = await store.updateMeta(meta.id, patch);
   pageCache.clear();
   res.json({ meta: withUrl(updated) });
@@ -382,7 +427,44 @@ api.post("/sites/:id/publish", async (req, res) => {
   if (!meta) return;
   if (req.body?.site) await store.saveDraft(meta.id, req.body.site);
   const updated = await store.publish(meta.id);
-  res.json({ meta: withUrl(updated) });
+  // Sites set up to publish to outside hosting upload their files now.
+  const jobId = updated.deploy?.enabled ? startDeployJob(updated).id : null;
+  res.json({ meta: withUrl(updated), jobId });
+});
+
+api.post("/sites/:id/deploy", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (!meta.deploy?.host) return res.status(400).json({ error: "Add the hosting's FTP details first (Site tab)." });
+  if (!meta.publishedAt) return res.status(400).json({ error: "Publish the site first." });
+  res.json({ jobId: startDeployJob(meta).id });
+});
+
+api.post("/sites/:id/deploy/test", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const settings = cleanDeploySettings(req.body || {}, meta.deploy || {});
+  if (!settings.host || !settings.user || !settings.password) return res.status(400).json({ error: "Fill in the server, username and password first." });
+  try {
+    res.json(await testConnection(settings));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// "Download site as files": the published site as a ZIP for any web host.
+api.get("/sites/:id/export.zip", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const site = await store.getPublished(meta.id);
+  if (!site) return res.status(400).json({ error: "Publish the site first." });
+  const files = await buildStaticSite({ site, siteId: meta.id, mediaDir: store.mediaDir(meta.id), formEmail: meta.formEmail || "", domain: meta.domains?.[0] || "" });
+  const zip = new yazl.ZipFile();
+  for (const f of files) zip.addBuffer(f.content, f.path);
+  zip.end();
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${meta.slug}-website.zip"`);
+  zip.outputStream.pipe(res);
 });
 
 api.post("/sites/:id/unpublish", async (req, res) => {

@@ -4,6 +4,7 @@ import { BLOCKS, FONT_CHOICES, createPage, createSection, findNode } from "/admi
 import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
+import { followDeploy } from "./deploy-ui.js";
 
 const PALETTES = [
   { name: "Ocean", colors: { primary: "#2563eb", accent: "#f59e0b", background: "#ffffff", surface: "#f1f5fb", text: "#111827", muted: "#6b7280", dark: "#0f172a" } },
@@ -254,28 +255,116 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Address"));
     root.append(h("div", { class: "field" }, h("label", {}, s.baseDomain ? `Subdomain (.${s.baseDomain})` : "Site address name"), slug,
       h("div", { class: "field-hint" }, "Live at: ", h("a", { href: meta.liveUrl, target: "_blank", rel: "noopener" }, meta.liveUrl))));
-    root.append(h("div", { class: "field" }, h("label", {}, "Custom domains"), domains,
-      h("div", { class: "field-hint" }, "Point the domain's DNS (A record or CNAME) at this server, then add it here.")));
+    root.append(h("div", { class: "field" }, h("label", {}, "Domain name"), domains,
+      h("div", { class: "field-hint" }, "The web address this site lives at, e.g. www.smithantiques.co.uk. Used for the \"View live\" link and search engines.")));
     root.append(saveMeta);
 
     root.append(h("hr", { class: "sep" }));
     root.append(h("div", { class: "group-title" }, "Publishing"));
     root.append(h("p", { class: "small", style: { marginTop: 0 } }, meta.publishedAt ? `Live · last published ${timeAgo(meta.publishedAt)}` : "Not published yet. Click Publish at the top when you're ready."));
     if (meta.publishedAt) root.append(h("button", { class: "btn btn-sm btn-danger", onclick: async () => {
-      if (!(await confirmDialog("Take this site offline? Visitors will see a 'coming soon' page until you publish again.", { okText: "Unpublish", danger: true }))) return;
+      const msg = meta.deploy?.enabled
+        ? "Unpublish the builder's copy of this site? This does NOT remove it from the customer's own hosting; to take that down, delete the files there."
+        : "Take this site offline? Visitors will see a 'coming soon' page until you publish again.";
+      if (!(await confirmDialog(msg, { okText: "Unpublish", danger: true }))) return;
       const { meta: m } = await api(`/sites/${s.siteId}/unpublish`, { method: "POST", body: {} });
       onMetaChange(m);
       render();
     } }, "Unpublish"));
 
+    renderHosting(s, meta);
+
     root.append(h("hr", { class: "sep" }));
-    root.append(h("div", { class: "group-title" }, "Contact form messages"));
-    root.append(h("button", { class: "btn btn-sm", onclick: () => showSubmissions(s.siteId) }, "View messages"));
+    root.append(h("div", { class: "group-title" }, "Contact forms"));
+    const formEmail = h("input", { class: "input", type: "email", value: meta.formEmail || "", placeholder: "owner@theirbusiness.co.uk" });
+    root.append(h("div", { class: "field" }, h("label", {}, "Email form messages to"), formEmail,
+      h("div", { class: "field-hint" }, "On the customer's own hosting, every contact form message is emailed here. Re-publish after changing it.")));
+    root.append(h("div", { class: "row", style: { flexWrap: "wrap" } },
+      h("button", { class: "btn btn-sm", onclick: async () => {
+        try {
+          const { meta: m } = await api(`/sites/${s.siteId}/meta`, { method: "PATCH", body: { formEmail: formEmail.value } });
+          onMetaChange(m);
+          toast("Saved. Publish again to update the live site.");
+        } catch (e) { toast(e.message, { error: true }); }
+      } }, "Save email"),
+      h("button", { class: "btn btn-sm", onclick: () => showSubmissions(s.siteId) }, "Messages received here"),
+    ));
 
     root.append(h("hr", { class: "sep" }));
     root.append(h("div", { class: "group-title" }, "Custom CSS"));
     root.append(fieldControl({ key: "customCss", label: "", type: "code" }, s.site.customCss, (v) => state.mutate((site) => { site.customCss = v; }, { key: "site:css", source: "panel" }), {}));
     root.append(h("p", { class: "field-hint", style: { marginTop: "-8px" } }, "Applies to every page. Blocks use classes like .eka-btn, .eka-card, .eka-h."));
+  }
+
+  // "Your hosting": FTP details for publishing to the customer's own web host.
+  function renderHosting(s, meta) {
+    const d = meta.deploy || {};
+    root.append(h("hr", { class: "sep" }));
+    root.append(h("div", { class: "group-title" }, "Your hosting (FTP)"));
+    root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Put this site on any normal web host. Your host gives you these details, often called FTP account or FTP login."));
+
+    const enabled = h("input", { type: "checkbox", checked: !!d.enabled });
+    const host = h("input", { class: "input", value: d.host || "", placeholder: "ftp.theirdomain.co.uk" });
+    const user = h("input", { class: "input", value: d.user || "", autocomplete: "off" });
+    const password = h("input", { class: "input", type: "password", autocomplete: "new-password", placeholder: d.hasPassword ? "Saved (leave empty to keep it)" : "" });
+    const dir = h("input", { class: "input", value: d.remoteDir ?? "public_html", placeholder: "public_html" });
+    const port = h("input", { class: "input", type: "number", value: d.port || 21 });
+    const secure = h("input", { type: "checkbox", checked: d.secure !== "none" });
+    const status = h("div", { class: "small", style: { margin: "8px 0", minHeight: "1.2em" } });
+
+    const values = () => ({ enabled: enabled.checked, host: host.value, user: user.value, password: password.value, remoteDir: dir.value, port: port.value, secure: secure.checked ? "explicit" : "none" });
+    const field = (label, input, hint) => h("div", { class: "field" }, h("label", {}, label), input, hint ? h("div", { class: "field-hint" }, hint) : null);
+
+    root.append(
+      h("div", { class: "field" }, h("label", { class: "check" }, enabled, "Upload to this hosting every time I click Publish")),
+      field("FTP server", host),
+      field("Username", user),
+      field("Password", password),
+      field("Folder", dir, "Where the website files go. Usually public_html (sometimes htdocs or www)."),
+      h("details", {}, h("summary", { class: "small", style: { cursor: "pointer", marginBottom: "10px" } }, "Advanced"),
+        field("Port", port, "21 unless your host says otherwise."),
+        h("div", { class: "field" }, h("label", { class: "check" }, secure, "Use encrypted connection (recommended)")),
+      ),
+      status,
+    );
+
+    if (meta.deployError) { status.style.color = "var(--danger)"; status.textContent = `Last upload failed: ${meta.deployError}`; }
+    else if (meta.deployedAt) status.textContent = `Last uploaded ${timeAgo(meta.deployedAt)}.`;
+
+    const save = async () => {
+      const { meta: m } = await api(`/sites/${s.siteId}/meta`, { method: "PATCH", body: { deploy: values() } });
+      onMetaChange(m);
+      return m;
+    };
+
+    root.append(h("div", { class: "row", style: { flexWrap: "wrap" } },
+      h("button", { class: "btn btn-sm", onclick: async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true; status.style.color = ""; status.textContent = "Connecting…";
+        try {
+          const r = await api(`/sites/${s.siteId}/deploy/test`, { method: "POST", body: values() });
+          status.style.color = "var(--ok)";
+          status.textContent = `Connected. The folder contains: ${r.entries.join(", ") || "(empty)"}`;
+        } catch (err) { status.style.color = "var(--danger)"; status.textContent = err.message; }
+        btn.disabled = false;
+      } }, "Test connection"),
+      h("button", { class: "btn btn-sm btn-primary", onclick: async () => {
+        try { await save(); toast("Hosting details saved."); render(); } catch (err) { toast(err.message, { error: true }); }
+      } }, "Save"),
+      meta.publishedAt && d.host ? h("button", { class: "btn btn-sm", onclick: async () => {
+        try {
+          const { jobId } = await api(`/sites/${s.siteId}/deploy`, { method: "POST", body: {} });
+          const m = await followDeploy(s.siteId, jobId);
+          if (m) onMetaChange(m);
+        } catch (err) { toast(err.message, { error: true }); }
+      } }, "Upload now") : null,
+    ));
+
+    root.append(h("p", { class: "field-hint", style: { marginTop: "14px" } }, "Prefer to upload by hand? ",
+      meta.publishedAt
+        ? h("a", { href: `/api/sites/${s.siteId}/export.zip`, download: "" }, "Download the published site as files")
+        : "Publish first, then you can download the site as files.",
+      " (a ZIP to upload to any host)."));
   }
 
   async function showSubmissions(siteId) {

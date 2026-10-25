@@ -238,6 +238,17 @@ export class Store {
     }
   }
 
+  // ---- publishing to outside hosting ----------------------------------------
+
+  // Remembers what was last uploaded (path → hash) so only changes are sent.
+  async getDeployManifest(id) {
+    return (await this.readJson(this.file(id, "deploy-manifest.json"))) || {};
+  }
+
+  async saveDeployManifest(id, manifest) {
+    await this.writeJson(this.file(id, "deploy-manifest.json"), manifest);
+  }
+
   // ---- form submissions ---------------------------------------------------
 
   async addSubmission(id, entry) {
