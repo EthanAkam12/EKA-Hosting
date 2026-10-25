@@ -82,7 +82,7 @@ function contactSection(brief, props = {}) {
 const LAYOUTS = [
   // 0: dark, centred hero
   (brief, name) => [
-    s({ background: "dark", padding: "xl", minHeight: true, width: "narrow", align: "center" }, [[
+    s({ background: "image", overlay: 55, padding: "xl", minHeight: true, width: "narrow", align: "center" }, [[
       b("heading", { text: name, level: 1, align: "center" }),
       b("text", { html: `<p>${esc(about(brief))}</p>`, align: "center" }),
       b("buttons", { align: "center", items: [{ text: "Get in touch", href: contactHref(brief), style: "primary" }, { text: "Our services", href: "#services", style: "outline" }] }),

@@ -55,6 +55,10 @@ function img(src, alt, ctx, { sizes = "100vw", cls = "", eager = false } = {}) {
   return `<img src="${esc(url)}"${srcset} alt="${esc(alt)}"${cls ? ` class="${cls}"` : ""} ${priority ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
 }
 
+// Generated placeholder pictures get a small tag in the editor only.
+const isPlaceholder = (url) => /\/placeholder-[\w-]+\.(webp|svg)$/.test(String(url || ""));
+const phTag = (ctx, text) => (ctx.editor ? `<span class="eka-ph-tag">${text}</span>` : "");
+
 function placeholderImage(label = "Add an image") {
   return `<div class="eka-ph" role="img" aria-label="${esc(label)}"><span>${esc(label)}</span></div>`;
 }
@@ -86,7 +90,8 @@ const renderers = {
     const inner = p.src ? img(p.src, p.alt, ctx, { sizes: "(max-width: 760px) 100vw, 50vw" }) : ctx.editor ? placeholderImage() : "";
     if (!inner) return "";
     const cap = p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : "";
-    return `<figure class="eka-img${ratio}${p.rounded ? " rounded" : ""}">${inner}${cap}</figure>`;
+    const tag = isPlaceholder(p.src) ? phTag(ctx, "Placeholder · double-click to replace") : "";
+    return `<figure class="eka-img${ratio}${p.rounded ? " rounded" : ""}">${tag}${inner}${cap}</figure>`;
   },
 
   list(p) {
@@ -127,7 +132,8 @@ const renderers = {
     const imgs = p.images.filter((i) => i.src);
     if (!imgs.length) return ctx.editor ? `<div class="eka-gallery g-${p.columns}">${placeholderImage("Add gallery images")}</div>` : "";
     const sizes = `(max-width: 760px) 50vw, ${Math.round(100 / p.columns)}vw`;
-    return `<div class="eka-gallery g-${p.columns}">${imgs.map((i) => img(i.src, i.alt, ctx, { sizes })).join("")}</div>`;
+    const tag = imgs.some((i) => isPlaceholder(i.src)) ? phTag(ctx, "Placeholder photos · replace in the panel") : "";
+    return `<div class="eka-gallery g-${p.columns}">${tag}${imgs.map((i) => img(i.src, i.alt, ctx, { sizes })).join("")}</div>`;
   },
 
   video(p, ctx) {
@@ -234,7 +240,8 @@ export function renderSection(section, ctx) {
     })
     .join("");
   const id = p.anchor ? ` id="${esc(p.anchor)}"` : "";
-  return `<section${id} class="${cls.join(" ")}"${style}${editorAttrs(ctx, "section", section.id)}><div class="eka-wrap"><div class="eka-cols l-${layout}">${cols}</div></div></section>`;
+  const bgTag = p.background === "image" && isPlaceholder(p.image) ? phTag(ctx, "Placeholder background · change it in the section settings") : "";
+  return `<section${id} class="${cls.join(" ")}"${style}${editorAttrs(ctx, "section", section.id)}>${bgTag}<div class="eka-wrap"><div class="eka-cols l-${layout}">${cols}</div></div></section>`;
 }
 
 // ---------------------------------------------------------------------------

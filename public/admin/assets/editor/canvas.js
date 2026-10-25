@@ -27,6 +27,9 @@ section.eka-sel,header.eka-sel,footer.eka-sel{outline:2px solid #0f766e!importan
 .eka-drag-src{opacity:.3}
 .eka-header.sticky{position:relative}
 .eka-form-ok{display:none!important}
+.eka-img,.eka-gallery{position:relative}
+.eka-ph-tag{position:absolute;top:10px;left:10px;z-index:3;background:rgba(17,24,39,.78);color:#fff;font:600 11px/1.2 system-ui,sans-serif;padding:5px 8px;border-radius:5px;pointer-events:none;letter-spacing:.01em}
+section>.eka-ph-tag{top:12px;left:12px}
 `;
 
 export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia, onAskAi, onKey }) {

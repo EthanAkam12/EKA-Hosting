@@ -182,3 +182,25 @@ test("wizard: AI concept, refine and build keep the approved home page", async (
   assert.equal(site.pages[0].sections[0].columns[0].blocks[0].props.text, "Hello");
   assert.match(calls[2].prompt, /add a page called Gallery/);
 });
+
+test("placeholder pictures fill empty image spots in the site's colours", async () => {
+  const { fillPlaceholders, isPlaceholder } = await import("../server/placeholders.js");
+  const os = await import("node:os");
+  const fsp = await import("node:fs/promises");
+  const dir = await fsp.mkdtemp(`${os.tmpdir()}/eka-ph-`);
+  const site = sampleSite();
+  site.pages[0].sections.push(createSection({ background: "image" }, [[createBlock("gallery")]]));
+  await fillPlaceholders(normalizeSite(site) && site, { dir, urlPrefix: "/_tmp/" });
+  const img = site.pages[0].sections[0].columns[1].blocks[0].props.src;
+  assert.ok(isPlaceholder(img), img);
+  assert.ok(isPlaceholder(site.pages[0].sections[1].props.image));
+  assert.equal(site.pages[0].sections[1].columns[0].blocks[0].props.images.length, 6);
+  const files = await fsp.readdir(dir);
+  assert.ok(files.some((f) => f.endsWith("-o-sm.webp")) || files.some((f) => f.endsWith(".svg")));
+  // Editor tags placeholders; the live page doesn't.
+  const editorHtml = renderPage(normalizeSite(site), normalizeSite(site).pages[0], { editor: true });
+  const liveHtml = renderPage(normalizeSite(site), normalizeSite(site).pages[0], {});
+  assert.match(editorHtml, /eka-ph-tag/);
+  assert.ok(!liveHtml.includes("eka-ph-tag"));
+  await fsp.rm(dir, { recursive: true, force: true });
+});
