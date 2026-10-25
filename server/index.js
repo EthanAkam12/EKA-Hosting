@@ -135,7 +135,10 @@ async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = 
   const formAction = `/_forms/${meta.id}`;
   if (draft) {
     res.setHeader("Cache-Control", "no-store");
-    return res.type("html").send(renderPage(site, page, { base, formAction }));
+    // Draft previews get a bar on top so it's obvious how to get back. Plain
+    // HTML only: previews block scripts.
+    const bar = `<div style="position:relative;z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;background:#1c2230;color:#fff;font:600 14px/1.4 system-ui,sans-serif"><span>Preview: this is how visitors will see your latest changes.</span><a href="/admin/sites/${meta.id}" style="margin-left:auto;background:#4f46e5;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none">&larr; Back to editor</a></div>`;
+    return res.type("html").send(renderPage(site, page, { base, formAction }).replace("<body>", `<body>${bar}`));
   }
   const key = `${meta.id}|${meta.publishedAt}|${base}|${page.slug}`;
   const { html, etag } = cachedRender(key, () => renderPage(site, page, { base, formAction }));
