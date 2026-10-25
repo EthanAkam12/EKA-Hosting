@@ -487,14 +487,29 @@ app.use((err, req, res, _next) => {
   res.status(500).type("html").send(simplePage("Something went wrong", "Please try again in a moment."));
 });
 
-app.listen(PORT, HOST, () => {
-  const url = `http://localhost:${PORT}/admin`;
-  console.log(`EKA Hosting running on ${url}`);
-  if (process.env.ADMIN_PASSWORD === "change-me") console.log("  Your password is still 'change-me'. Edit settings.txt to choose your own.");
-  if (process.env.OPEN_BROWSER === "1") {
-    const cmd = process.platform === "win32" ? `start "" "${url}"` : process.platform === "darwin" ? `open "${url}"` : `xdg-open "${url}"`;
-    exec(cmd, () => {});
-  }
-  console.log(`AI: ${ai.enabled ? `${ai.provider} (new sites: ${ai.model}, changes: ${ai.editModel})` : "not configured (template mode) — set ANTHROPIC_API_KEY to enable"}`);
-  if (BASE_DOMAIN) console.log(`Customer sites: https://<slug>.${BASE_DOMAIN}/`);
-});
+// If the port is taken (often another program, or the builder already
+// running in another window), try the next few before giving up.
+function listen(port, triesLeft = 10) {
+  const server = app.listen(port, HOST, () => {
+    const url = `http://localhost:${port}/admin`;
+    console.log(`EKA Hosting running on ${url}`);
+    if (process.env.ADMIN_PASSWORD === "change-me") console.log("  Your password is still 'change-me'. Edit settings.txt to choose your own.");
+    if (process.env.OPEN_BROWSER === "1") {
+      const cmd = process.platform === "win32" ? `start "" "${url}"` : process.platform === "darwin" ? `open "${url}"` : `xdg-open "${url}"`;
+      exec(cmd, () => {});
+    }
+    console.log(`AI: ${ai.enabled ? `${ai.provider} (new sites: ${ai.model}, changes: ${ai.editModel})` : "not configured (template mode) — set ANTHROPIC_API_KEY to enable"}`);
+    if (BASE_DOMAIN) console.log(`Customer sites: https://<slug>.${BASE_DOMAIN}/`);
+  });
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE" && triesLeft > 0) {
+      console.log(`  Port ${port} is already in use, trying ${port + 1}...`);
+      return listen(port + 1, triesLeft - 1);
+    }
+    console.error(`\n  Could not start the builder: ${err.message}`);
+    if (err.code === "EADDRINUSE") console.error("  Every port we tried is busy. Close other copies of the builder and try again.");
+    if (err.code === "EACCES") console.error("  Windows blocked the connection. Try a different PORT in settings.txt, e.g. PORT=8080.");
+    process.exit(1);
+  });
+}
+listen(PORT);

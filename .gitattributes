@@ -1,2 +1,2 @@
-*.bat text eol=crlf
-settings.example.txt text eol=crlf
+*.bat -text
+settings.example.txt -text
