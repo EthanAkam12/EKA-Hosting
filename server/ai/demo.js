@@ -194,6 +194,10 @@ export function createDemoProvider() {
       const home = createPage("Home", "index");
       home.seo.description = about(brief).slice(0, 155);
       home.sections = LAYOUTS[v](brief, name);
+      // Templates can't write copy: use the owner's homepage description as the hero text.
+      const homeInfo = String(brief.pageInfo?.Home || "").trim();
+      const heroText = homeInfo && home.sections[0]?.columns.flatMap((c) => c.blocks).find((x) => x.type === "text");
+      if (heroText) heroText.props.html = `<p>${esc(homeInfo)}</p>`;
       site.pages = [home];
       return { site };
     },
@@ -205,9 +209,14 @@ export function createDemoProvider() {
         if (site.pages.some((p) => p.slug === slug)) continue;
         const page = createPage(title, slug);
         const make = EXTRA_PAGES[slug];
-        page.sections = make ? make(brief, name) : [s({ width: "narrow" }, [[b("heading", { text: title, level: 1 }), b("text", { html: "<p>Add your content here.</p>" })]])];
+        const info = String(brief.pageInfo?.[title] || "").trim();
+        page.sections = make ? make(brief, name) : [s({ width: "narrow" }, [[b("heading", { text: title, level: 1 }), b("text", { html: `<p>${esc(info || "Add your content here.")}</p>` })]])];
+        // The owner's description of the page goes under its title.
+        if (make && info) page.sections[0].columns[0].blocks.push(b("text", { html: `<p>${esc(info)}</p>`, align: "center" }));
         site.pages.push(page);
       }
+      // Pages may have been added after the design was picked: refresh the menu.
+      if (plannedPages(brief).length) site.header.links = headerLinks(brief);
       return { site };
     },
 

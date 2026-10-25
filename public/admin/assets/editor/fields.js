@@ -92,9 +92,86 @@ export function fieldControl(field, value, onChange, ctx) {
     case "list":
       return listControl(field, value || [], onChange, ctx);
 
+    // Number with a slider. Empty = use the default (shown as the placeholder).
+    case "slider": {
+      const { min = 0, max = 100, step = 1, unit = "px" } = field;
+      const has = value !== null && value !== undefined && value !== "";
+      const range = h("input", { type: "range", class: `range${has ? "" : " unset"}`, min, max, step, value: has ? value : (field.placeholder ?? min), "aria-label": field.label });
+      const num = h("input", { id, class: "input num", type: "number", min, max, step, value: has ? value : "", placeholder: field.placeholder !== undefined ? String(field.placeholder) : "auto" });
+      const reset = h("button", { class: "icon-btn", type: "button", title: "Back to default", hidden: !has }, "↺");
+      range.addEventListener("input", () => { num.value = range.value; range.classList.remove("unset"); reset.hidden = false; onChange(Number(range.value)); });
+      num.addEventListener("input", () => {
+        if (num.value === "") { reset.hidden = true; range.classList.add("unset"); return onChange(null); }
+        range.value = num.value; range.classList.remove("unset"); reset.hidden = false; onChange(Number(num.value));
+      });
+      reset.addEventListener("click", () => { num.value = ""; range.classList.add("unset"); reset.hidden = true; onChange(null); });
+      return wrap(h("div", { class: "slider-row" }, range, num, h("span", { class: "unit" }, unit), reset));
+    }
+
+    // Colour that can be left unset.
+    case "coloropt": {
+      const swatch = h("input", { type: "color", value: value || "#000000", "aria-label": field.label, class: value ? "" : "unset" });
+      const text = h("input", { id, class: "input", value: value || "", maxlength: "7", placeholder: "Default" });
+      const clear = h("button", { class: "icon-btn", type: "button", title: "Clear", hidden: !value }, "✕");
+      swatch.addEventListener("input", () => { text.value = swatch.value; swatch.classList.remove("unset"); clear.hidden = false; onChange(swatch.value); });
+      text.addEventListener("input", () => {
+        if (/^#[0-9a-f]{6}$/i.test(text.value)) { swatch.value = text.value; swatch.classList.remove("unset"); clear.hidden = false; onChange(text.value); }
+        else if (!text.value) { clear.hidden = true; onChange(null); }
+      });
+      clear.addEventListener("click", () => { text.value = ""; swatch.classList.add("unset"); clear.hidden = true; onChange(null); });
+      return wrap(h("div", { class: "color-row" }, swatch, text, clear));
+    }
+
+    // Margin / padding: four sides, per device, with a "link" toggle.
+    case "box":
+      return boxControl(field, value || {}, onChange, ctx);
+
+    case "hide": {
+      const v = value || {};
+      const box = (d, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: !!v[d], onchange: (e) => onChange({ ...v, [d]: e.target.checked }, { rebuild: true }) }), label);
+      return wrap(h("div", { class: "row", style: { flexWrap: "wrap", gap: "14px" } }, box("d", "Desktop"), box("t", "Tablet"), box("m", "Mobile")));
+    }
+
     default:
       return wrap(h("input", { id, class: "input", value: value ?? "", oninput: (e) => onChange(e.target.value) }));
   }
+}
+
+const DEVICE_KEY = { desktop: "d", tablet: "t", mobile: "m" };
+const linked = new Set(); // box fields with "link sides" switched on, by label
+
+function boxControl(field, value, onChange, ctx) {
+  const dev = DEVICE_KEY[ctx.device] || "d";
+  const cur = value[dev] || {};
+  // What applies on this device if nothing is set here: the bigger screen's value.
+  const inherited = (k) => (dev === "m" ? value.t?.[k] ?? value.d?.[k] : dev === "t" ? value.d?.[k] : undefined);
+  const isLinked = linked.has(field.label);
+  const inputs = {};
+  const emit = () => {
+    const sides = {};
+    for (const [k, el] of Object.entries(inputs)) if (el.value !== "") sides[k] = Number(el.value);
+    const next = { ...value, [dev]: sides };
+    if (!Object.keys(sides).length) delete next[dev];
+    onChange(next);
+  };
+  const cells = [["t", "Top"], ["r", "Right"], ["b", "Bottom"], ["l", "Left"]].map(([k, label]) => {
+    const inh = inherited(k);
+    const el = h("input", { class: "input num", type: "number", step: "1", value: cur[k] ?? "", placeholder: inh !== undefined ? String(inh) : field.placeholder ?? "–", "aria-label": `${field.label} ${label}` });
+    el.addEventListener("input", () => {
+      if (linked.has(field.label)) for (const other of Object.values(inputs)) if (other !== el) other.value = el.value;
+      emit();
+    });
+    inputs[k] = el;
+    return h("label", { class: "box-cell" }, el, h("span", {}, label));
+  });
+  const link = h("button", { class: `icon-btn${isLinked ? " active" : ""}`, type: "button", title: "Same value on all sides" }, "🔗");
+  link.addEventListener("click", () => { isLinked ? linked.delete(field.label) : linked.add(field.label); link.classList.toggle("active"); });
+  const devices = h("span", { class: "box-devices" }, [["desktop", "🖥"], ["tablet", "▭"], ["mobile", "📱"]].map(([d, icon]) =>
+    h("button", { class: `icon-btn${ctx.device === d ? " active" : ""}`, type: "button", title: `Edit for ${d}${value[DEVICE_KEY[d]] ? " (set)" : ""}`, onclick: () => ctx.setDevice?.(d) }, icon, value[DEVICE_KEY[d]] && d !== ctx.device ? h("i", { class: "dot" }) : null)));
+  return h("div", { class: "field" },
+    h("div", { class: "box-head" }, h("span", { class: "field-label" }, field.label), devices),
+    h("div", { class: "box-grid" }, ...cells, link),
+    h("div", { class: "field-hint" }, dev === "d" ? "Pixels. Empty = default." : `Only on ${ctx.device}. Empty = same as the bigger screen.`));
 }
 
 // Repeatable groups (buttons, FAQ items, stats…). Keeps which items are

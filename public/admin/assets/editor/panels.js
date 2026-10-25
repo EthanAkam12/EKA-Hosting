@@ -1,6 +1,6 @@
 // Left-hand tabs: Add, AI, Pages, Style, Site.
 
-import { BLOCKS, FONT_CHOICES, createPage, createSection, findNode } from "/admin/shared/schema.js";
+import { BLOCKS, FONT_CHOICES, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, createPage, createSection, findNode } from "/admin/shared/schema.js";
 import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
@@ -84,10 +84,38 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     return null;
   }
 
+  // Change requests typed in the new-site wizard that weren't done yet (no AI
+  // key at the time): a to-do list for this page and the whole site.
+  function notesCard(apply) {
+    const s = state.get();
+    const notes = s.meta?.notes || {};
+    const page = state.page();
+    const here = ["_site", page.slug].filter((k) => notes[k]);
+    const elsewhere = s.site.pages.filter((p) => p.id !== page.id && notes[p.slug]);
+    if (!here.length && !elsewhere.length) return null;
+    const done = async (key) => {
+      const next = { ...notes };
+      delete next[key];
+      try { const { meta } = await api(`/sites/${s.siteId}/meta`, { method: "PATCH", body: { notes: next } }); onMetaChange(meta); render(); } catch (e) { toast(e.message, { error: true }); }
+    };
+    return h("div", { class: "notes-card" },
+      h("div", { class: "group-title", style: { marginTop: 0 } }, "Your change requests"),
+      here.map((key) => h("div", { class: "note" },
+        h("div", { class: "small", style: { fontWeight: 700 } }, key === "_site" ? "Whole site" : `${page.title} page`),
+        h("p", {}, notes[key]),
+        h("div", { class: "row" },
+          apply ? h("button", { class: "btn btn-sm btn-primary", disabled: aiBusy, onclick: () => apply(key === "_site" ? notes[key] : `On the ${page.title} page: ${notes[key]}`, () => done(key)) }, "✦ Do it with AI") : null,
+          h("button", { class: "btn btn-sm", onclick: () => done(key) }, "✓ Done")))),
+      elsewhere.length ? h("p", { class: "field-hint" }, "Also requests for: ", elsewhere.map((p, i) => [i ? ", " : "", h("a", { href: "#", onclick: (e) => { e.preventDefault(); state.setPage(p.id); } }, p.title)])) : null,
+    );
+  }
+
   function renderAi() {
     const s = state.get();
     if (!s.aiEnabled) {
-      root.append(h("div", { class: "notice" }, "AI isn't set up on this server yet. Ask whoever runs it to set ANTHROPIC_API_KEY. You can still change everything by hand."));
+      const card = notesCard(null);
+      if (card) root.append(card);
+      root.append(h("div", { class: "notice" }, "AI isn't set up yet, so written changes can't be done automatically. Add your Anthropic API key to settings.txt and restart the builder. You can still change everything by hand."));
       return;
     }
     if (aiScope && !findNode(s.site, aiScope)) aiScope = null;
@@ -100,6 +128,8 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     const sendBtn = h("button", { class: "btn btn-primary btn-block", onclick: send, disabled: aiBusy }, aiBusy ? h("span", { class: "spinner" }) : null, aiBusy ? "Working…" : "Apply change");
     const progress = (aiProgress = h("div", { class: "small muted", style: { marginTop: "8px", minHeight: "1.4em" } }));
 
+    const card = notesCard((text, onDone) => { aiScope = null; input.value = text; send().then((ok) => { if (ok) onDone(); }); });
+    if (card) root.append(card);
     root.append(log);
     const label = aiScope && scopeLabel(aiScope);
     if (label) root.append(h("div", { class: "ai-scope" }, "Changing: ", h("strong", {}, label), h("button", { class: "icon-btn", title: "Change the whole site instead", "aria-label": "Clear selection", onclick: () => { aiScope = null; render(); } }, "✕")));
@@ -111,7 +141,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
 
     async function send() {
       const instruction = input.value.trim();
-      if (!instruction || aiBusy) return;
+      if (!instruction || aiBusy) return false;
       aiBusy = true;
       aiLog.push({ role: "user", text: instruction });
       render();
@@ -124,8 +154,10 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
         });
         if (result.changed) state.replaceSite(result.site);
         aiLog.push({ role: "bot", text: result.summary });
+        return result.changed;
       } catch (err) {
         aiLog.push({ role: "err", text: err.message });
+        return false;
       } finally {
         aiBusy = false;
         if (active === "ai") render();
@@ -231,7 +263,30 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(fieldControl(fontField("heading", "Headings"), theme.fonts.heading, (v) => set("theme:fh", (site) => { site.theme.fonts.heading = v; }, { rebuild: true }), {}));
     root.append(fieldControl(fontField("body", "Body text"), theme.fonts.body, (v) => set("theme:fb", (site) => { site.theme.fonts.body = v; }, { rebuild: true }), {}));
     root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "System fonts load instantly. Each web font adds one small download."));
-    root.append(fieldControl({ key: "radius", label: "Corner rounding (px)", type: "number" }, theme.radius, (v) => set("theme:r", (site) => { site.theme.radius = v; }), {}));
+    const tf = (group, key, field, rebuild = false) => root.append(fieldControl({ key, ...field }, theme[group][key], (v) => set(`theme:${group}:${key}`, (site) => { site.theme[group][key] = v ?? field.placeholder; }, { rebuild: rebuild || field.type === "select" || field.type === "checkbox" }), {}));
+
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Text"));
+    tf("type", "base", { label: "Body text size", type: "slider", min: 14, max: 22, placeholder: 17 });
+    tf("type", "headingScale", { label: "Heading size", type: "slider", min: 60, max: 160, step: 5, unit: "%", placeholder: 100 });
+    tf("type", "headingWeight", { label: "Heading weight", type: "select", options: [300, 400, 500, 600, 700, 800, 900], labels: ["Light", "Normal", "Medium", "Semi-bold", "Bold", "Extra bold", "Black"] });
+
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Buttons"));
+    tf("buttons", "size", { label: "Size", type: "select", options: ["sm", "md", "lg", "xl"], labels: ["Small", "Medium", "Large", "Extra large"] });
+    tf("buttons", "shape", { label: "Shape", type: "select", options: ["theme", "square", "rounded", "pill"], labels: ["Same as corner rounding", "Square", "Slightly rounded", "Pill"] });
+    tf("buttons", "weight", { label: "Text weight", type: "select", options: [400, 500, 600, 700, 800], labels: ["Normal", "Medium", "Semi-bold", "Bold", "Extra bold"] });
+    tf("buttons", "hover", { label: "Hover animation", type: "select", options: HOVER_EFFECTS, labels: HOVER_LABELS });
+    tf("buttons", "uppercase", { label: "CAPITAL LETTERS", type: "checkbox" });
+    tf("buttons", "shadow", { label: "Drop shadow", type: "checkbox" });
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Hover over any button on the page to try the animation. Change a single button group in its own Style tab."));
+
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Layout"));
+    root.append(fieldControl({ key: "radius", label: "Corner rounding", type: "slider", min: 0, max: 32, placeholder: 10 }, theme.radius, (v) => set("theme:r", (site) => { site.theme.radius = v ?? 10; }), {}));
+    tf("layout", "width", { label: "Content width", type: "slider", min: 720, max: 1600, step: 10, placeholder: 1140 });
+    tf("layout", "spacing", { label: "Space between sections", type: "slider", min: 25, max: 200, step: 5, unit: "%", placeholder: 100 });
+
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Animation"));
+    tf("layout", "motion", { label: "Sections animate in as you scroll", type: "select", options: ENTRANCE_EFFECTS, labels: ENTRANCE_LABELS });
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Applies to every section unless a section picks its own (Advanced tab). Use Preview to see it. Pure CSS, so it doesn't slow the site down."));
   }
 
   // ------------------------------------------------------------- Site -----

@@ -46,7 +46,17 @@ export const DEFAULT_THEME = {
   },
   fonts: { heading: "system", body: "system" },
   radius: 10,
+  // Site-wide styling, like Elementor's "Site settings".
+  buttons: { size: "md", shape: "theme", weight: 600, uppercase: false, hover: "lift", shadow: false },
+  type: { base: 17, headingScale: 100, headingWeight: 700 },
+  layout: { width: 1140, spacing: 100, motion: "none" },
 };
+
+export const HOVER_EFFECTS = ["none", "lift", "grow", "shrink", "glow", "brighten", "pulse", "wobble", "shine"];
+export const HOVER_LABELS = ["None", "Lift up", "Grow", "Shrink", "Glow", "Brighten", "Pulse", "Wobble", "Shine sweep"];
+export const ENTRANCE_EFFECTS = ["none", "fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "zoom-out", "flip"];
+export const ENTRANCE_LABELS = ["None", "Fade in", "Fade up", "Fade down", "Slide in from left", "Slide in from right", "Zoom in", "Zoom out", "Flip up"];
+export const SHADOWS = ["none", "sm", "md", "lg", "xl"];
 
 // ---------------------------------------------------------------------------
 // Block definitions. `fields` drives the editor's property panel; `defaults`
@@ -77,10 +87,11 @@ export const BLOCKS = {
     label: "Buttons", icon: "▭", group: "Basic",
     defaults: () => ({ items: [{ text: "Get in touch", href: "#contact", style: "primary" }], align: "left" }),
     fields: [
-      { key: "items", label: "Buttons", type: "list", itemLabel: "text", itemDefaults: () => ({ text: "Button", href: "#", style: "primary" }), itemFields: [
+      { key: "items", label: "Buttons", type: "list", itemLabel: "text", itemDefaults: () => ({ text: "Button", href: "#", style: "primary", icon: "none" }), itemFields: [
         { key: "text", label: "Label", type: "text" },
         { key: "href", label: "Link", type: "url" },
-        { key: "style", label: "Style", type: "select", options: ["primary", "secondary", "outline", "light"] },
+        { key: "style", label: "Style", type: "select", options: ["primary", "secondary", "outline", "light", "dark", "link"], labels: ["Main colour", "Accent colour", "Outline", "White", "Dark", "Text link"] },
+        { key: "icon", label: "Icon", type: "select", options: ["none", "arrow", "phone", "email", "download", "play", "cart", "check"], labels: ["None", "→ Arrow", "☎ Phone", "✉ Email", "↓ Download", "▶ Play", "🛒 Basket", "✓ Tick"] },
       ] },
       { key: "align", label: "Align", ...ALIGN },
     ],
@@ -320,6 +331,28 @@ function normalizeTheme(theme) {
   for (const k of ["heading", "body"]) out.fonts[k] = FONT_CHOICES[fonts[k]] ? fonts[k] : DEFAULT_THEME.fonts[k];
   const r = Number(t.radius);
   out.radius = Number.isFinite(r) ? Math.max(0, Math.min(32, Math.round(r))) : DEFAULT_THEME.radius;
+  const pick = (v, options, fallback) => (options.includes(v) ? v : fallback);
+  const b = isObj(t.buttons) ? t.buttons : {}, bd = DEFAULT_THEME.buttons;
+  out.buttons = {
+    size: pick(b.size, ["sm", "md", "lg", "xl"], bd.size),
+    shape: pick(b.shape, ["theme", "square", "rounded", "pill"], bd.shape),
+    weight: pick(Number(b.weight), [400, 500, 600, 700, 800], bd.weight),
+    uppercase: typeof b.uppercase === "boolean" ? b.uppercase : bd.uppercase,
+    hover: pick(b.hover, HOVER_EFFECTS, bd.hover),
+    shadow: typeof b.shadow === "boolean" ? b.shadow : bd.shadow,
+  };
+  const ty = isObj(t.type) ? t.type : {}, td = DEFAULT_THEME.type;
+  out.type = {
+    base: clampNum(ty.base, 14, 22, td.base),
+    headingScale: clampNum(ty.headingScale, 60, 160, td.headingScale),
+    headingWeight: pick(Number(ty.headingWeight), [300, 400, 500, 600, 700, 800, 900], td.headingWeight),
+  };
+  const ly = isObj(t.layout) ? t.layout : {}, ld = DEFAULT_THEME.layout;
+  out.layout = {
+    width: clampNum(ly.width, 720, 1600, ld.width),
+    spacing: clampNum(ly.spacing, 25, 200, ld.spacing),
+    motion: pick(ly.motion, ENTRANCE_EFFECTS, ld.motion),
+  };
   return out;
 }
 
@@ -351,6 +384,64 @@ function normalizeField(field, value, fallback) {
   }
 }
 
+function clampNum(v, min, max, fallback) {
+  const n = Number(v);
+  return v !== "" && v !== null && v !== undefined && Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : fallback;
+}
+
+// Per-element styling (Elementor's Style + Advanced tabs). Only values that
+// were actually set are kept, so untouched elements stay `style: {}`-free.
+//   margin / padding: { d|t|m: { t, r, b, l } } in px, per device
+//   radius, borderWidth, fontSize, maxWidth, gap: px
+//   bg, bg2 (gradient end), color, borderColor: hex
+//   borderStyle, shadow, fontWeight, animation, speed, delay (ms), hover, btnSize
+//   hide: { d, t, m }
+export const DEVICES = ["d", "t", "m"];
+const SIDES = ["t", "r", "b", "l"];
+export function normalizeStyle(style) {
+  if (!isObj(style)) return undefined;
+  const out = {};
+  for (const box of ["margin", "padding"]) {
+    const src = isObj(style[box]) ? style[box] : {};
+    const dev = {};
+    for (const d of DEVICES) {
+      const v = isObj(src[d]) ? src[d] : {};
+      const sides = {};
+      for (const k of SIDES) {
+        const n = clampNum(v[k], box === "margin" ? -400 : 0, 600, null);
+        if (n !== null) sides[k] = n;
+      }
+      if (Object.keys(sides).length) dev[d] = sides;
+    }
+    if (Object.keys(dev).length) out[box] = dev;
+  }
+  const num = (k, min, max) => { const n = clampNum(style[k], min, max, null); if (n !== null) out[k] = n; };
+  num("radius", 0, 999); num("borderWidth", 0, 30); num("fontSize", 8, 160); num("maxWidth", 40, 2400); num("gap", 0, 200); num("delay", 0, 3000);
+  for (const k of ["bg", "bg2", "color", "borderColor"]) if (typeof style[k] === "string" && HEX.test(style[k].trim())) out[k] = style[k].trim();
+  const one = (k, options) => { if (options.includes(style[k])) out[k] = style[k]; };
+  one("borderStyle", ["solid", "dashed", "dotted", "double"]);
+  one("shadow", SHADOWS.slice(1));
+  one("animation", ENTRANCE_EFFECTS); // "none" is kept: it switches off the site-wide animation
+  one("speed", ["fast", "slow"]);
+  one("hover", HOVER_EFFECTS);
+  one("btnSize", ["sm", "md", "lg", "xl"]);
+  one("align", ["left", "center", "right"]);
+  const fw = Number(style.fontWeight);
+  if ([300, 400, 500, 600, 700, 800, 900].includes(fw)) out.fontWeight = fw;
+  if (isObj(style.hide)) {
+    const hide = {};
+    for (const d of DEVICES) if (style.hide[d] === true) hide[d] = true;
+    if (Object.keys(hide).length) out.hide = hide;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function withStyle(node, style) {
+  const st = normalizeStyle(style);
+  if (st) node.style = st;
+  return node;
+}
+
 export function normalizeBlock(block) {
   if (!isObj(block) || !BLOCKS[block.type]) return null;
   const def = BLOCKS[block.type];
@@ -360,7 +451,7 @@ export function normalizeBlock(block) {
   for (const f of def.fields) out[f.key] = normalizeField(f, props[f.key], defaults[f.key]);
   // Keep defaults for keys without editor fields (none today, but future-proof).
   for (const k of Object.keys(defaults)) if (!(k in out)) out[k] = defaults[k];
-  return { id: str(block.id) || uid("b"), type: block.type, props: out };
+  return withStyle({ id: str(block.id) || uid("b"), type: block.type, props: out }, block.style);
 }
 
 export function normalizeSection(section) {
@@ -385,7 +476,7 @@ export function normalizeSection(section) {
     const extra = cols.splice(want);
     for (const c of extra) cols[want - 1].blocks.push(...c.blocks);
   }
-  return { id: str(section.id) || uid("s"), type: "section", props: p, columns: cols };
+  return withStyle({ id: str(section.id) || uid("s"), type: "section", props: p, columns: cols }, section.style);
 }
 
 export function normalizePage(page, index = 0) {

@@ -117,3 +117,28 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
   .side-left, .side-right { max-height: 34vh; }
   .stage { padding: 8px; min-height: 50vh; }
 }
+
+/* Inspector tabs (Content / Style / Advanced) and the extra style controls */
+.insp-tabs { display: flex; gap: 4px; margin: -4px 0 14px; padding: 3px; background: #eef0f6; border-radius: 9px; }
+.insp-tabs button { flex: 1; border: 0; background: none; padding: 7px 4px; border-radius: 7px; font: 600 12.5px system-ui, sans-serif; color: var(--muted); cursor: pointer; }
+.insp-tabs button.active { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.insp-group { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.insp-group:first-of-type { border-top: 0; padding-top: 0; margin-top: 4px; }
+.slider-row { display: grid; grid-template-columns: 1fr 64px auto 26px; gap: 6px; align-items: center; }
+.slider-row .unit { font-size: 11.5px; color: var(--muted); }
+.range { width: 100%; accent-color: var(--brand); }
+.range.unset { opacity: .4; }
+.input.num { padding: 6px 6px; min-height: 32px; text-align: center; }
+.color-row:has(.icon-btn) { grid-template-columns: 34px 1fr 26px; }
+.color-row input[type=color].unset { opacity: .35; }
+.box-head { display: flex; align-items: center; justify-content: space-between; }
+.box-devices { display: flex; gap: 2px; }
+.box-devices .icon-btn { width: 26px; height: 24px; font-size: 12px; position: relative; }
+.box-devices .dot { position: absolute; top: 2px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--brand); }
+.box-grid { display: grid; grid-template-columns: repeat(4, 1fr) 30px; gap: 4px; align-items: start; }
+.box-cell { display: grid; gap: 3px; text-align: center; font-size: 10.5px; color: var(--muted); }
+.box-grid .icon-btn { height: 32px; width: 30px; }
+.play-row { display: flex; gap: 8px; margin: -4px 0 12px; }
+.notes-card { border: 1px solid #f3d9a4; background: #fffaf0; border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+.notes-card .note + .note { border-top: 1px solid #f3e3c0; margin-top: 10px; padding-top: 10px; }
+.notes-card .note p { margin: 4px 0 8px; font-size: 13px; white-space: pre-wrap; }

@@ -81,7 +81,11 @@ const renderers = {
     const items = p.items.filter((b) => b.text);
     if (!items.length) return ctx.editor ? `<div class="eka-hint">Add buttons in the panel</div>` : "";
     return `<div class="eka-btns j-${p.align}">${items
-      .map((b) => `<a class="eka-btn btn-${b.style}" ${attrHref(b.href, ctx)}>${esc(b.text)}</a>`)
+      .map((b) => {
+        const icon = BUTTON_ICONS[b.icon] ? `<svg class="bi-${b.icon}" viewBox="0 0 24 24" aria-hidden="true">${BUTTON_ICONS[b.icon]}</svg>` : "";
+        const label = `<span>${esc(b.text)}</span>`;
+        return `<a class="eka-btn btn-${b.style}" ${attrHref(b.href, ctx)}>${b.icon === "arrow" ? label + icon : icon + label}</a>`;
+      })
       .join("")}</div>`;
   },
 
@@ -192,6 +196,115 @@ const renderers = {
   },
 };
 
+// Small line icons (Feather, MIT) drawn in the button's text colour.
+const BUTTON_ICONS = {
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
+  email: '<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m22 6-10 7L2 6"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  play: '<path d="M7 4l13 8-13 8z" fill="currentColor"/>',
+  cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+};
+
+// ---------------------------------------------------------------------------
+// Per-element styling (margin, padding, borders, animation…). Each styled
+// element gets a class "x-<id>" and its rules go in one <style> per page.
+// ---------------------------------------------------------------------------
+
+const SHADOW_CSS = {
+  sm: "0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.08)",
+  md: "0 8px 20px -6px rgba(0,0,0,.18)",
+  lg: "0 18px 40px -12px rgba(0,0,0,.25)",
+  xl: "0 30px 64px -16px rgba(0,0,0,.35)",
+};
+
+export function hoverVars(effect) {
+  const v = { t: "none", s: "var(--btn-sh,none)", f: "none", a: "none", sh: "none" };
+  if (effect === "lift") { v.t = "translateY(-3px)"; v.s = "0 12px 22px -10px rgba(0,0,0,.45)"; }
+  if (effect === "grow") v.t = "scale(1.05)";
+  if (effect === "shrink") v.t = "scale(.95)";
+  if (effect === "glow") v.s = "0 0 0 4px color-mix(in srgb,var(--c-primary) 25%,transparent),0 10px 26px -8px color-mix(in srgb,var(--c-primary) 70%,transparent)";
+  if (effect === "brighten") v.f = "brightness(1.12)";
+  if (effect === "pulse") v.a = "eka-pulse 1s ease-in-out infinite";
+  if (effect === "wobble") v.a = "eka-wobble .6s ease";
+  if (effect === "shine") v.sh = "eka-shine .8s ease";
+  return `--bh-t:${v.t};--bh-s:${v.s};--bh-f:${v.f};--bh-a:${v.a};--bh-sh:${v.sh}`;
+}
+
+const BTN_SIZES = { sm: [38, 16, ".92rem"], md: [46, 24, "1rem"], lg: [54, 32, "1.08rem"], xl: [62, 40, "1.16rem"] };
+const btnSizeVars = (size) => { const [hgt, px, fs] = BTN_SIZES[size] || BTN_SIZES.md; return `--btn-h:${hgt}px;--btn-px:${px}px;--btn-fs:${fs}`; };
+
+const MEDIA = { d: "", t: "@media (max-width:1000px)", m: "@media (max-width:760px)" };
+const HIDE_MEDIA = { d: "@media (min-width:1001px)", t: "@media (min-width:761px) and (max-width:1000px)", m: "@media (max-width:760px)" };
+const SIDE_NAMES = { t: "top", r: "right", b: "bottom", l: "left" };
+
+// Returns the extra classes for an element and adds its rules to ctx.css.
+function styleNode(node, ctx, { kind, first }) {
+  const st = node.style || {};
+  const cls = [];
+  const name = `x-${node.id.replace(/[^\w-]/g, "")}`;
+  const sel = `.${name}.${name}`; // doubled: beats the base rules, e.g. the gap between blocks
+  const rules = [];
+  const at = {}; // media query → declarations
+  const add = (decl, media = "") => (at[media] ||= []).push(decl);
+
+  const anim = st.animation || (kind === "section" ? ctx.site.theme.layout.motion : "none");
+  if (anim && anim !== "none") {
+    cls.push("an", first ? "an-load" : "an-scroll");
+    add(`--an:eka-${anim}`);
+    if (st.speed) add(`--an-d:${st.speed === "fast" ? ".5s" : "1.2s"};--an-re:${st.speed === "fast" ? "40%" : "100%"}`);
+    if (st.delay) add(`--an-delay:${st.delay}ms;--an-rs:${Math.min(50, Math.round(st.delay / 30))}%`);
+  }
+  if (st.hover) {
+    add(hoverVars(st.hover));
+    if (node.type !== "buttons") cls.push("hv");
+  }
+  if (st.btnSize) add(btnSizeVars(st.btnSize));
+
+  if (st.maxWidth) {
+    if (kind === "section") rules.push(`${sel}>.eka-wrap{--wrap:${st.maxWidth}px}`);
+    else {
+      add(`max-width:${st.maxWidth}px;width:100%`);
+      if (st.align === "center") add("margin-left:auto;margin-right:auto");
+      if (st.align === "right") add("margin-left:auto");
+    }
+  }
+  for (const box of ["margin", "padding"]) {
+    for (const [dev, sides] of Object.entries(st[box] || {})) {
+      for (const [k, v] of Object.entries(sides)) add(`${box}-${SIDE_NAMES[k]}:${v}px`, MEDIA[dev]);
+    }
+  }
+  if (st.bg) {
+    if (st.bg2 && !(kind === "section" && node.props.background === "image")) add(`background:linear-gradient(135deg,${st.bg},${st.bg2})`);
+    else add(`background-color:${st.bg}`);
+  }
+  if (st.color) add(`color:${st.color}`);
+  if (st.radius !== undefined) {
+    add(`border-radius:${st.radius}px`);
+    if (kind === "section") add("overflow:hidden");
+    else add(`--r:${st.radius}px;--btn-r:${st.radius}px`);
+  }
+  if (st.borderWidth) add(`border:${st.borderWidth}px ${st.borderStyle || "solid"} ${st.borderColor || "color-mix(in srgb,currentColor 25%,transparent)"}`);
+  if (st.shadow) add(`box-shadow:${SHADOW_CSS[st.shadow]}`);
+  if (st.gap !== undefined && kind === "section") rules.push(`${sel} .eka-cols{gap:${st.gap}px}`);
+  if (st.fontSize) {
+    const fs = st.fontSize > 24 ? `clamp(${Math.round(st.fontSize * 0.6)}px,${(st.fontSize / 12.8).toFixed(2)}vw,${st.fontSize}px)` : `${st.fontSize}px`;
+    rules.push(`${sel},${sel} :is(h1,h2,h3,h4,blockquote,.eka-btn){font-size:${fs}}`);
+  }
+  if (st.fontWeight) rules.push(`${sel},${sel} :is(h1,h2,h3,h4,.eka-btn){font-weight:${st.fontWeight}}`);
+  for (const dev of Object.keys(st.hide || {})) {
+    // The editor shows hidden elements faded so they can still be selected.
+    rules.push(`${HIDE_MEDIA[dev]}{${sel}{${ctx.editor ? "opacity:.3;filter:grayscale(1)" : "display:none!important"}}}`);
+  }
+
+  // Desktop first, then tablet, then mobile, so the smaller screens win.
+  const ordered = ["", MEDIA.t, MEDIA.m].filter((m) => at[m]).map((m) => (m ? `${m}{${sel}{${at[m].join(";")}}}` : `${sel}{${at[m].join(";")}}`));
+  rules.unshift(...ordered);
+  if (rules.length) { cls.push(name); ctx.css.push(...rules); }
+  return cls;
+}
+
 function videoEmbed(url) {
   const u = String(url || "");
   const yt = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
@@ -209,13 +322,16 @@ export function renderBlock(block, ctx) {
   const fn = renderers[block.type];
   if (!fn) return "";
   const inner = fn(block.props, ctx, block);
-  return `<div class="eka-b eka-b-${block.type}"${editorAttrs(ctx, "block", block.id)}>${inner}</div>`;
+  if (!inner && !ctx.editor) return `<div class="eka-b eka-b-${block.type}"></div>`;
+  const extra = ctx.css ? styleNode(block, ctx, { kind: "block", first: ctx.sectionIndex === 0 }) : [];
+  return `<div class="eka-b eka-b-${block.type}${extra.length ? " " + extra.join(" ") : ""}"${editorAttrs(ctx, "block", block.id)}>${inner}</div>`;
 }
 
 export function renderSection(section, ctx) {
   const p = section.props;
   const cls = ["eka-s", `bg-${p.background}`, `pad-${p.padding}`, `w-${p.width}`, `t-${p.align}`, `va-${p.valign}`];
   if (p.minHeight) cls.push("tall");
+  if (ctx.css) cls.push(...styleNode(section, ctx, { kind: "section", first: ctx.sectionIndex === 0 }));
   let style = "";
   if (p.background === "image") {
     const url = safeUrl(p.image);
@@ -287,7 +403,11 @@ export function themeCss(theme) {
   const c = theme.colors;
   const heading = FONT_CHOICES[theme.fonts.heading] || FONT_CHOICES.system;
   const body = FONT_CHOICES[theme.fonts.body] || FONT_CHOICES.system;
-  return `:root{--c-primary:${c.primary};--c-accent:${c.accent};--c-bg:${c.background};--c-surface:${c.surface};--c-text:${c.text};--c-muted:${c.muted};--c-dark:${c.dark};--c-on-primary:${contrastText(c.primary)};--c-on-dark:${contrastText(c.dark)};--f-head:${heading.stack};--f-body:${body.stack};--r:${theme.radius}px}`;
+  const b = theme.buttons, t = theme.type, l = theme.layout;
+  const btnR = { theme: "var(--r)", square: "0px", rounded: "8px", pill: "999px" }[b.shape];
+  return `:root{--c-primary:${c.primary};--c-accent:${c.accent};--c-bg:${c.background};--c-surface:${c.surface};--c-text:${c.text};--c-muted:${c.muted};--c-dark:${c.dark};--c-on-primary:${contrastText(c.primary)};--c-on-dark:${contrastText(c.dark)};--f-head:${heading.stack};--f-body:${body.stack};--r:${theme.radius}px;`
+    + `--btn-r:${btnR};${btnSizeVars(b.size)};--btn-w:${b.weight};--btn-tt:${b.uppercase ? "uppercase" : "none"};--btn-ls:${b.uppercase ? ".06em" : "0"};--btn-sh:${b.shadow ? "0 6px 16px -6px rgba(0,0,0,.35)" : "none"};${hoverVars(b.hover)};`
+    + `--fs-base:${t.base}px;--hs:${t.headingScale / 100};--hw:${t.headingWeight};--wrap-n:${l.width}px;--sp:${l.spacing / 100}}`;
 }
 
 function contrastText(hex) {
@@ -300,13 +420,14 @@ function contrastText(hex) {
 
 export const BASE_CSS = `*,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-body{margin:0;font-family:var(--f-body);font-size:1.0625rem;line-height:1.65;color:var(--c-text);background:var(--c-bg);-webkit-font-smoothing:antialiased}
+body{margin:0;font-family:var(--f-body);font-size:var(--fs-base,17px);line-height:1.65;color:var(--c-text);background:var(--c-bg);-webkit-font-smoothing:antialiased}
 img{max-width:100%;height:auto;display:block}
 a{color:var(--c-primary)}
-h1,h2,h3,h4{font-family:var(--f-head);line-height:1.15;margin:0 0 .5em;letter-spacing:-.015em}
-h1{font-size:clamp(2.2rem,5vw,3.75rem)}h2{font-size:clamp(1.75rem,3.5vw,2.6rem)}h3{font-size:1.35rem}h4{font-size:1.1rem}
+h1,h2,h3,h4{font-family:var(--f-head);font-weight:var(--hw,700);line-height:1.15;margin:0 0 .5em;letter-spacing:-.015em}
+h1{font-size:calc(clamp(2.2rem,5vw,3.75rem)*var(--hs,1))}h2{font-size:calc(clamp(1.75rem,3.5vw,2.6rem)*var(--hs,1))}h3{font-size:calc(1.35rem*var(--hs,1))}h4{font-size:calc(1.1rem*var(--hs,1))}
+main{overflow-x:clip}
 p{margin:0 0 1em}
-.eka-wrap{width:100%;max-width:var(--wrap,1140px);margin:0 auto;padding:0 20px}
+.eka-wrap{width:100%;max-width:var(--wrap,var(--wrap-n,1140px));margin:0 auto;padding:0 20px}
 .t-left{text-align:left}.t-center{text-align:center}.t-right{text-align:right}
 .eka-header{background:var(--c-bg);border-bottom:1px solid color-mix(in srgb,var(--c-text) 10%,transparent);z-index:50;position:relative}
 .eka-header.sticky{position:sticky;top:0}
@@ -324,9 +445,9 @@ p{margin:0 0 1em}
 @media (max-width:860px){.eka-burger{display:block}.eka-nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:stretch;gap:0;padding:8px 20px 20px;background:var(--c-bg);border-bottom:1px solid color-mix(in srgb,var(--c-text) 10%,transparent)}.eka-nav a:not(.eka-btn){padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--c-text) 8%,transparent)}.eka-nav .eka-btn{margin-top:14px}.eka-nav-t:checked~.eka-nav{display:flex}.eka-nav-t:checked+.eka-burger span{background:transparent}.eka-nav-t:checked+.eka-burger span::before{transform:translateY(7px) rotate(45deg)}.eka-nav-t:checked+.eka-burger span::after{transform:translateY(-7px) rotate(-45deg)}}
 .eka-s{position:relative;background-size:cover;background-position:center}
 .eka-s>.eka-wrap{position:relative}
-.pad-none{padding:0}.pad-sm{padding:32px 0}.pad-md{padding:56px 0}.pad-lg{padding:88px 0}.pad-xl{padding:128px 0}
-@media (max-width:760px){.pad-md{padding:44px 0}.pad-lg{padding:60px 0}.pad-xl{padding:84px 0}}
-.w-narrow{--wrap:760px}.w-normal{--wrap:1140px}.w-wide{--wrap:1360px}.w-full{--wrap:none}.w-full>.eka-wrap{padding:0}
+.pad-none{padding:0}.pad-sm{padding:calc(32px*var(--sp,1)) 0}.pad-md{padding:calc(56px*var(--sp,1)) 0}.pad-lg{padding:calc(88px*var(--sp,1)) 0}.pad-xl{padding:calc(128px*var(--sp,1)) 0}
+@media (max-width:760px){.pad-md{padding:calc(44px*var(--sp,1)) 0}.pad-lg{padding:calc(60px*var(--sp,1)) 0}.pad-xl{padding:calc(84px*var(--sp,1)) 0}}
+.w-narrow{--wrap:min(760px,var(--wrap-n,1140px))}.w-normal{--wrap:var(--wrap-n,1140px)}.w-wide{--wrap:calc(var(--wrap-n,1140px) + 220px)}.w-full{--wrap:none}.w-full>.eka-wrap{padding:0}
 .tall{min-height:min(88vh,820px);display:flex;align-items:center}.tall>.eka-wrap{flex:1}
 .bg-surface{background-color:var(--c-surface)}
 .bg-primary{background-color:var(--c-primary);color:var(--c-on-primary)}
@@ -349,12 +470,20 @@ p{margin:0 0 1em}
 .eka-btns{display:flex;flex-wrap:wrap;gap:12px}
 .j-left{justify-content:flex-start}.j-center{justify-content:center}.j-right{justify-content:flex-end}
 .t-center .eka-btns.j-left{justify-content:center}
-.eka-btn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:10px 24px;border-radius:var(--r);font-weight:600;font-size:1rem;text-decoration:none;border:2px solid transparent;transition:transform .15s,filter .15s,background .15s;cursor:pointer;font-family:inherit;line-height:1.2}
-.eka-btn:hover{transform:translateY(-1px);filter:brightness(1.08)}
+.eka-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5em;min-height:var(--btn-h,46px);padding:8px var(--btn-px,24px);border-radius:var(--btn-r,var(--r));font-weight:var(--btn-w,600);font-size:var(--btn-fs,1rem);text-transform:var(--btn-tt,none);letter-spacing:var(--btn-ls,0);box-shadow:var(--btn-sh,none);text-decoration:none;border:2px solid transparent;transition:transform .2s,box-shadow .2s,filter .2s,background-color .2s;cursor:pointer;font-family:inherit;line-height:1.2;position:relative;overflow:hidden}
+.eka-btn::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);transform:translateX(-100%);pointer-events:none}
+.eka-btn:hover{transform:var(--bh-t,none);box-shadow:var(--bh-s,none);filter:var(--bh-f,none);animation:var(--bh-a,none)}
+.eka-btn:hover::after{animation:var(--bh-sh,none)}
+.eka-btn svg{width:1.1em;height:1.1em;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.bi-arrow{transition:transform .2s}.eka-btn:hover .bi-arrow{transform:translateX(3px)}
+.hv>*{transition:transform .25s,box-shadow .25s,filter .25s}
+.hv:hover>*{transform:var(--bh-t,none);box-shadow:var(--bh-s,none);filter:var(--bh-f,none);animation:var(--bh-a,none)}
 .btn-primary{background:var(--c-primary);color:var(--c-on-primary)}
 .btn-secondary{background:var(--c-accent);color:#111}
 .btn-outline{border-color:currentColor;color:inherit;background:transparent}
 .btn-light{background:#fff;color:#111}
+.btn-dark{background:var(--c-dark);color:var(--c-on-dark)}
+.btn-link{background:none;color:inherit;padding-left:0;padding-right:0;min-height:0;box-shadow:none;text-decoration:underline;text-underline-offset:4px}.btn-link::after{display:none}
 .bg-primary .btn-primary{background:var(--c-on-primary);color:var(--c-primary)}
 .eka-img{margin:0}.eka-img img{width:100%}.eka-img.rounded img,.eka-img.rounded .eka-ph{border-radius:var(--r)}
 .eka-img[class*=" r-"] img{height:100%;object-fit:cover}
@@ -416,7 +545,19 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-footer-in{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;justify-content:space-between}
 .eka-footer p{margin:0;opacity:.8}.eka-footer-links{display:flex;flex-wrap:wrap;gap:20px}.eka-footer a{color:inherit;opacity:.85;text-decoration:none}.eka-footer a:hover{opacity:1}
 .eka-hint{font-size:.85rem;opacity:.6;padding:8px;border:1px dashed currentColor;border-radius:6px}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}`;
+@keyframes eka-pulse{50%{transform:scale(1.06)}}
+@keyframes eka-wobble{20%{transform:rotate(-4deg)}40%{transform:rotate(3deg)}60%{transform:rotate(-2deg)}80%{transform:rotate(1deg)}}
+@keyframes eka-shine{to{transform:translateX(100%)}}
+@keyframes eka-fade{from{opacity:0}}
+@keyframes eka-fade-up{from{opacity:0;transform:translateY(48px)}}
+@keyframes eka-fade-down{from{opacity:0;transform:translateY(-48px)}}
+@keyframes eka-fade-left{from{opacity:0;transform:translateX(-64px)}}
+@keyframes eka-fade-right{from{opacity:0;transform:translateX(64px)}}
+@keyframes eka-zoom{from{opacity:0;transform:scale(.85)}}
+@keyframes eka-zoom-out{from{opacity:0;transform:scale(1.15)}}
+@keyframes eka-flip{from{opacity:0;transform:perspective(900px) rotateX(45deg);transform-origin:50% 100%}}
+@media (prefers-reduced-motion:no-preference){.an{animation:var(--an) var(--an-d,.8s) cubic-bezier(.2,.7,.2,1) var(--an-delay,0s) both}@supports (animation-timeline:view()){.an-scroll{animation-duration:auto;animation-delay:0s;animation-timeline:view();animation-range:entry var(--an-rs,0%) entry var(--an-re,70%)}}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}`;
 
 function fontLinks(theme) {
   const families = [...new Set([theme.fonts.heading, theme.fonts.body])]
@@ -437,10 +578,11 @@ function fontLinks(theme) {
  * @param opts { base = "/", editor = false, formAction, canonical }
  */
 export function renderBody(site, page, opts = {}) {
-  const ctx = { site, page, base: opts.base || "/", editor: !!opts.editor, formAction: opts.formAction, eagerImages: 2 };
-  const sections = page.sections.map((s) => renderSection(s, ctx)).join("");
+  const ctx = { site, page, base: opts.base || "/", editor: !!opts.editor, formAction: opts.formAction, eagerImages: 2, css: [] };
+  const sections = page.sections.map((s, i) => { ctx.sectionIndex = i; return renderSection(s, ctx); }).join("");
+  const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
   const empty = ctx.editor && !page.sections.length ? `<div class="eka-page-empty">This page is empty. Drag a section or block here, or ask the AI to build it.</div>` : "";
-  return `${renderHeader(site, ctx)}<main id="main">${sections}${empty}</main>${renderFooter(site, ctx)}`;
+  return `${nodeCss}${renderHeader(site, ctx)}<main id="main">${sections}${empty}</main>${renderFooter(site, ctx)}`;
 }
 
 export function renderCss(site) {

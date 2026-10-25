@@ -30,6 +30,8 @@ section.eka-sel,header.eka-sel,footer.eka-sel{outline:2px solid #0f766e!importan
 .eka-img,.eka-gallery{position:relative}
 .eka-ph-tag{position:absolute;top:10px;left:10px;z-index:3;background:rgba(17,24,39,.78);color:#fff;font:600 11px/1.2 system-ui,sans-serif;padding:5px 8px;border-radius:5px;pointer-events:none;letter-spacing:.01em}
 section>.eka-ph-tag{top:12px;left:12px}
+.an{animation:none!important}
+.an.eka-an-play{animation:var(--an) var(--an-d,.8s) cubic-bezier(.2,.7,.2,1) var(--an-delay,0s) both!important}
 `;
 
 export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia, onAskAi, onKey }) {
@@ -550,7 +552,19 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
     if (selectId) { state.select(selectId); scrollTo(selectId); }
   }
 
+  // Plays an element's entrance animation once (animations are off while editing).
+  function playAnimation(id) {
+    const el = elFor(id);
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.classList.remove("eka-an-play");
+    void el.offsetWidth;
+    el.classList.add("eka-an-play");
+    el.addEventListener("animationend", () => el.classList.remove("eka-an-play"), { once: true });
+  }
+
   return {
+    playAnimation,
     boot,
     render,
     updateSelection,

@@ -1,5 +1,6 @@
-// New-site wizard: 1) the brief, 2) pick a homepage design (generate another,
-// or ask for changes), 3) confirm and build the full site.
+// New-site wizard: 1) the brief, 2) a short description of each page,
+// 3) pick a homepage design (generate another, or ask for changes, page by
+// page), then confirm to build the full site.
 
 import { h, api, waitForJob, toast } from "./ui.js";
 import { renderPage } from "/admin/shared/render.js";
@@ -18,16 +19,24 @@ let me = { ai: { enabled: false } };
 
 // Everything the wizard knows. Saved in the tab so a refresh doesn't lose work.
 let state = load() || {
+  version: 2,
   step: 1,
-  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", logoUrl: "", colors: null, style: STYLES[0], pages: ["About", "Contact"] },
+  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", logoUrl: "", colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
   concepts: [], // [{ site, layout, requests: [], history: [] }]
   current: 0,
+  notes: {}, // change requests per page: { "Whole site": "", "Home": "", "About": "" }
 };
+state.notes ||= {};
+state.brief.pageInfo ||= {};
 let busy = null; // text while waiting on the AI
+const openBoxes = new Set(["Home"]); // which page change boxes are expanded
 let device = "desktop";
 
 function load() {
-  try { return JSON.parse(sessionStorage.getItem(SAVE_KEY)); } catch { return null; }
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SAVE_KEY));
+    return saved?.version === 2 ? saved : null; // older wizard layout: start again
+  } catch { return null; }
 }
 function save() {
   try { sessionStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* storage full or blocked: carry on */ }
@@ -41,7 +50,7 @@ function setStep(n) {
 
 function render() {
   document.querySelectorAll("[data-step]").forEach((el) => el.classList.toggle("on", Number(el.dataset.step) === state.step));
-  app.replaceChildren(state.step === 1 ? renderBrief() : renderDesign());
+  app.replaceChildren(state.step === 1 ? renderBrief() : state.step === 2 ? renderPages() : renderDesign());
 }
 
 // ------------------------------------------------------------------ step 1 --
@@ -105,14 +114,12 @@ function renderBrief() {
   );
   paintPages();
 
-  const go = h("button", { class: "btn btn-primary", onclick: async () => {
+  const go = h("button", { class: "btn btn-primary", onclick: () => {
     err.textContent = "";
     if (!b.name.trim() && !b.description.trim()) { err.textContent = "Add the business name or a description first."; return; }
-    state.concepts = [];
-    state.current = 0;
     setStep(2);
-    await newConcept();
-  } }, "Show me a design →");
+    window.scrollTo(0, 0);
+  } }, "Next: describe the pages →");
 
   return h("div", { class: "brief" },
     h("h2", {}, "Tell us about the business"),
@@ -165,6 +172,56 @@ function renderBrief() {
 
 // ------------------------------------------------------------------ step 2 --
 
+const PAGE_HINTS = {
+  home: "The first thing visitors see: what you want to get across, the main offer, any special deals…",
+  about: "Who runs the business, how it started, what makes it different, the team…",
+  services: "Each service or product range, with prices if you want them shown…",
+  gallery: "What the photos will show: finished work, the shop, products…",
+  pricing: "Packages or prices to list…",
+  faq: "Questions customers often ask, and the answers…",
+  contact: "How people should get in touch, delivery/collection, areas covered…",
+  shop: "What's for sale, how buying works…",
+};
+
+function renderPages() {
+  const b = state.brief;
+  const pages = ["Home", ...b.pages.filter((p) => p.toLowerCase() !== "home")];
+  const card = (title) => {
+    const box = h("textarea", { class: "textarea", rows: "3", placeholder: PAGE_HINTS[title.toLowerCase()] || `What should the ${title} page say or show?` }, b.pageInfo[title] || "");
+    box.addEventListener("input", () => { b.pageInfo[title] = box.value; save(); });
+    return h("div", { class: "card page-card" },
+      h("div", { class: "row" },
+        h("h3", { class: "grow", style: { margin: 0 } }, title === "Home" ? "Home page" : `${title} page`),
+        title === "Home" ? null : h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
+          b.pages = b.pages.filter((p) => p !== title); delete b.pageInfo[title]; save(); render();
+        } }, "Remove")),
+      box);
+  };
+  const addPage = h("input", { class: "input", placeholder: "+ Add another page (type a name, press Enter)", onkeydown: (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const v = e.target.value.trim().slice(0, 40);
+    if (v && !pages.some((p) => p.toLowerCase() === v.toLowerCase())) { b.pages = [...b.pages, v]; save(); render(); document.querySelector(".page-card:last-of-type textarea")?.focus(); }
+  } });
+
+  return h("div", { class: "brief" },
+    h("h2", {}, "What goes on each page?"),
+    h("p", { class: "muted", style: { margin: 0 } }, "A sentence or two per page is plenty. All optional: leave a page blank and it's written from the business description."),
+    pages.map(card),
+    h("div", { class: "card" }, addPage),
+    h("div", { class: "actions" },
+      h("button", { class: "btn", onclick: () => setStep(1) }, "← Back"),
+      h("button", { class: "btn btn-primary", onclick: async () => {
+        state.concepts = [];
+        state.current = 0;
+        setStep(3);
+        await newConcept();
+      } }, "Show me a design →")),
+  );
+}
+
+// ------------------------------------------------------------------ step 3 --
+
 function currentConcept() {
   return state.concepts[state.current];
 }
@@ -193,12 +250,14 @@ async function newConcept() {
     save();
   } catch (err) {
     toast(err.message, { error: true });
-    if (!state.concepts.length) state.step = 1;
+    if (!state.concepts.length) state.step = 2;
   }
   render();
 }
 
-async function refine(instruction) {
+// Applies a written change to the homepage preview. `key` is the change box
+// it came from, which is emptied once the change is made.
+async function refine(instruction, key) {
   const c = currentConcept();
   try {
     const result = await runJob("Making your change…", () => api("/wizard/refine", { method: "POST", body: { concept: c.site, instruction } }));
@@ -208,20 +267,33 @@ async function refine(instruction) {
       c.layout = result.layout;
     }
     c.requests.push(instruction);
+    if (key) state.notes[key] = "";
     save();
     toast(result.summary || "Done.");
+    return true;
   } catch (err) {
     toast(err.message, { error: true });
+    return false;
+  } finally {
+    render();
   }
-  render();
 }
 
 async function confirm() {
+  // With AI, changes typed for the whole site or the homepage are made first,
+  // so the other pages are built from the final design.
+  if (me.ai.enabled) {
+    for (const key of ["Whole site", "Home"]) {
+      const text = (state.notes[key] || "").trim();
+      if (text && !(await refine(text, key))) return;
+    }
+  }
   const c = currentConcept();
+  const pageNotes = Object.fromEntries(Object.entries(state.notes).filter(([, v]) => v && v.trim()));
   try {
     busy = "Building the full site…";
     render();
-    const { site } = await api("/sites", { method: "POST", body: { brief: state.brief, concept: c.site, requests: c.requests } });
+    const { site } = await api("/sites", { method: "POST", body: { brief: state.brief, concept: c.site, requests: c.requests, pageNotes } });
     clearAndGo(`/admin/sites/${site.id}`);
   } catch (err) {
     busy = null;
@@ -237,7 +309,42 @@ function clearAndGo(url) {
 
 function renderDesign() {
   const c = currentConcept();
-  const refineBox = h("textarea", { class: "textarea", rows: "3", placeholder: "e.g. make the header darker, use a photo-style hero, add a page called Gallery", disabled: !!busy || !me.ai.enabled });
+  const ai = me.ai.enabled;
+  const pages = ["Whole site", "Home", ...state.brief.pages.filter((p) => p.toLowerCase() !== "home")];
+  const hints = {
+    "Whole site": ai ? "Colours, fonts, header, buttons… Applies to every page." : "Colours, fonts, header, buttons…",
+    Home: ai ? "Changes to the homepage you're looking at." : "Changes to the homepage you're looking at.",
+  };
+  const placeholders = {
+    "Whole site": "e.g. darker header, rounder buttons, use a serif font",
+    Home: "e.g. use a photo-style hero, add a section about our history",
+  };
+
+  const changeBox = (key) => {
+    const live = ai && (key === "Whole site" || key === "Home");
+    const box = h("textarea", { class: "textarea", rows: "2", placeholder: placeholders[key] || `What should the ${key} page have? e.g. our story, opening hours, a photo of the shop`, disabled: !!busy }, state.notes[key] || "");
+    const mark = h("span", { class: "dot", hidden: !(state.notes[key] || "").trim() });
+    box.addEventListener("input", () => { state.notes[key] = box.value; mark.hidden = !box.value.trim(); save(); });
+    const apply = () => { const v = box.value.trim(); if (v) refine(v, key); };
+    if (live) box.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) apply(); });
+    const removable = !["Whole site", "Home"].includes(key);
+    return h("details", { class: "page-box", open: openBoxes.has(key), ontoggle: (e) => { e.target.open ? openBoxes.add(key) : openBoxes.delete(key); } },
+      h("summary", {}, h("span", { class: "grow" }, key === "Whole site" ? "Whole site" : `${key} page`), mark),
+      box,
+      h("div", { class: "row", style: { marginTop: "6px" } },
+        live ? h("button", { class: "btn btn-sm", disabled: !!busy, onclick: apply }, "Apply to preview") : h("span", { class: "small muted grow" }, hints[key] || (ai ? "Used when this page is built." : "Saved with the site.")),
+        live ? h("span", { class: "small muted grow" }, hints[key]) : null,
+        removable ? h("button", { class: "btn btn-sm btn-ghost", title: "Don't make this page", disabled: !!busy, onclick: () => {
+          state.brief.pages = state.brief.pages.filter((p) => p !== key); delete state.notes[key]; save(); render();
+        } }, "Remove page") : null,
+      ),
+    );
+  };
+  const addPage = h("input", { class: "input", placeholder: "+ Add a page (press Enter)", disabled: !!busy, onkeydown: (e) => {
+    if (e.key !== "Enter") return;
+    const v = e.target.value.trim().slice(0, 40);
+    if (v && !pages.some((p) => p.toLowerCase() === v.toLowerCase())) { state.brief.pages = [...state.brief.pages, v]; openBoxes.add(v); save(); render(); }
+  } });
 
   const side = h("aside", { class: "side" },
     h("h2", { style: { fontSize: "18px" } }, "Pick a design"),
@@ -251,21 +358,23 @@ function renderDesign() {
     h("button", { class: "btn big", style: { marginTop: "10px" }, disabled: !!busy, onclick: newConcept }, "↻ Generate another"),
 
     h("hr", { class: "sep" }),
-    h("div", { class: "field" },
-      h("label", {}, "Want something changed?"),
-      refineBox,
-      me.ai.enabled ? null : h("div", { class: "field-hint" }, "Written changes need AI (add your API key in settings.txt). You can still change anything by hand after you confirm."),
-    ),
-    h("div", { class: "row" },
-      h("button", { class: "btn", disabled: !!busy || !me.ai.enabled, onclick: () => { const v = refineBox.value.trim(); if (v) refine(v); } }, "Apply change"),
-      c?.history.length ? h("button", { class: "btn btn-ghost", disabled: !!busy, onclick: () => { c.site = c.history.pop(); c.requests.pop(); save(); render(); } }, "↶ Undo") : null,
-    ),
-    c?.requests.length ? h("ul", { class: "changes" }, c.requests.map((r) => h("li", {}, r))) : null,
+    h("label", { style: { fontWeight: 600, display: "block" } }, "Want something changed?"),
+    h("p", { class: "field-hint", style: { margin: "2px 0 10px" } }, ai
+      ? "Write what you want, page by page. Homepage and whole-site changes can be tried on the preview now; the rest are used when the pages are built."
+      : "Write what you want, page by page. Without an AI key they can't be done automatically yet, so they're saved with the site and shown in the editor's AI tab as a to-do list (do them by hand, or with one click once the key is added)."),
+    h("div", { class: "page-boxes" }, pages.map(changeBox)),
+    addPage,
+    c?.requests.length ? h("div", { style: { marginTop: "12px" } },
+      h("div", { class: "small", style: { fontWeight: 600 } }, "Done on this design:"),
+      h("ul", { class: "changes" }, c.requests.map((r) => h("li", {}, r))),
+      c.history.length ? h("button", { class: "btn btn-sm btn-ghost", disabled: !!busy, onclick: () => { c.site = c.history.pop(); c.requests.pop(); save(); render(); } }, "↶ Undo last change") : null,
+    ) : null,
 
     h("hr", { class: "sep" }),
-    h("a", { href: "#", class: "small", onclick: (e) => { e.preventDefault(); if (!busy) setStep(1); } }, "← Edit the brief"),
+    h("div", { class: "row", style: { gap: "16px" } },
+      h("a", { href: "#", class: "small", onclick: (e) => { e.preventDefault(); if (!busy) setStep(1); } }, "← Edit the brief"),
+      h("a", { href: "#", class: "small", onclick: (e) => { e.preventDefault(); if (!busy) setStep(2); } }, "← Page descriptions")),
   );
-  refineBox.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { const v = refineBox.value.trim(); if (v) refine(v); } });
 
   const frame = h("div", { class: `frame${device === "mobile" ? " mobile" : ""}` });
   const inner = h("div", { class: "frame-in" });
@@ -301,12 +410,12 @@ function renderDesign() {
   return wrap;
 }
 
-window.addEventListener("resize", () => { if (state.step === 2) render(); });
+window.addEventListener("resize", () => { if (state.step === 3) render(); });
 
 // ------------------------------------------------------------------- start --
 
 api("/me").then((m) => { me = m; }).catch(() => {}).finally(() => {
   // A refresh in the middle of generating: show what we have.
-  if (state.step === 2 && !state.concepts.length) state.step = 1;
+  if (state.step === 3 && !state.concepts.length) state.step = 2;
   render();
 });

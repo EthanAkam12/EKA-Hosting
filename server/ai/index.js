@@ -87,13 +87,13 @@ export function createAi({ provider = pickProvider() } = {}) {
     },
 
     // Builds the remaining pages in the approved concept's style.
-    async buildFromConcept({ brief, concept, requests = [], onProgress }) {
+    async buildFromConcept({ brief, concept, requests = [], pageNotes = {}, onProgress }) {
       if (provider.buildFromConcept) {
-        return { site: applyBrief(normalizeSite((await provider.buildFromConcept({ brief, concept })).site), brief) };
+        return { site: applyBrief(normalizeSite((await provider.buildFromConcept({ brief, concept, pageNotes })).site), brief) };
       }
       const text = await provider.complete({
         system: BUILD_SYSTEM,
-        prompt: buildPrompt({ brief, concept, requests }),
+        prompt: buildPrompt({ brief, concept, requests, pageNotes }),
         model: generateModel,
         effort: generateEffort,
         onProgress,

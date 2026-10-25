@@ -1,7 +1,7 @@
 // Prompt text for the site generator and editor. The block reference is built
 // from shared/schema.js so the AI always knows exactly what the editor supports.
 
-import { BLOCKS, SECTION_FIELDS, FONT_CHOICES } from "../../shared/schema.js";
+import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, ENTRANCE_EFFECTS } from "../../shared/schema.js";
 
 function describeField(f) {
   switch (f.type) {
@@ -27,7 +27,10 @@ export function blockReference() {
   "theme": {
     "colors": { "primary", "accent", "background", "surface", "text", "muted", "dark" }  (all 6-digit hex),
     "fonts": { "heading": FONT, "body": FONT },  FONT is one of ${Object.keys(FONT_CHOICES).join("|")}
-    "radius": number 0-32 (corner rounding in px)
+    "radius": number 0-32 (corner rounding in px),
+    "buttons": { "size": "sm"|"md"|"lg"|"xl", "shape": "theme"|"square"|"rounded"|"pill", "weight": 400-800, "uppercase": boolean, "shadow": boolean, "hover": HOVER },
+    "type": { "base": 14-22 (body text px), "headingScale": 60-160 (% of normal), "headingWeight": 300-900 },
+    "layout": { "width": 720-1600 (content width px), "spacing": 25-200 (% of normal section spacing), "motion": ANIMATION (every section animates in unless it sets its own) }
   },
   "header": { "logoText": string, "logoImage": "", "ctaText": string, "ctaHref": string, "sticky": boolean },
   "footer": { "text": string, "links": [{ "text", "href" }] },
@@ -38,8 +41,17 @@ export function blockReference() {
 SECTION = { "id"?, "type": "section", "props": { ${section} }, "columns": [ { "id"?, "blocks": [BLOCK] } ] }
   The number of columns must match props.layout ("1" = 1 column, "1-1" = 2, "2-1" = 2, "1-2" = 2, "1-1-1" = 3, "1-1-1-1" = 4).
 
-BLOCK = { "id"?, "type": TYPE, "props": {...} } where TYPE and props are:
+BLOCK = { "id"?, "type": TYPE, "props": {...}, "style"?: STYLE } where TYPE and props are:
 ${blocks}
+
+STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; leave out what you don't need):
+{ "margin"|"padding": { "d"|"t"|"m": { "t", "r", "b", "l" } } (px per side; d = desktop, t = tablet override, m = mobile override),
+  "bg": hex, "bg2": hex (gradient end), "color": hex (text), "radius": px, "borderWidth": px, "borderStyle": "solid"|"dashed"|"dotted"|"double", "borderColor": hex,
+  "shadow": "sm"|"md"|"lg"|"xl", "fontSize": px, "fontWeight": 300-900, "maxWidth": px, "align": "center"|"right" (with maxWidth), "gap": px (sections: space between columns),
+  "animation": ANIMATION, "speed": "fast"|"slow", "delay": ms, "hover": HOVER (buttons blocks: button hover animation; other blocks: hover effect), "btnSize": "sm"|"md"|"lg"|"xl",
+  "hide": { "d"|"t"|"m": true } }
+HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.
+Prefer the section/block props and theme settings first; use STYLE for specific tweaks the owner asks for (spacing, borders, animations, hiding on mobile…).
 
 LINKS: link to another page with "/slug" (e.g. "/about", home is "/"), to a section with "#anchor" or "/slug#anchor",
 phone with "tel:+44...", email with "mailto:...". Give the contact section the anchor "contact".`;
@@ -125,6 +137,8 @@ export function formatBrief(brief = {}) {
   }
   if (brief.style && brief.style !== STYLE_CHOICES[0]) add("Style", brief.style);
   if (Array.isArray(brief.pages) && brief.pages.length) add("Pages wanted", brief.pages.join(", "));
+  const info = Object.entries(brief.pageInfo || {}).filter(([, v]) => v && String(v).trim());
+  if (info.length) lines.push(`What the owner wants on each page (follow closely):\n${info.map(([page, text]) => `- ${page}: ${String(text).trim()}`).join("\n")}`);
   if (brief.logoUrl) add("Logo", `${brief.logoUrl} (already uploaded; put it in header.logoImage${brief.logoAttached ? "; the image is attached so you can match its colours" : ""})`);
   return lines.join("\n");
 }
@@ -154,9 +168,11 @@ Respond with ONLY a JSON object: { "pages": [ <every page except the home page> 
 - If the concept already has other pages, include them (expanded if they're thin).
 - headerLinks = the main menu, in order, starting with Home ("/").`;
 
-export function buildPrompt({ brief, concept, requests = [] }) {
+export function buildPrompt({ brief, concept, requests = [], pageNotes = {} }) {
   const req = requests.length ? `\n\nThe owner also asked for:\n${requests.map((r) => `- ${r}`).join("\n")}\n(Changes to the home page have already been made; act on any that are about other pages.)` : "";
-  return `APPROVED CONCEPT (home page, theme, header, footer):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}${req}\n\nCreate the remaining pages. Usually: the pages the brief asks for; otherwise About, Services (or what fits the business) and Contact. A small business can have just 2-4 pages.`;
+  const notes = Object.entries(pageNotes).filter(([k]) => k !== "Home" && k !== "Whole site");
+  const perPage = notes.length ? `\n\nWHAT THE OWNER WANTS ON EACH PAGE (follow these closely; create any page named here even if the brief doesn't list it):\n${notes.map(([page, text]) => `- ${page} page: ${text}`).join("\n")}` : "";
+  return `APPROVED CONCEPT (home page, theme, header, footer):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}${req}${perPage}\n\nCreate the remaining pages. Usually: the pages the brief asks for; otherwise About, Services (or what fits the business) and Contact. A small business can have just 2-4 pages.`;
 }
 
 // One line describing a concept's layout, so "generate another" can avoid it.

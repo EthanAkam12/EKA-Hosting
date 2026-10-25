@@ -25,7 +25,7 @@ import { deploy, testConnection } from "./deploy.js";
 import yazl from "yazl";
 import { renderPage } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
-import { createEmptySite, normalizeSite, findNode } from "../shared/schema.js";
+import { createEmptySite, normalizeSite, findNode, slugify } from "../shared/schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -381,7 +381,33 @@ function cleanBrief(input = {}) {
     colors,
     style: STYLE_CHOICES.includes(input.style) ? input.style : STYLE_CHOICES[0],
     pages: Array.isArray(input.pages) ? input.pages.map((p) => str(p, 40)).filter(Boolean).slice(0, 12) : [],
+    // A short description per page, by page name ("Home", "About"…).
+    pageInfo: Object.fromEntries(Object.entries(input.pageInfo && typeof input.pageInfo === "object" ? input.pageInfo : {})
+      .map(([k, v]) => [str(k, 40), str(v, 1500)]).filter(([k, v]) => k && v).slice(0, 13)),
   };
+}
+
+// Change requests typed per page in the wizard: { "Whole site": "...", "Home": "...", "About": "..." }
+function cleanPageNotes(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(input).slice(0, 20)) {
+    const key = String(k).trim().slice(0, 40), text = String(v ?? "").trim().slice(0, 2000);
+    if (key && text) out[key] = text;
+  }
+  return out;
+}
+
+// Notes the AI couldn't act on (no API key) are kept with the site, by page
+// slug ("_site" for the whole site), and shown in the editor's AI tab.
+function notesBySlug(pageNotes, site) {
+  const out = {};
+  for (const [title, text] of Object.entries(pageNotes)) {
+    const key = title === "Whole site" ? "_site" : title === "Home" ? "index" : slugify(title);
+    if (key === "_site" || site.pages.some((p) => p.slug === key)) out[key] = text;
+    else out._site = [out._site, `${title} page: ${text}`].filter(Boolean).join("\n");
+  }
+  return out;
 }
 
 // The logo is shown to the AI so it can pick colours that match it.
@@ -453,15 +479,17 @@ api.post("/sites", async (req, res) => {
     const brief = cleanBrief(req.body.brief);
     const concept = normalizeSite(req.body.concept);
     const requests = Array.isArray(req.body.requests) ? req.body.requests.map((r) => String(r).slice(0, 2000)).slice(0, 20) : [];
+    const pageNotes = cleanPageNotes(req.body.pageNotes);
     const name = brief.name || concept.name;
     const meta = await store.create({ name, prompt: brief.description });
     const job = startJob("generate", meta.id, async (progress) => {
       try {
-        const { site } = await ai.buildFromConcept({ brief, concept, requests, onProgress: progress });
+        const { site } = await ai.buildFromConcept({ brief, concept, requests, pageNotes, onProgress: progress });
         await fillPlaceholders(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
         const adopted = await adoptTmpMedia(site, meta.id);
         await store.saveDraft(meta.id, adopted, { version: "Built from the approved design" });
-        await store.updateMeta(meta.id, { status: "ready", error: null, name: adopted.name, formEmail: brief.email || "" });
+        const notes = ai.enabled ? {} : notesBySlug(pageNotes, adopted);
+        await store.updateMeta(meta.id, { status: "ready", error: null, name: adopted.name, formEmail: brief.email || "", notes });
         return { ok: true };
       } catch (err) {
         await store.updateMeta(meta.id, { status: "error", error: err.message });
@@ -549,6 +577,7 @@ api.patch("/sites/:id/meta", async (req, res) => {
     patch.formEmail = email;
   }
   if (req.body.deploy && typeof req.body.deploy === "object") patch.deploy = cleanDeploySettings(req.body.deploy, meta.deploy || {});
+  if (req.body.notes && typeof req.body.notes === "object") patch.notes = cleanPageNotes(req.body.notes);
   const updated = await store.updateMeta(meta.id, patch);
   pageCache.clear();
   res.json({ meta: withUrl(updated) });

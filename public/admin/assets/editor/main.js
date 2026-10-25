@@ -231,12 +231,13 @@ state.on((what, source) => {
     case "page":
       canvas.render({ keepScroll: false });
       inspector.render();
-      if (active === "pages") panels.render();
+      if (active === "pages" || active === "ai") panels.render();
       renderBar();
       break;
     case "device":
       document.querySelectorAll("[data-device]").forEach((b) => b.classList.toggle("active", b.dataset.device === state.get().device));
       layoutFrame();
+      inspector.render(); // margin/padding boxes edit the current device
       break;
     case "save":
       renderSaveState();
