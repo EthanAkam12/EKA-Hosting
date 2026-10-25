@@ -2,7 +2,7 @@
 
 An AI website builder for making and managing customer websites.
 
-- **Describe a business → get a whole site.** The AI writes the pages, copy, layout and colour scheme.
+- **Describe a business → pick a design → get a whole site.** A short brief (description, logo, contact details, colours, style, pages) gives you a homepage design to judge. Ask for another design, or type changes ("make it darker", "add a Gallery page"), then confirm and the AI builds every page in that style.
 - **Change it by asking.** "Add a pricing section", "make it feel more premium", or select one block and say "make this punchier".
 - **Or change it by hand.** A drag-and-drop editor in the style of Elementor or Kadence: drag blocks and ready-made sections onto the page, double-click text to edit it in place, and tweak anything in the side panel. Desktop, tablet and mobile previews; undo/redo; autosave; a full version history.
 - **Fast customer sites.** Published pages are plain HTML with the CSS inlined and **no JavaScript at all**. The mobile menu, FAQs and form messages are pure CSS, photos are auto-converted to WebP with phone-sized copies, and YouTube embeds load only a thumbnail until clicked. A typical page is ~20 KB.
@@ -44,7 +44,7 @@ Run the tests with `npm test`.
 | `ANTHROPIC_API_KEY` | Turns on AI generation and editing (Claude). |
 | `AI_MODEL` | Claude model for building new sites. Default `claude-opus-5-5` (best quality). |
 | `AI_EDIT_MODEL` | Claude model for AI changes to existing sites. Default `claude-sonnet-5-5` (faster and about half the price). |
-| `AI_EFFORT` / `AI_GENERATE_EFFORT` | How hard the AI thinks for edits / new sites (`low`…`max`). Defaults `medium` / `high`. Lower is faster and cheaper. |
+| `AI_EFFORT` / `AI_CONCEPT_EFFORT` / `AI_GENERATE_EFFORT` | How hard the AI thinks for edits / design previews / building the full site (`low`…`max`). Defaults `medium` / `medium` / `high`. Lower is faster and cheaper. |
 | `AI_PROVIDER` | `claude` (default when a key is set) or `demo` (templates only). |
 | `BASE_DOMAIN` | e.g. `ekahosting.com`. Sites are then served at `https://<site-name>.ekahosting.com`. Without it, sites are served at `/s/<site-name>/` on the builder. |
 | `PORT` | Default `3000`. |

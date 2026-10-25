@@ -102,3 +102,69 @@ CHANGE REQUEST:
 ${instruction}
 """`;
 }
+
+// ---------------------------------------------------------------------------
+// New-site wizard: brief → homepage concepts → full site
+// ---------------------------------------------------------------------------
+
+export const STYLE_CHOICES = ["Let the AI decide", "Modern", "Classic", "Bold", "Minimal", "Warm & friendly", "Luxury", "Playful"];
+
+// Turns the wizard's brief into plain text the AI can work from.
+export function formatBrief(brief = {}) {
+  const lines = [];
+  const add = (label, value) => { if (value && String(value).trim()) lines.push(`${label}: ${String(value).trim()}`); };
+  add("Business name", brief.name);
+  add("Description", brief.description);
+  add("Phone", brief.phone);
+  add("Email", brief.email);
+  add("Address", brief.address);
+  add("Opening hours", brief.hours);
+  add("Social media / other links", brief.socials);
+  if (brief.colors?.primary) {
+    add("Brand colours (use these as the theme's primary and accent colours)", [brief.colors.primary, brief.colors.accent].filter(Boolean).join(", "));
+  }
+  if (brief.style && brief.style !== STYLE_CHOICES[0]) add("Style", brief.style);
+  if (Array.isArray(brief.pages) && brief.pages.length) add("Pages wanted", brief.pages.join(", "));
+  if (brief.logoUrl) add("Logo", `${brief.logoUrl} (already uploaded; put it in header.logoImage${brief.logoAttached ? "; the image is attached so you can match its colours" : ""})`);
+  return lines.join("\n");
+}
+
+const CONTACT_RULES = `- Use the contact details exactly as given (phone, email, address, hours). Put them in the contact section and the footer; make phone links "tel:" and email links "mailto:". Never invent contact details that weren't given.`;
+
+export const CONCEPT_SYSTEM = `${GENERATE_SYSTEM}
+
+YOU ARE DESIGNING A CONCEPT. Output a site JSON with ONLY the home page (one page, slug "index") plus theme, header and footer.
+The owner judges the look from this concept, so make the home page complete and polished: real copy, a strong hero, 5-8 sections.
+${CONTACT_RULES}
+- Put the planned pages in header.links (e.g. {"text":"Gallery","href":"/gallery"}) so the menu already shows them, even though only the home page exists yet (Home first, Contact last).`;
+
+export function conceptPrompt({ brief, previous = [] }) {
+  const prev = previous.length
+    ? `\n\nThe owner has already seen ${previous.length} concept(s) and asked for something different. Earlier concepts were:\n${previous.map((p, i) => `${i + 1}. ${p}`).join("\n")}\nMake this one CLEARLY different: a different hero treatment, different section order and mix, different background rhythm${brief.colors?.primary ? "" : ", and a different colour palette and fonts"}. Keep the same business details.`
+    : "";
+  return `Design a home page concept for this business.\n\n${formatBrief(brief)}${prev}`;
+}
+
+export const BUILD_SYSTEM = `${GENERATE_SYSTEM}
+
+YOU ARE FINISHING AN APPROVED DESIGN. The owner approved a home page concept. Create the OTHER pages of the site in exactly the same style: same theme, same kinds of sections, same tone of voice.
+${CONTACT_RULES}
+Respond with ONLY a JSON object: { "pages": [ <every page except the home page> ], "headerLinks": [ { "text", "href" } ] }
+- Do not include the home page; it stays exactly as approved.
+- If the concept already has other pages, include them (expanded if they're thin).
+- headerLinks = the main menu, in order, starting with Home ("/").`;
+
+export function buildPrompt({ brief, concept, requests = [] }) {
+  const req = requests.length ? `\n\nThe owner also asked for:\n${requests.map((r) => `- ${r}`).join("\n")}\n(Changes to the home page have already been made; act on any that are about other pages.)` : "";
+  return `APPROVED CONCEPT (home page, theme, header, footer):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}${req}\n\nCreate the remaining pages. Usually: the pages the brief asks for; otherwise About, Services (or what fits the business) and Contact. A small business can have just 2-4 pages.`;
+}
+
+// One line describing a concept's layout, so "generate another" can avoid it.
+export function describeLayout(site) {
+  const home = site.pages[0];
+  const sections = home.sections.map((s) => {
+    const kinds = [...new Set(s.columns.flatMap((c) => c.blocks.map((b) => b.type)))].join("+") || "empty";
+    return `${s.props.background}/${s.props.layout}:${kinds}`;
+  });
+  return `fonts ${site.theme.fonts.heading}/${site.theme.fonts.body}, primary ${site.theme.colors.primary}; sections: ${sections.join(" | ")}`;
+}

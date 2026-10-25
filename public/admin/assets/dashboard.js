@@ -5,11 +5,6 @@ const notice = document.getElementById("notice");
 let me = null;
 const watching = new Set();
 
-const EXAMPLES = [
-  "A family-run Italian restaurant in Manchester. Wood-fired pizza, fresh pasta, takeaway and private dining. Warm, rustic feel. Open Tue–Sun 5pm–10pm.",
-  "Personal trainer in Bristol offering 1-to-1 sessions, small group bootcamps and online coaching. Energetic, motivating style. Free first consultation.",
-  "Local plumbing and heating company in Leeds. Boiler installs and repairs, emergency call-outs 24/7, Gas Safe registered. Trustworthy and professional.",
-];
 
 async function load() {
   const [{ sites }, meData] = await Promise.all([api("/sites"), me ? Promise.resolve(me) : api("/me")]);
@@ -35,7 +30,7 @@ function render(sites) {
       h("div", { class: "empty" },
         h("h2", {}, "No websites yet"),
         h("p", { class: "muted" }, "Describe a business and the AI will build the whole site. You can then drag, drop and tweak anything."),
-        h("button", { class: "btn btn-primary", onclick: openNew }, "+ Create your first website"),
+        h("a", { class: "btn btn-primary", href: "/admin/new" }, "+ Create your first website"),
       ),
     );
     return;
@@ -92,45 +87,6 @@ function watch(site) {
     .finally(() => { watching.delete(site.jobId); load(); });
 }
 
-function openNew() {
-  const name = h("input", { class: "input", placeholder: "e.g. Bright Spark Electrical", maxlength: "120" });
-  const prompt = h("textarea", { class: "textarea", rows: "6", placeholder: "Describe the business: what they do, where, who for, services, prices, contact details, the look and feel they want…" });
-  const blank = h("input", { type: "checkbox" });
-  const err = h("p", { class: "small", style: { color: "var(--danger)", margin: 0 } });
-  const create = h("button", { class: "btn btn-primary", onclick: submit }, me?.ai.enabled ? "Build with AI" : "Create website");
-
-  const m = modal({
-    title: "New website",
-    body: h("div", {},
-      h("div", { class: "field" }, h("label", {}, "Business name"), name),
-      h("div", { class: "field" },
-        h("label", {}, "Describe the website"),
-        prompt,
-        h("div", { class: "field-hint" }, "The more detail, the better the first draft. Try an example:"),
-        h("div", { class: "examples" }, EXAMPLES.map((ex) => h("button", { class: "chip", type: "button", onclick: () => { prompt.value = ex; } }, ex.split(/[.,]/)[0]))),
-      ),
-      h("label", { class: "check" }, blank, "Start with a blank page instead"),
-      err,
-    ),
-    footer: [h("button", { class: "btn", onclick: () => m.close() }, "Cancel"), create],
-  });
-
-  async function submit() {
-    err.textContent = "";
-    if (!name.value.trim() && !prompt.value.trim()) return (err.textContent = "Add a name or a description.");
-    create.disabled = true;
-    try {
-      const res = await api("/sites", { method: "POST", body: { name: name.value, prompt: prompt.value, blank: blank.checked } });
-      m.close();
-      if (!res.jobId) location.href = `/admin/sites/${res.site.id}`;
-      else { toast("Building the site… you can keep working while it runs."); load(); }
-    } catch (e) {
-      err.textContent = e.message;
-      create.disabled = false;
-    }
-  }
-}
-
 async function duplicate(site) {
   try {
     await api(`/sites/${site.id}/duplicate`, { method: "POST", body: {} });
@@ -157,7 +113,7 @@ async function remove(site) {
 }
 
 document.addEventListener("click", () => document.querySelectorAll(".menu-list").forEach((m) => (m.hidden = true)));
-document.getElementById("new").addEventListener("click", openNew);
+document.getElementById("new").addEventListener("click", () => { location.href = "/admin/new"; });
 document.getElementById("logout").addEventListener("click", async () => {
   await api("/logout", { method: "POST", body: {} });
   location.href = "/admin/login";

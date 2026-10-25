@@ -30,7 +30,8 @@ function sniff(buf) {
   return null;
 }
 
-export async function saveUpload({ dir, siteId, buffer, filename }) {
+// urlPrefix is where the file will be served from, e.g. "/_m/<siteId>/".
+export async function saveUpload({ dir, siteId, urlPrefix = `/_m/${siteId}/`, buffer, filename }) {
   if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error("No file received.");
   const type = sniff(buffer);
   if (!type) throw new Error("Please upload a JPG, PNG, WebP, GIF or AVIF image.");
@@ -44,12 +45,12 @@ export async function saveUpload({ dir, siteId, buffer, filename }) {
     const image = sharp(buffer, { failOn: "error" }).rotate(); // apply EXIF orientation
     await image.clone().resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).toFile(path.join(dir, `${stem}-o.webp`));
     await image.clone().resize({ width: 800, height: 800, fit: "inside", withoutEnlargement: true }).webp({ quality: 78 }).toFile(path.join(dir, `${stem}-o-sm.webp`));
-    return `/_m/${siteId}/${stem}-o.webp`;
+    return `${urlPrefix}${stem}-o.webp`;
   }
 
   const file = `${stem}.${TYPES[type]}`;
   await fs.writeFile(path.join(dir, file), buffer);
-  return `/_m/${siteId}/${file}`;
+  return `${urlPrefix}${file}`;
 }
 
 export async function deleteUpload(dir, file) {

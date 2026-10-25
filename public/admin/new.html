@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-size='11' font-weight='800' text-anchor='middle' fill='white' font-family='sans-serif'%3EEKA%3C/text%3E%3C/svg%3E">
+<title>New website · EKA Hosting</title>
+<link rel="stylesheet" href="/admin/assets/admin.css">
+<style>
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  .top { background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+  .top-in { display: flex; align-items: center; gap: 14px; min-height: 58px; padding: 0 16px; }
+  .top h1 { font-size: 16px; }
+  .steps { display: flex; gap: 6px; margin-left: auto; font-size: 13px; color: var(--muted); }
+  .steps span { padding: 4px 10px; border-radius: 99px; }
+  .steps span.on { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+  @media (max-width: 640px) { .steps { display: none; } }
+
+  /* Step 1: the brief */
+  .brief { width: min(780px, 100%); margin: 0 auto; padding: 28px 16px 80px; }
+  .brief h2 { font-size: 22px; margin-bottom: 4px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 18px; box-shadow: var(--shadow); }
+  .card h3 { font-size: 15px; margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line-strong); background: #fff; border-radius: 99px; padding: 5px 12px; font-size: 13px; cursor: pointer; user-select: none; }
+  .chip:hover { border-color: var(--brand); }
+  .chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .chip.fixed { opacity: .7; cursor: default; }
+  .logo-box { display: flex; align-items: center; gap: 14px; }
+  .logo-prev { width: 120px; height: 72px; border: 1px dashed var(--line-strong); border-radius: 8px; display: grid; place-items: center; background: #fafbfc center/contain no-repeat; color: var(--muted); font-size: 12px; }
+  .colors { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .colors label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+  .colors input[type=color] { width: 44px; height: 34px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0; background: none; cursor: pointer; }
+  .actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+
+  /* Step 2: choose a design */
+  .design { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+  .side { background: var(--panel); border-right: 1px solid var(--line); padding: 18px; overflow-y: auto; }
+  .stage { background: #e9ebef; padding: 16px; display: flex; flex-direction: column; min-width: 0; }
+  .stage-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .frame { position: relative; flex: 1; min-height: 480px; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: var(--shadow-lg); margin: 0 auto; width: 100%; }
+  .frame.mobile { width: 390px; }
+  .frame-in { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  .frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .busy { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(245, 246, 248, .9); text-align: center; padding: 20px; z-index: 2; }
+  .busy .spinner { width: 28px; height: 28px; color: var(--brand); margin-bottom: 10px; }
+  .options { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
+  .opt { border: 1px solid var(--line-strong); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .opt.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+  .big { width: 100%; min-height: 44px; font-size: 15px; }
+  .changes { margin: 10px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+  .sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+  @media (max-width: 900px) {
+    .design { display: block; }
+    .side { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+    .frame { flex: none; height: 75vh; min-height: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <a class="icon-btn" href="/admin" title="All websites" aria-label="All websites">←</a>
+  <h1>New website</h1>
+  <div class="steps"><span data-step="1">1 · Brief</span><span data-step="2">2 · Pick a design</span><span data-step="3">3 · Build</span></div>
+</div></header>
+<div id="app" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+<script type="module" src="/admin/assets/new.js"></script>
+</body>
+</html>

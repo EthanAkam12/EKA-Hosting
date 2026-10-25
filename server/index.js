@@ -22,6 +22,7 @@ import { buildStaticSite } from "./export.js";
 import { deploy, testConnection } from "./deploy.js";
 import yazl from "yazl";
 import { renderPage } from "../shared/render.js";
+import { STYLE_CHOICES } from "./ai/prompts.js";
 import { createEmptySite, normalizeSite, findNode } from "../shared/schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -160,6 +161,15 @@ function simplePage(title, body) {
 // Shared endpoints (every host)
 // ---------------------------------------------------------------------------
 
+// Images uploaded in the new-site wizard before the site exists (admin only).
+const TMP_MEDIA = path.join(DATA_DIR, "tmp-media");
+await fs.mkdir(TMP_MEDIA, { recursive: true });
+app.get("/_tmp/:file", (req, res) => {
+  if (!auth.isAuthed(req) || !/^[\w.-]+$/.test(req.params.file) || req.params.file.startsWith(".")) return res.sendStatus(404);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.sendFile(path.join(TMP_MEDIA, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+});
+
 app.get("/_m/:siteId/:file", async (req, res) => {
   const { siteId, file } = req.params;
   if (!store.getMeta(siteId) || !/^[\w.-]+$/.test(file) || file.startsWith(".")) return res.sendStatus(404);
@@ -245,6 +255,7 @@ app.get(["/s/:slug", "/s/:slug/*"], (req, res, next) => {
 app.get("/", (req, res) => res.redirect("/admin"));
 app.get("/admin/login", (req, res) => res.sendFile(path.join(ROOT, "public/admin/login.html")));
 app.get("/admin", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/dashboard.html")));
+app.get("/admin/new", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/new.html")));
 app.get("/admin/sites/:id", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/editor.html")));
 app.get(["/admin/preview/:id", "/admin/preview/:id/*"], auth.requirePage, (req, res, next) => {
   const meta = store.getMeta(req.params.id);
@@ -325,7 +336,108 @@ api.get("/me", (req, res) => {
 
 api.get("/sites", (req, res) => res.json({ sites: store.list().map(withUrl) }));
 
+// ---- new-site wizard ----------------------------------------------------------
+
+const HEX = /^#[0-9a-f]{6}$/i;
+function cleanBrief(input = {}) {
+  const str = (v, max = 500) => String(v ?? "").trim().slice(0, max);
+  const colors = input.colors && HEX.test(input.colors.primary || "")
+    ? { primary: input.colors.primary, accent: HEX.test(input.colors.accent || "") ? input.colors.accent : "" }
+    : null;
+  return {
+    name: str(input.name, 120),
+    description: str(input.description, 6000),
+    phone: str(input.phone, 60),
+    email: str(input.email, 200),
+    address: str(input.address, 300),
+    hours: str(input.hours, 400),
+    socials: str(input.socials, 600),
+    logoUrl: /^\/_tmp\/[\w.-]+$/.test(input.logoUrl || "") ? input.logoUrl : "",
+    colors,
+    style: STYLE_CHOICES.includes(input.style) ? input.style : STYLE_CHOICES[0],
+    pages: Array.isArray(input.pages) ? input.pages.map((p) => str(p, 40)).filter(Boolean).slice(0, 12) : [],
+  };
+}
+
+// The logo is shown to the AI so it can pick colours that match it.
+async function briefImages(brief) {
+  if (!ai.enabled || !brief.logoUrl) return [];
+  const file = path.join(TMP_MEDIA, path.basename(brief.logoUrl));
+  const ext = path.extname(file).slice(1).toLowerCase();
+  const mediaType = { webp: "image/webp", png: "image/png", jpg: "image/jpeg", gif: "image/gif" }[ext];
+  if (!mediaType) return [];
+  try {
+    return [{ mediaType, data: (await fs.readFile(file)).toString("base64") }];
+  } catch {
+    return [];
+  }
+}
+
+// Moves wizard uploads into the new site's media folder and fixes their URLs.
+async function adoptTmpMedia(site, siteId) {
+  let json = JSON.stringify(site);
+  const files = new Set([...json.matchAll(/\/_tmp\/([\w.-]+)/g)].map((m) => m[1]));
+  for (const file of files) {
+    const names = [file, file.replace(/-o\.webp$/, "-o-sm.webp")];
+    for (const name of new Set(names)) {
+      await fs.copyFile(path.join(TMP_MEDIA, name), path.join(store.mediaDir(siteId), name)).catch(() => {});
+    }
+  }
+  json = json.replace(/\/_tmp\//g, `/_m/${siteId}/`);
+  return JSON.parse(json);
+}
+
+api.post("/wizard/media", express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
+  try {
+    const url = await saveUpload({ dir: TMP_MEDIA, urlPrefix: "/_tmp/", buffer: req.body, filename: req.get("X-Filename") || "logo" });
+    res.json({ url });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.post("/wizard/concept", async (req, res) => {
+  const brief = cleanBrief(req.body?.brief);
+  if (!brief.name && !brief.description) return res.status(400).json({ error: "Add the business name or a description first." });
+  const previous = Array.isArray(req.body?.previous) ? req.body.previous.map(String).slice(-6) : [];
+  const images = await briefImages(brief);
+  const job = startJob("concept", null, (progress) => ai.generateConcept({ brief, previous, images, onProgress: progress }));
+  res.json({ jobId: job.id });
+});
+
+api.post("/wizard/refine", async (req, res) => {
+  if (!ai.enabled) return res.status(400).json({ error: "Written changes need AI. Add your API key to settings.txt and restart the builder. You can still change everything by hand after you confirm." });
+  const instruction = String(req.body?.instruction || "").trim().slice(0, 2000);
+  if (!instruction || !req.body?.concept) return res.status(400).json({ error: "Describe the change you want." });
+  const concept = normalizeSite(req.body.concept);
+  const job = startJob("refine", null, (progress) => ai.refineConcept({ concept, instruction, onProgress: progress }));
+  res.json({ jobId: job.id });
+});
+
 api.post("/sites", async (req, res) => {
+  // From the wizard: build the full site from the approved concept.
+  if (req.body?.concept) {
+    const brief = cleanBrief(req.body.brief);
+    const concept = normalizeSite(req.body.concept);
+    const requests = Array.isArray(req.body.requests) ? req.body.requests.map((r) => String(r).slice(0, 2000)).slice(0, 20) : [];
+    const name = brief.name || concept.name;
+    const meta = await store.create({ name, prompt: brief.description });
+    const job = startJob("generate", meta.id, async (progress) => {
+      try {
+        const { site } = await ai.buildFromConcept({ brief, concept, requests, onProgress: progress });
+        const adopted = await adoptTmpMedia(site, meta.id);
+        await store.saveDraft(meta.id, adopted, { version: "Built from the approved design" });
+        await store.updateMeta(meta.id, { status: "ready", error: null, name: adopted.name, formEmail: brief.email || "" });
+        return { ok: true };
+      } catch (err) {
+        await store.updateMeta(meta.id, { status: "error", error: err.message });
+        throw err;
+      }
+    });
+    await store.updateMeta(meta.id, { jobId: job.id });
+    return res.json({ site: withUrl(store.getMeta(meta.id)), jobId: job.id });
+  }
+
   const name = String(req.body?.name || "").trim().slice(0, 120);
   const prompt = String(req.body?.prompt || "").trim().slice(0, 8000);
   if (!name && !prompt) return res.status(400).json({ error: "Give the site a name or a description." });

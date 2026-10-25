@@ -8,7 +8,7 @@
 import { normalizeSite, normalizeSection, normalizeBlock, findNode } from "../../shared/schema.js";
 import { createAnthropicProvider } from "./anthropic.js";
 import { createDemoProvider } from "./demo.js";
-import { GENERATE_SYSTEM, EDIT_SYSTEM, generatePrompt, editPrompt } from "./prompts.js";
+import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, describeLayout } from "./prompts.js";
 
 function pickProvider() {
   const choice = (process.env.AI_PROVIDER || "").toLowerCase();
@@ -26,6 +26,8 @@ function pickProvider() {
 // `provider` can be injected (used by the tests); normally it comes from env.
 export function createAi({ provider = pickProvider() } = {}) {
   const generateEffort = process.env.AI_GENERATE_EFFORT || "high";
+  // Concepts are previews the owner may regenerate several times: keep them quicker.
+  const conceptEffort = process.env.AI_CONCEPT_EFFORT || "medium";
   // New sites use the strongest model; changes use a faster, cheaper one.
   const generateModel = process.env.AI_MODEL || provider.model;
   const editModel = process.env.AI_EDIT_MODEL || (provider.name === "claude" ? "claude-sonnet-5-5" : provider.model);
@@ -52,6 +54,57 @@ export function createAi({ provider = pickProvider() } = {}) {
       const site = normalizeSite(data.site && data.pages === undefined ? data.site : data);
       if (name) site.name = name;
       return { site, summary: "Site generated." };
+    },
+
+    // ---- new-site wizard ---------------------------------------------------
+
+    // A home-page-only design for the owner to judge. `previous` = layout
+    // descriptions of concepts already shown, so the next one differs.
+    async generateConcept({ brief, previous = [], images = [], onProgress }) {
+      let site;
+      if (provider.generateConcept) {
+        site = normalizeSite((await provider.generateConcept({ brief, variant: previous.length })).site);
+      } else {
+        const text = await provider.complete({
+          system: CONCEPT_SYSTEM,
+          prompt: conceptPrompt({ brief: { ...brief, logoAttached: images.length > 0 }, previous }),
+          images,
+          model: generateModel,
+          effort: conceptEffort,
+          onProgress,
+        });
+        const data = parseJson(text);
+        site = normalizeSite(data.site && data.pages === undefined ? data.site : data);
+      }
+      site = applyBrief(site, brief);
+      return { site, layout: describeLayout(site) };
+    },
+
+    // Applies a written change ("make it darker") to a concept.
+    async refineConcept({ concept, instruction, onProgress }) {
+      const result = await this.editSite({ site: concept, instruction, onProgress });
+      return { ...result, layout: describeLayout(result.site) };
+    },
+
+    // Builds the remaining pages in the approved concept's style.
+    async buildFromConcept({ brief, concept, requests = [], onProgress }) {
+      if (provider.buildFromConcept) {
+        return { site: applyBrief(normalizeSite((await provider.buildFromConcept({ brief, concept })).site), brief) };
+      }
+      const text = await provider.complete({
+        system: BUILD_SYSTEM,
+        prompt: buildPrompt({ brief, concept, requests }),
+        model: generateModel,
+        effort: generateEffort,
+        onProgress,
+      });
+      const data = parseJson(text);
+      const extra = (Array.isArray(data.pages) ? data.pages : []).filter((p) => p && p.slug !== "index");
+      const site = structuredClone(concept);
+      site.pages = [concept.pages[0], ...extra];
+      const links = Array.isArray(data.headerLinks) ? data.headerLinks.filter((l) => l && l.text) : [];
+      site.header.links = links.length ? links : null;
+      return { site: applyBrief(normalizeSite(site), brief) };
     },
 
     // Returns { site, summary, changed }
@@ -88,6 +141,15 @@ export function createAi({ provider = pickProvider() } = {}) {
       throw new Error("The AI's answer wasn't in the expected format. Please try again.");
     },
   };
+}
+
+// Things the owner stated outright always win over the AI's choices.
+export function applyBrief(site, brief = {}) {
+  if (brief.name) { site.name = brief.name; if (!site.header.logoImage) site.header.logoText = brief.name; }
+  if (brief.colors?.primary) site.theme.colors.primary = brief.colors.primary;
+  if (brief.colors?.accent) site.theme.colors.accent = brief.colors.accent;
+  if (brief.logoUrl) site.header.logoImage = brief.logoUrl;
+  return normalizeSite(site);
 }
 
 // Pulls the JSON object out of a model response, tolerating stray prose or

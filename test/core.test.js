@@ -136,3 +136,49 @@ test("static export rewrites images and adds a contact form handler", async () =
   assert.ok(byPath["contact.php"].includes(Buffer.from(JSON.stringify("owner@example.com")).toString("base64")));
   assert.ok(byPath[".htaccess"] && byPath["404.html"]);
 });
+
+test("wizard: built-in templates give different designs and use the brief", async () => {
+  const { createDemoProvider } = await import("../server/ai/demo.js");
+  const ai = createAi({ provider: createDemoProvider() });
+  const brief = { name: "Smith Antiques", phone: "01904 123456", email: "hi@smith.test", colors: { primary: "#123456", accent: "#abcdef" }, logoUrl: "/_tmp/logo-o.webp", pages: ["About", "Gallery", "Contact"] };
+  const a = await ai.generateConcept({ brief, previous: [] });
+  const b2 = await ai.generateConcept({ brief, previous: [a.layout] });
+  assert.notEqual(a.layout, b2.layout, "generate another gives a different layout");
+  assert.equal(a.site.theme.colors.primary, "#123456");
+  assert.equal(a.site.header.logoImage, "/_tmp/logo-o.webp");
+  assert.equal(a.site.pages.length, 1, "concept is the home page only");
+  assert.match(JSON.stringify(a.site), /tel:01904123456/);
+  assert.deepEqual(a.site.header.links.map((l) => l.text), ["Home", "About", "Gallery", "Contact"]);
+  const { site } = await ai.buildFromConcept({ brief, concept: a.site });
+  assert.deepEqual(site.pages.map((p) => p.slug), ["index", "about", "gallery", "contact"]);
+  assert.deepEqual(site.pages[0], a.site.pages[0], "the approved home page is kept exactly");
+});
+
+test("wizard: AI concept, refine and build keep the approved home page", async () => {
+  const calls = [];
+  const provider = {
+    name: "claude", model: "claude-opus-5-5",
+    complete: async (args) => {
+      calls.push(args);
+      if (args.prompt.startsWith("Design a home page concept")) {
+        return JSON.stringify({ name: "x", theme: { colors: { primary: "#000000" } }, pages: [{ title: "Home", slug: "index", sections: [{ type: "section", props: {}, columns: [{ blocks: [{ type: "heading", props: { text: "Hello" } }] }] }] }] });
+      }
+      if (args.prompt.startsWith("CURRENT SITE JSON")) return JSON.stringify({ summary: "Darker.", noop: true });
+      return JSON.stringify({ pages: [{ title: "Gallery", slug: "gallery", sections: [] }, { title: "Home", slug: "index", sections: [] }], headerLinks: [{ text: "Home", href: "/" }, { text: "Gallery", href: "/gallery" }] });
+    },
+  };
+  const ai = createAi({ provider });
+  const brief = { name: "Smith", colors: { primary: "#112233", accent: "" } };
+  const c = await ai.generateConcept({ brief, previous: ["fonts system/system; sections: dark/1:heading"], images: [{ mediaType: "image/webp", data: "AAAA" }] });
+  assert.equal(c.site.theme.colors.primary, "#112233", "owner's colours win");
+  assert.equal(c.site.name, "Smith");
+  assert.match(calls[0].prompt, /CLEARLY different/);
+  assert.equal(calls[0].images.length, 1, "logo is shown to the AI");
+  const r = await ai.refineConcept({ concept: c.site, instruction: "darker" });
+  assert.equal(r.changed, false);
+  assert.equal(calls[1].model, "claude-sonnet-5-5", "changes use the cheaper model");
+  const { site } = await ai.buildFromConcept({ brief, concept: c.site, requests: ["add a page called Gallery"] });
+  assert.deepEqual(site.pages.map((p) => p.slug), ["index", "gallery"], "AI can't replace the home page");
+  assert.equal(site.pages[0].sections[0].columns[0].blocks[0].props.text, "Hello");
+  assert.match(calls[2].prompt, /add a page called Gallery/);
+});

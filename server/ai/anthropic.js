@@ -8,12 +8,16 @@ export function createAnthropicProvider({ model, effort } = {}) {
   return {
     name: "claude",
     model,
-    async complete({ system, prompt, model: callModel, effort: callEffort, onProgress }) {
+    // images: optional [{ mediaType, data (base64) }] shown to the model before the prompt.
+    async complete({ system, prompt, images = [], model: callModel, effort: callEffort, onProgress }) {
+      const content = images.length
+        ? [...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.data } })), { type: "text", text: prompt }]
+        : prompt;
       const stream = client.beta.messages.stream({
         model: callModel || model,
         max_tokens: 64000,
         system,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content }],
         output_config: { effort: callEffort || effort },
         // If a request is declined by a safety classifier, let the API retry
         // it on Anthropic's recommended fallback model instead of failing.
