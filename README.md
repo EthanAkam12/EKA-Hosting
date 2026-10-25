@@ -19,6 +19,8 @@ An AI website builder for making and managing customer websites.
 
 Keep the black window open while you use the builder; closing it stops the builder. Everything you make is saved in the `data` folder.
 
+**Updating:** close the black window, then double-click **update-windows.bat**. It downloads the latest version from GitHub and keeps your `data` folder and `settings.txt` (and saves a backup of both in `backups` first).
+
 ## Quick start
 
 ```bash
