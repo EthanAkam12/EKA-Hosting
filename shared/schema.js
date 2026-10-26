@@ -70,6 +70,9 @@ export const HOVER_LABELS = ["None", "Lift up", "Grow", "Shrink", "Glow", "Brigh
 export const ENTRANCE_EFFECTS = ["none", "fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "zoom-out", "flip"];
 export const ENTRANCE_LABELS = ["None", "Fade in", "Fade up", "Fade down", "Slide in from left", "Slide in from right", "Zoom in", "Zoom out", "Flip up"];
 export const SHADOWS = ["none", "sm", "md", "lg", "xl"];
+export const BG_POSITIONS = ["center", "top", "bottom", "left", "right", "top left", "top right", "bottom left", "bottom right"];
+export const BG_EFFECTS = ["fade", "zoom", "zoom-out", "pan", "parallax"];
+export const BG_EFFECT_LABELS = ["Fade in", "Slow zoom (Ken Burns)", "Zoom out as it appears", "Slow pan", "Parallax (moves as you scroll)"];
 
 // ---------------------------------------------------------------------------
 // Block definitions. `fields` drives the editor's property panel; `defaults`
@@ -265,7 +268,7 @@ export const SECTION_FIELDS = [
   { key: "layout", label: "Columns", type: "select", options: ["1", "1-1", "2-1", "1-2", "1-1-1", "1-1-1-1"], labels: ["1 column", "2 equal", "2 (wide left)", "2 (wide right)", "3 equal", "4 equal"] },
   { key: "background", label: "Background", type: "select", options: ["default", "surface", "primary", "dark", "image"] },
   { key: "image", label: "Background image", type: "image", showIf: { background: "image" } },
-  { key: "overlay", label: "Darken image (%)", type: "number", showIf: { background: "image" } },
+  { key: "overlay", label: "Darken image (%)", type: "number", hidden: true }, // default tint; edited in the Style tab
   { key: "padding", label: "Spacing", type: "select", options: ["none", "sm", "md", "lg", "xl"] },
   { key: "width", label: "Content width", type: "select", options: ["narrow", "normal", "wide", "full"] },
   { key: "align", label: "Text align", type: "select", options: ["left", "center"] },
@@ -451,6 +454,19 @@ export function normalizeStyle(style) {
   one("hover", HOVER_EFFECTS);
   one("btnSize", ["sm", "md", "lg", "xl"]);
   one("align", ["left", "center", "right"]);
+  // Background image (blocks; sections use props.image) and its settings.
+  for (const k of ["bgImage", "bgImageMobile"]) {
+    const v = str(style[k]).trim();
+    if (/^(\/|https?:\/\/)/.test(v)) out[k] = v;
+  }
+  one("bgPos", BG_POSITIONS);
+  one("bgSize", ["contain"]);
+  if (style.bgFixed === true) out.bgFixed = true;
+  if (style.bgRepeat === true) out.bgRepeat = true;
+  for (const k of ["tint", "tint2"]) if (typeof style[k] === "string" && HEX.test(style[k].trim())) out[k] = style[k].trim();
+  one("tintDir", ["up", "right", "left", "diagonal", "radial"]);
+  one("bgEffect", BG_EFFECTS);
+  num("tintOpacity", 0, 100); num("bgBlur", 0, 30); num("bgGray", 0, 100); num("bgBright", 20, 200); num("minHeight", 0, 1400);
   if (FONT_CHOICES[style.fontFamily]) out.fontFamily = style.fontFamily;
   num("lineHeight", 80, 300); // % of the font size
   num("letterSpacing", -5, 30);

@@ -84,3 +84,22 @@ test("header menu links can be styled", () => {
   assert.match(html, /class="eka-btn btn-secondary"/);
   assert.match(html, /family=Oswald/);
 });
+
+test("background images: real <img> layer, tint, effects, phone image", () => {
+  const site = createEmptySite("x");
+  const hero = createSection({ background: "image", image: "/_m/s1/photo-o.webp", overlay: 30 });
+  hero.style = { bgPos: "bottom", bgEffect: "zoom", tint: "#112233", tint2: "#c9a227", tintDir: "diagonal", tintOpacity: 70, bgGray: 40, bgImageMobile: "/_m/s1/tall-o.webp" };
+  const card = createBlock("card");
+  card.style = { bgImage: "/_m/s1/card-o.webp", bgFixed: true };
+  const plain = createSection({ background: "image", image: "/_m/s1/photo-o.webp" }, [[card]]);
+  site.pages[0].sections = [hero, plain];
+  const n = normalizeSite(site);
+  const html = renderPage(n, n.pages[0]);
+  assert.match(html, /<div class="eka-bgi fx-zoom" aria-hidden="true" style="filter:grayscale\(40%\)"><picture class="eka-bgi-in"><source media="\(max-width:760px\)" srcset="\/_m\/s1\/tall-o-sm\.webp"><img style="object-fit:cover;object-position:bottom"/);
+  assert.match(html, /fetchpriority="high"/); // first section's background loads first
+  assert.match(html, /background:linear-gradient\(135deg,#112233,#c9a227\);opacity:0\.70/);
+  // second section: default black tint from the old "darken" value, lazy image
+  assert.match(html, /<div class="eka-tint" aria-hidden="true" style="background:#000000;opacity:0\.45"><\/div>/);
+  assert.match(html, /background-image:url\(&quot;\/_m\/s1\/card-o\.webp&quot;\)[^"]*background-attachment:fixed/);
+  assert.doesNotMatch(html, /<script/);
+});

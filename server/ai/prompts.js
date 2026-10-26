@@ -51,7 +51,10 @@ STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; l
   "bg": hex, "bg2": hex (gradient end), "color": hex (text), "radius": px, "borderWidth": px, "borderStyle": "solid"|"dashed"|"dotted"|"double", "borderColor": hex,
   "shadow": "sm"|"md"|"lg"|"xl", "fontSize": px, "fontWeight": 300-900, "fontFamily": FONT, "lineHeight": % (e.g. 150), "letterSpacing": px, "textTransform": "uppercase"|"lowercase"|"capitalize"|"none", "italic": true, "maxWidth": px, "align": "center"|"right" (with maxWidth), "gap": px (sections: space between columns),
   "animation": ANIMATION, "speed": "fast"|"slow", "delay": ms, "hover": HOVER (buttons blocks: button hover animation; other blocks: hover effect), "btnSize": "sm"|"md"|"lg"|"xl",
-  "hide": { "d"|"t"|"m": true } }
+  "hide": { "d"|"t"|"m": true }, "minHeight": px,
+  background image: "bgImage": URL (blocks only; sections use props.background "image" + props.image), "bgImageMobile": URL, "bgPos": "center"|"top"|"bottom"|"left"|"right"|"top left"|…, "bgSize": "contain",
+  "bgFixed": true, "bgRepeat": true, "tint": hex, "tint2": hex (gradient tint), "tintDir": "up"|"right"|"left"|"diagonal"|"radial", "tintOpacity": 0-100 (sections default to props.overlay),
+  "bgEffect": "fade"|"zoom"|"zoom-out"|"pan"|"parallax", "bgBlur": px, "bgGray": %, "bgBright": % }
 HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.
 Prefer the section/block props and theme settings first; use STYLE for specific tweaks the owner asks for (spacing, borders, animations, hiding on mobile…).
 

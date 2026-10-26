@@ -1,6 +1,6 @@
 // Right-hand property panel for whatever is selected.
 
-import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
+import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
 import { h } from "../ui.js";
 import { fieldControl } from "./fields.js";
 
@@ -71,8 +71,9 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     tabs({ content: "Layout", style: "Style", advanced: "Advanced" });
     if (tab === "style") return styleControls(section, "section");
     if (tab === "advanced") return advancedControls(section, "section");
+    if (section.props.background === "image") root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Tint, focus point, effects and more for the image are in the Style tab."));
     for (const f of SECTION_FIELDS) {
-      if (f.showIf && !Object.entries(f.showIf).every(([k, v]) => section.props[k] === v)) continue;
+      if (f.hidden || (f.showIf && !Object.entries(f.showIf).every(([k, v]) => section.props[k] === v))) continue;
       root.append(fieldControl(f, section.props[f.key], (v, opts) => set(`sec:${section.id}:${f.key}`, (site) => {
         const n = findNode(site, section.id);
         if (n) n.node.props[f.key] = f.key === "anchor" ? slugify(v).replace(/^page$/, "") : v;
@@ -123,6 +124,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (isSection) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Overrides the Background choice in Layout."));
     styleField(node, "bg", { label: "Colour", type: "coloropt" });
     if (node.style?.bg) styleField(node, "bg2", { label: "Fade into (gradient)", type: "coloropt" });
+    backgroundImage(node, isSection);
     group("Border & corners");
     styleField(node, "borderWidth", { label: "Border width", type: "slider", min: 0, max: 20, placeholder: 0 });
     if (node.style?.borderWidth) {
@@ -137,6 +139,46 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     }
   }
 
+  // Background image: picture, how it sits, a tint over it, effects and filters.
+  function backgroundImage(node, isSection) {
+    const st = node.style || {};
+    group("Background image");
+    const image = isSection ? (node.props.background === "image" ? node.props.image : "") : st.bgImage;
+    if (isSection) {
+      root.append(fieldControl({ key: "image", label: "Image", type: "image" }, image, (v) => set(`sec:${node.id}:image`, (site) => {
+        const n = findNode(site, node.id);
+        if (!n) return;
+        n.node.props.image = v;
+        // Choosing a picture switches the section to an image background (white text); removing it goes back.
+        n.node.props.background = v ? "image" : n.node.props.background === "image" ? "default" : n.node.props.background;
+      }, { rebuild: true }), ctx()));
+    } else {
+      styleField(node, "bgImage", { label: "Image", type: "image" });
+    }
+    if (image) {
+      styleField(node, "bgImageMobile", { label: "Different image on phones (optional)", type: "image" });
+      styleField(node, "bgPos", { label: "Focus on", type: "select", options: ["default", ...BG_POSITIONS.slice(1)], labels: ["Centre", "Top", "Bottom", "Left", "Right", "Top left", "Top right", "Bottom left", "Bottom right"] });
+      styleField(node, "bgSize", { label: "Fit", type: "select", options: ["default", "contain"], labels: ["Fill the space (crop)", "Show the whole image"] });
+      styleField(node, "bgFixed", { label: "Stay still while the page scrolls", type: "checkbox" });
+      styleField(node, "bgRepeat", { label: "Repeat as a pattern", type: "checkbox" });
+    }
+    group("Tint over the image");
+    if (!image) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "A see-through colour on top of the background. Most useful over an image, to make text readable."));
+    styleField(node, "tint", { label: "Tint colour", type: "coloropt" });
+    styleField(node, "tint2", { label: "Fade into (gradient tint)", type: "coloropt" });
+    if (st.tint2) styleField(node, "tintDir", { label: "Gradient direction", type: "select", options: ["default", "up", "right", "left", "diagonal", "radial"], labels: ["Top to bottom", "Bottom to top", "Left to right", "Right to left", "Diagonal", "From the centre"] });
+    styleField(node, "tintOpacity", { label: "Tint strength", type: "slider", min: 0, max: 100, unit: "%", placeholder: isSection && node.props.background === "image" ? node.props.overlay : st.tint ? 50 : 0 });
+    if (image) {
+      group("Image effects");
+      styleField(node, "bgEffect", { label: "Effect", type: "select", options: ["default", ...BG_EFFECTS], labels: ["None", ...BG_EFFECT_LABELS] });
+      if (st.bgEffect === "fade" || st.bgEffect === "zoom-out") root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Plays on the live site (use Preview); switched off while editing."));
+      if (st.bgEffect === "parallax" && st.bgFixed) root.append(h("p", { class: "field-hint", style: { marginTop: "-6px", color: "var(--danger)" } }, "Parallax and \"stay still\" don't mix: untick one."));
+      styleField(node, "bgBlur", { label: "Blur", type: "slider", min: 0, max: 30, placeholder: 0 });
+      styleField(node, "bgGray", { label: "Black & white", type: "slider", min: 0, max: 100, unit: "%", placeholder: 0 });
+      styleField(node, "bgBright", { label: "Brightness", type: "slider", min: 20, max: 200, step: 5, unit: "%", placeholder: 100 });
+    }
+  }
+
   function advancedControls(node, kind) {
     const isSection = kind === "section";
     group("Spacing");
@@ -146,6 +188,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
 
     group("Size & position");
     styleField(node, "maxWidth", { label: isSection ? "Content width" : "Max width", type: "slider", min: 100, max: 1600 });
+    styleField(node, "minHeight", { label: "Min height", type: "slider", min: 0, max: 1200, step: 10 });
     if (!isSection && node.style?.maxWidth) styleField(node, "align", { label: "Position", type: "select", options: ["default", "center", "right"], labels: ["Left", "Centre", "Right"] });
 
     group("Motion");

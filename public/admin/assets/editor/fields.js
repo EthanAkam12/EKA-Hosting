@@ -113,12 +113,15 @@ export function fieldControl(field, value, onChange, ctx) {
       const swatch = h("input", { type: "color", value: value || "#000000", "aria-label": field.label, class: value ? "" : "unset" });
       const text = h("input", { id, class: "input", value: value || "", maxlength: "7", placeholder: "Default" });
       const clear = h("button", { class: "icon-btn", type: "button", title: "Clear", hidden: !value }, "✕");
-      swatch.addEventListener("input", () => { text.value = swatch.value; swatch.classList.remove("unset"); clear.hidden = false; onChange(swatch.value); });
+      // Setting or clearing the colour can show/hide other options, so rebuild the panel then.
+      let had = !!value;
+      const emit = (v) => { const opts = !!v !== had ? { rebuild: true } : undefined; had = !!v; onChange(v, opts); };
+      swatch.addEventListener("input", () => { text.value = swatch.value; swatch.classList.remove("unset"); clear.hidden = false; emit(swatch.value); });
       text.addEventListener("input", () => {
-        if (/^#[0-9a-f]{6}$/i.test(text.value)) { swatch.value = text.value; swatch.classList.remove("unset"); clear.hidden = false; onChange(text.value); }
-        else if (!text.value) { clear.hidden = true; onChange(null); }
+        if (/^#[0-9a-f]{6}$/i.test(text.value)) { swatch.value = text.value; swatch.classList.remove("unset"); clear.hidden = false; emit(text.value); }
+        else if (!text.value) { clear.hidden = true; emit(null); }
       });
-      clear.addEventListener("click", () => { text.value = ""; swatch.classList.add("unset"); clear.hidden = true; onChange(null); });
+      clear.addEventListener("click", () => { text.value = ""; swatch.classList.add("unset"); clear.hidden = true; emit(null); });
       return wrap(h("div", { class: "color-row" }, swatch, text, clear));
     }
 

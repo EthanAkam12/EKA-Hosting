@@ -290,6 +290,8 @@ function styleNode(node, ctx, { kind, first }) {
     else add(`background-color:${st.bg}`);
   }
   if (st.color) add(`color:${st.color}`);
+  if (st.minHeight) add(`min-height:${st.minHeight}px${kind === "section" ? ";display:flex;align-items:center" : ""}`);
+  if (st.minHeight && kind === "section") rules.push(`${sel}>.eka-wrap{flex:1}`);
   if (st.radius !== undefined) {
     add(`border-radius:${st.radius}px`);
     if (kind === "section") add("overflow:hidden");
@@ -328,6 +330,42 @@ function styleNode(node, ctx, { kind, first }) {
   return cls;
 }
 
+// Background image + tint, as two layers behind the content. A real <img>
+// (not CSS background) so it lazy-loads and phones get the small copy.
+const TINT_DIRS = { down: "to bottom", up: "to top", right: "to right", left: "to left", diagonal: "135deg" };
+function bgLayers(node, ctx, { image, tintOpacity = 0, first }) {
+  const st = node.style || {};
+  const url = safeUrl(image);
+  const opacity = st.tintOpacity ?? (st.tint ? 50 : tintOpacity);
+  const hasTint = opacity > 0 && (url || st.tint);
+  if (!url && !hasTint) return "";
+  let out = "";
+  if (url) {
+    const fx = st.bgEffect ? ` fx-${st.bgEffect}${first ? "" : " fx-scroll"}` : "";
+    const filters = [st.bgBlur && `blur(${st.bgBlur}px)`, st.bgGray && `grayscale(${st.bgGray}%)`, st.bgBright && st.bgBright !== 100 && `brightness(${st.bgBright}%)`].filter(Boolean);
+    const pos = st.bgPos || "center";
+    let media;
+    if (st.bgFixed || st.bgRepeat) {
+      // Plain CSS background: needed for "fixed while scrolling" and patterns.
+      const bg = [`background-image:url(&quot;${esc(url.replace(/"/g, "%22"))}&quot;)`, `background-position:${pos}`,
+        st.bgRepeat ? "background-repeat:repeat" : `background-size:${st.bgSize || "cover"};background-repeat:no-repeat`, st.bgFixed ? "background-attachment:fixed" : ""].filter(Boolean).join(";");
+      media = `<div class="eka-bgi-in" style="${bg}"></div>`;
+    } else {
+      const im = img(url, "", ctx, { sizes: "100vw", eager: first }).replace("<img ", `<img style="object-fit:${st.bgSize || "cover"};object-position:${pos}" `);
+      const mobile = safeUrl(st.bgImageMobile);
+      const m = mobile ? `<source media="(max-width:760px)" srcset="${esc(/-o\.webp$/.test(mobile) ? mobile.replace(/-o\.webp$/, "-o-sm.webp") : mobile)}">` : "";
+      media = `<picture class="eka-bgi-in">${m}${im}</picture>`;
+    }
+    out += `<div class="eka-bgi${fx}" aria-hidden="true"${filters.length ? ` style="filter:${filters.join(" ")}"` : ""}>${media}</div>`;
+  }
+  if (hasTint) {
+    const c1 = st.tint || "#000000";
+    const bg = st.tint2 ? (st.tintDir === "radial" ? `radial-gradient(circle,${c1},${st.tint2})` : `linear-gradient(${TINT_DIRS[st.tintDir] || "to bottom"},${c1},${st.tint2})`) : c1;
+    out += `<div class="eka-tint" aria-hidden="true" style="background:${bg};opacity:${(opacity / 100).toFixed(2)}"></div>`;
+  }
+  return out;
+}
+
 function videoEmbed(url) {
   const u = String(url || "");
   const yt = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
@@ -347,7 +385,9 @@ export function renderBlock(block, ctx) {
   const inner = fn(block.props, ctx, block);
   if (!inner && !ctx.editor) return `<div class="eka-b eka-b-${block.type}"></div>`;
   const extra = ctx.css ? styleNode(block, ctx, { kind: "block", first: ctx.sectionIndex === 0 }) : [];
-  return `<div class="eka-b eka-b-${block.type}${extra.length ? " " + extra.join(" ") : ""}"${editorAttrs(ctx, "block", block.id)}>${inner}</div>`;
+  const layers = bgLayers(block, ctx, { image: block.style?.bgImage, first: ctx.sectionIndex === 0 });
+  if (layers) extra.push("has-bgi");
+  return `<div class="eka-b eka-b-${block.type}${extra.length ? " " + extra.join(" ") : ""}"${editorAttrs(ctx, "block", block.id)}>${layers}${inner}</div>`;
 }
 
 export function renderSection(section, ctx) {
@@ -355,12 +395,9 @@ export function renderSection(section, ctx) {
   const cls = ["eka-s", `bg-${p.background}`, `pad-${p.padding}`, `w-${p.width}`, `t-${p.align}`, `va-${p.valign}`];
   if (p.minHeight) cls.push("tall");
   if (ctx.css) cls.push(...styleNode(section, ctx, { kind: "section", first: ctx.sectionIndex === 0 }));
-  let style = "";
-  if (p.background === "image") {
-    const url = safeUrl(p.image);
-    if (url) style = ` style="background-image:url(&quot;${esc(url.replace(/"/g, "%22"))}&quot;);--ov:${(p.overlay / 100).toFixed(2)}"`;
-    else style = ` style="--ov:${(p.overlay / 100).toFixed(2)}"`;
-  }
+  const layers = bgLayers(section, ctx, { image: p.background === "image" ? p.image : "", tintOpacity: p.background === "image" ? p.overlay : 0, first: ctx.sectionIndex === 0 });
+  if (layers) cls.push("has-bgi");
+  const style = "";
   let columns = section.columns.map((c) => ({ c, blocks: c.blocks.map((b) => renderBlock(b, ctx)).filter((html) => !/^<div class="eka-b[^>]*><\/div>$/.test(html)) }));
   let layout = p.layout;
   if (!ctx.editor) {
@@ -380,7 +417,7 @@ export function renderSection(section, ctx) {
     .join("");
   const id = p.anchor ? ` id="${esc(p.anchor)}"` : "";
   const bgTag = p.background === "image" && isPlaceholder(p.image) ? phTag(ctx, "Placeholder background · change it in the section settings") : "";
-  return `<section${id} class="${cls.join(" ")}"${style}${editorAttrs(ctx, "section", section.id)}>${bgTag}<div class="eka-wrap"><div class="eka-cols l-${layout}">${cols}</div></div></section>`;
+  return `<section${id} class="${cls.join(" ")}"${style}${editorAttrs(ctx, "section", section.id)}>${layers}${bgTag}<div class="eka-wrap"><div class="eka-cols l-${layout}">${cols}</div></div></section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -518,7 +555,18 @@ p{margin:0 0 1em}
 .bg-primary{background-color:var(--c-primary);color:var(--c-on-primary)}
 .bg-dark{background-color:var(--c-dark);color:var(--c-on-dark)}
 .bg-image{background-color:var(--c-dark);color:#fff}
-.bg-image::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,var(--ov,.45))}
+.has-bgi{position:relative;isolation:isolate}
+.has-bgi>.eka-bgi,.has-bgi>.eka-tint{position:absolute;inset:0;z-index:-1;pointer-events:none;border-radius:inherit}
+.eka-bgi{overflow:clip}
+.eka-bgi-in{position:absolute;inset:0;display:block}.eka-bgi-in img{width:100%;height:100%;display:block}
+.fx-parallax .eka-bgi-in{inset:-15% 0}
+@keyframes eka-bg-fade{from{opacity:0}}
+@keyframes eka-kb{from{transform:scale(1)}to{transform:scale(1.15)}}
+@keyframes eka-bg-zoomout{from{transform:scale(1.25)}}
+@keyframes eka-pan{from{transform:scale(1.15) translateX(-4%)}to{transform:scale(1.15) translateX(4%)}}
+@keyframes eka-parallax{from{transform:translateY(-10%)}to{transform:translateY(10%)}}
+@media (prefers-reduced-motion:no-preference){.fx-fade .eka-bgi-in{animation:eka-bg-fade 1.6s ease both}.fx-zoom .eka-bgi-in{animation:eka-kb 18s ease-in-out infinite alternate}.fx-zoom-out .eka-bgi-in{animation:eka-bg-zoomout 2.4s cubic-bezier(.2,.7,.2,1) both}.fx-pan .eka-bgi-in{animation:eka-pan 24s ease-in-out infinite alternate}
+@supports (animation-timeline:view()){.fx-scroll.fx-fade .eka-bgi-in,.fx-scroll.fx-zoom-out .eka-bgi-in{animation-duration:auto;animation-timeline:view();animation-range:entry 0% entry 90%}.fx-parallax .eka-bgi-in{animation:eka-parallax linear both;animation-timeline:view();animation-range:cover}}}
 .bg-primary a:not(.eka-btn),.bg-dark a:not(.eka-btn),.bg-image a:not(.eka-btn){color:inherit}
 .bg-primary .eka-muted,.bg-dark .eka-muted,.bg-image .eka-muted{color:inherit;opacity:.8}
 .eka-cols{display:grid;gap:40px}
