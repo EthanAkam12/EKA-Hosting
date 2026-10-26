@@ -299,7 +299,7 @@ function styleNode(node, ctx, { kind, first }) {
   if (st.shadow) add(`box-shadow:${SHADOW_CSS[st.shadow]}`);
   if (st.gap !== undefined && kind === "section") rules.push(`${sel} .eka-cols{gap:${st.gap}px}`);
   if (kind === "header") {
-    if (st.color) rules.push(`${sel} :is(.eka-logo,.eka-nav a:not(.eka-btn)){color:${st.color}}${sel} .eka-burger span,${sel} .eka-burger span::before,${sel} .eka-burger span::after{background:${st.color}}`);
+    if (st.color) rules.push(`${sel} :is(.eka-logo,.eka-nav a:not(.eka-btn)){color:${st.color}}${sel} .eka-burger span,${sel} .eka-burger span::before,${sel} .eka-burger span::after{background:${st.color}}${sel} .eka-nav-t:checked+.eka-burger span{background:transparent}`);
     if (st.bg) rules.push(`${sel} .eka-nav{background:${st.bg}}`);
   }
   if (st.fontSize) {
@@ -409,12 +409,45 @@ function renderHeader(site, ctx) {
       return `<a ${attrHref(l.href, ctx)}${href === current ? ' aria-current="page"' : ""}>${esc(l.text)}</a>`;
     })
     .join("");
-  const cta = h.ctaText ? `<a class="eka-btn btn-primary" ${attrHref(h.ctaHref, ctx)}>${esc(h.ctaText)}</a>` : "";
+  const cta = h.ctaText ? `<a class="eka-btn btn-${h.ctaStyle || "primary"}" ${attrHref(h.ctaHref, ctx)}>${esc(h.ctaText)}</a>` : "";
+  if (h.menu && ctx.css) ctx.css.push(...menuCss(h));
   const burger = links.length || cta
     ? `<input type="checkbox" id="eka-nav-t" class="eka-nav-t"><label for="eka-nav-t" class="eka-burger" aria-label="Open menu"><span></span></label>`
     : "";
   const extra = ctx.css ? styleNode({ id: "header", type: "header", style: h.style }, ctx, { kind: "header" }) : [];
   return `<header class="eka-header${h.sticky ? " sticky" : ""}${extra.length ? " " + extra.join(" ") : ""}"${ctx.editor ? ' data-eka-kind="header" data-eka-id="header"' : ""}><div class="eka-wrap eka-header-in"><a class="eka-logo"${logoVars} ${attrHref("/", ctx)}>${logo}</a>${burger}<nav class="eka-nav" aria-label="Main">${nav}${cta}</nav></div></header>`;
+}
+
+// Menu link styles. Pushed after the header's own rules, and more specific,
+// so they win over the header's text colour.
+function menuCss(h) {
+  const m = h.menu;
+  const A = "header.eka-header.eka-header .eka-nav a:not(.eka-btn)";
+  const NAV = "header.eka-header.eka-header .eka-nav";
+  const DESK = "@media (min-width:861px)";
+  const rules = [];
+  const d = [];
+  if (m.font && FONT_CHOICES[m.font]) d.push(`font-family:${FONT_CHOICES[m.font].stack}`);
+  if (m.size) d.push(`font-size:${m.size}px`);
+  if (m.weight) d.push(`font-weight:${m.weight}`);
+  if (m.transform) d.push(`text-transform:${m.transform}`);
+  if (m.letterSpacing !== undefined) d.push(`letter-spacing:${m.letterSpacing}px`);
+  if (m.color) d.push(`color:${m.color}`);
+  if (d.length) rules.push(`${A}{${d.join(";")}}`);
+  const normal = m.color || h.style?.color || "var(--c-text)";
+  const hover = m.hover === "none" ? normal : m.hoverColor || (m.hover && m.hover !== "color" ? normal : "var(--c-primary)");
+  rules.push(`${A}:hover{color:${hover}}`);
+  rules.push(`${A}[aria-current=page]{color:${m.activeColor || (m.hover === "none" ? normal : m.hoverColor || "var(--c-primary)")}}`);
+  if (m.hover === "underline" || m.hover === "overline") {
+    const edge = m.hover === "underline" ? "bottom" : "top";
+    rules.push(`${DESK}{${A}{position:relative}${A}::after{content:"";position:absolute;left:0;right:0;${edge}:-6px;height:2px;border-radius:2px;background:currentColor;transform:scaleX(0);transition:transform .2s}${A}:hover::after,${A}[aria-current=page]::after{transform:scaleX(1)}}`);
+  }
+  if (m.hover === "pill") rules.push(`${DESK}{${A}{padding:6px 14px;border-radius:999px;transition:background-color .2s}${A}:hover,${A}[aria-current=page]{background:color-mix(in srgb,currentColor 12%,transparent)}}`);
+  const nav = [];
+  if (m.gap !== undefined) nav.push(`gap:${m.gap}px`);
+  if (m.align) nav.push(`flex:1;justify-content:${m.align === "center" ? "center" : "flex-start"}`);
+  if (nav.length) rules.push(`${DESK}{${NAV}{${nav.join(";")}}${m.align === "left" ? `${NAV} .eka-btn{margin-left:auto}header.eka-header.eka-header .eka-logo{margin-right:40px}` : ""}}`);
+  return rules;
 }
 
 function renderFooter(site, ctx) {
@@ -594,7 +627,7 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 // Google Fonts URL for the site's fonts plus any picked for single elements
 // on this page (so a font used once doesn't load on every page).
 export function fontsHref(site, page) {
-  const keys = new Set([site.theme.fonts.heading, site.theme.fonts.body]);
+  const keys = new Set([site.theme.fonts.heading, site.theme.fonts.body, site.header.menu?.font]);
   const walk = (node) => {
     if (node.style?.fontFamily) keys.add(node.style.fontFamily);
     for (const c of node.columns || []) c.blocks.forEach(walk);

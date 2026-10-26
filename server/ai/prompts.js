@@ -33,7 +33,8 @@ export function blockReference() {
     "type": { "base": 14-22 (body text px), "headingScale": 60-160 (% of normal), "headingWeight": 300-900 },
     "layout": { "width": 720-1600 (content width px), "spacing": 25-200 (% of normal section spacing), "motion": ANIMATION (every section animates in unless it sets its own) }
   },
-  "header": { "logoText": string, "logoImage": "", "ctaText": string, "ctaHref": string, "sticky": boolean },
+  "header": { "logoText": string, "logoImage": "", "ctaText": string, "ctaHref": string, "ctaStyle": "primary"|"secondary"|"outline"|"light"|"dark", "sticky": boolean, "logoHeight"?: px, "style"?: STYLE,
+    "menu"?: { "font": FONT, "size": px, "weight": 300-900, "transform": "uppercase"|"lowercase"|"capitalize", "letterSpacing": px, "color", "hoverColor", "activeColor": hex, "hover": "color"|"underline"|"overline"|"pill"|"none", "gap": px, "align": "center"|"left" } },
   "footer": { "text": string, "links": [{ "text", "href" }] },
   "pages": [ { "id"?, "title": string, "slug": string ("index" for the home page, first), "seo": { "title", "description" }, "sections": [SECTION] } ],
   "customCss": string (usually "")

@@ -82,15 +82,16 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
 
   // ---- Style / Advanced tabs: everything lives in node.style -------------
 
-  function styleField(node, key, field) {
-    const st = node.style || {};
-    root.append(fieldControl({ key, ...field }, st[key], (v, opts) => set(`style:${node.id}:${key}`, (site) => {
+  // `bucket` is where the value lives on the node: "style", or "menu" for the header's menu links.
+  function styleField(node, key, field, bucket = "style") {
+    const st = node[bucket] || {};
+    root.append(fieldControl({ key, ...field }, st[key], (v, opts) => set(`${bucket}:${node.id}:${key}`, (site) => {
       const n = node.id === "header" || node.id === "footer" ? { node: site[node.id] } : findNode(site, node.id);
       if (!n) return;
-      const next = { ...(n.node.style || {}) };
+      const next = { ...(n.node[bucket] || {}) };
       if (v === null || v === undefined || v === "" || v === "default" || v === false) delete next[key];
       else next[key] = v;
-      n.node.style = next;
+      n.node[bucket] = next;
     }, opts), ctx()));
   }
   const group = (title) => root.append(h("div", { class: "insp-group" }, title));
@@ -172,7 +173,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     head.textContent = "Header (every page)";
     const hd = state.get().site.header;
     tabs({ content: "Content", style: "Style" });
-    if (tab !== "content") return frameStyle({ id: "header", style: hd.style });
+    if (tab !== "content") return frameStyle({ id: "header", style: hd.style, menu: hd.menu });
     const field = (f) => root.append(fieldControl(f, hd[f.key], (v, opts) => set(`header:${f.key}`, (site) => { site.header[f.key] = v; }, opts), ctx()));
     field({ key: "logoText", label: "Logo text", type: "text" });
     field({ key: "logoImage", label: "Logo image (optional, replaces text)", type: "image" });
@@ -184,6 +185,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
       slider("logoTextSize", "Logo text size", 12, 72, 20);
     }
     field({ key: "ctaText", label: "Button text (leave empty for none)", type: "text" });
+    field({ key: "ctaStyle", label: "Button style", type: "select", options: ["primary", "secondary", "outline", "light", "dark"], labels: ["Main colour", "Accent colour", "Outline", "White", "Dark"] });
     field({ key: "ctaHref", label: "Button link", type: "url" });
     field({ key: "sticky", label: "Stick to top when scrolling", type: "checkbox" });
     root.append(h("hr", { class: "sep" }));
@@ -217,6 +219,24 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     styleField(node, "shadow", { label: "Shadow", type: "select", options: ["default", "sm", "md", "lg", "xl"], labels: ["None", "Small", "Medium", "Large", "Extra large"] });
     group("Spacing");
     styleField(node, "padding", { label: "Padding (inside)", type: "box" });
+    if (node.id === "header") menuControls(node);
+  }
+
+  function menuControls(node) {
+    const mf = (key, field) => styleField(node, key, field, "menu");
+    group("Menu links");
+    mf("font", { label: "Font", type: "select", options: ["default", ...Object.keys(FONT_CHOICES)], labels: ["Site default", ...Object.values(FONT_CHOICES).map((f) => f.label)] });
+    mf("size", { label: "Size", type: "slider", min: 10, max: 40, placeholder: 16 });
+    mf("weight", { label: "Weight", type: "select", options: ["default", 300, 400, 500, 600, 700, 800, 900], labels: ["Default", "Light", "Normal", "Medium", "Semi-bold", "Bold", "Extra bold", "Black"] });
+    mf("transform", { label: "Capitals", type: "select", options: ["default", "uppercase", "lowercase", "capitalize"], labels: ["As typed", "ALL CAPITALS", "all lower case", "Capital Each Word"] });
+    mf("letterSpacing", { label: "Letter spacing", type: "slider", min: -3, max: 20, placeholder: 0 });
+    mf("color", { label: "Colour", type: "coloropt" });
+    mf("hoverColor", { label: "Colour on hover", type: "coloropt" });
+    mf("activeColor", { label: "Colour of the current page", type: "coloropt" });
+    mf("hover", { label: "Hover effect", type: "select", options: ["default", "underline", "overline", "pill", "none"], labels: ["Change colour", "Underline slides in", "Line above slides in", "Highlight (pill)", "None"] });
+    mf("gap", { label: "Space between links", type: "slider", min: 0, max: 80, placeholder: 22 });
+    mf("align", { label: "Position", type: "select", options: ["default", "center", "left"], labels: ["Right", "Centre", "Left, next to the logo"] });
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Hover over the menu on the page to try it. On phones the menu folds into the ☰ button."));
   }
 
   function renderPage() {

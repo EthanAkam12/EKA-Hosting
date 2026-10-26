@@ -466,6 +466,25 @@ export function normalizeStyle(style) {
   return Object.keys(out).length ? out : undefined;
 }
 
+// Header menu link styling (like Elementor's Nav Menu widget).
+export const MENU_HOVERS = ["color", "underline", "overline", "pill", "none"];
+export function normalizeMenu(menu) {
+  if (!isObj(menu)) return undefined;
+  const out = {};
+  if (FONT_CHOICES[menu.font]) out.font = menu.font;
+  for (const [k, min, max] of [["size", 10, 40], ["letterSpacing", -3, 20], ["gap", 0, 80]]) {
+    const n = clampNum(menu[k], min, max, null);
+    if (n !== null) out[k] = n;
+  }
+  const w = Number(menu.weight);
+  if ([300, 400, 500, 600, 700, 800, 900].includes(w)) out.weight = w;
+  if (["uppercase", "lowercase", "capitalize", "none"].includes(menu.transform)) out.transform = menu.transform;
+  for (const k of ["color", "hoverColor", "activeColor"]) if (typeof menu[k] === "string" && HEX.test(menu[k].trim())) out[k] = menu[k].trim();
+  if (MENU_HOVERS.includes(menu.hover)) out.hover = menu.hover;
+  if (["left", "center"].includes(menu.align)) out.align = menu.align;
+  return Object.keys(out).length ? out : undefined;
+}
+
 function withStyle(node, style) {
   const st = normalizeStyle(style);
   if (st) node.style = st;
@@ -556,6 +575,8 @@ export function normalizeSite(site) {
       logoHeightMobile: clampNum(header.logoHeightMobile, 16, 120, null), // null = same as desktop, capped
       logoTextSize: clampNum(header.logoTextSize, 12, 72, 20),
       ...(normalizeStyle(header.style) ? { style: normalizeStyle(header.style) } : {}),
+      ...(normalizeMenu(header.menu) ? { menu: normalizeMenu(header.menu) } : {}),
+      ctaStyle: ["primary", "secondary", "outline", "light", "dark"].includes(header.ctaStyle) ? header.ctaStyle : "primary",
     },
     footer: {
       text: str(footer.text, `© ${new Date().getFullYear()} ${name}`),

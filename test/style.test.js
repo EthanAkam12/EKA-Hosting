@@ -68,3 +68,19 @@ test("a font picked for one element only loads on the page that uses it", async 
   assert.match(html, /class="eka-header sticky x-header"/);
   assert.match(html, /\.x-header\.x-header\{background-color:#112233;color:#ffffff\}/);
 });
+
+test("header menu links can be styled", () => {
+  const site = createEmptySite("x");
+  site.header.menu = { font: "oswald", size: 15, transform: "uppercase", hover: "underline", hoverColor: "#f5c542", align: "center", junk: 1 };
+  site.header.ctaText = "Call";
+  site.header.ctaStyle = "secondary";
+  const n = normalizeSite(site);
+  assert.deepEqual(Object.keys(n.header.menu).sort(), ["align", "font", "hover", "hoverColor", "size", "transform"]);
+  const html = renderPage(n, n.pages[0]);
+  assert.match(html, /\.eka-nav a:not\(\.eka-btn\)\{font-family:"Oswald"[^}]*font-size:15px;text-transform:uppercase\}/);
+  assert.match(html, /:hover\{color:#f5c542\}/);
+  assert.match(html, /::after\{content:""/);
+  assert.match(html, /justify-content:center/);
+  assert.match(html, /class="eka-btn btn-secondary"/);
+  assert.match(html, /family=Oswald/);
+});
