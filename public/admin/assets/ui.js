@@ -101,3 +101,14 @@ export function timeAgo(iso) {
   if (s < 86400 * 7) return `${Math.floor(s / 86400)} d ago`;
   return new Date(iso).toLocaleDateString();
 }
+
+// Strip shown at the top of every admin page in demo mode.
+export function demoBanner(me) {
+  if (!me?.demo) return;
+  const ai = me.demo.aiLeft === null ? "" : ` You have ${me.demo.aiLeft} AI actions left.`;
+  document.body.prepend(h("div", { class: "demo-bar" },
+    h("strong", {}, "Demo · "),
+    `Try anything: your websites are private to you and deleted after ${me.demo.hours} hours. Publishing is switched off.${ai} `,
+    h("a", { href: "/help", target: "_blank", rel: "noopener" }, "How it works"),
+  ));
+}

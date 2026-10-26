@@ -353,6 +353,11 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
 
   // "Your hosting": FTP details for publishing to the customer's own web host.
   function renderHosting(s, meta) {
+    if (s.demo) {
+      root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Your hosting (FTP)"),
+        h("p", { class: "field-hint" }, "In the full version, Publish uploads the site straight to your hosting over FTP, and you can download it as files. Switched off in the demo."));
+      return;
+    }
     const d = meta.deploy || {};
     root.append(h("hr", { class: "sep" }));
     root.append(h("div", { class: "group-title" }, "Your hosting (FTP)"));

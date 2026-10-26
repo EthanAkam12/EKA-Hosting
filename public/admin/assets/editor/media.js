@@ -34,7 +34,8 @@ export function openMediaPicker(siteId, onPick) {
   });
 
   async function refresh() {
-    const { media } = await api(`/sites/${siteId}/media`);
+    const { media: all } = await api(`/sites/${siteId}/media`);
+    const media = all.filter((u) => !/\.(mp4|webm)$/i.test(u)); // videos are chosen in the video field
     grid.replaceChildren(
       ...(media.length ? media.map(item) : [h("p", { class: "muted", style: { gridColumn: "1/-1" } }, "No images yet. Upload some above.")]),
     );

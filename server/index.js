@@ -15,7 +15,7 @@ import compression from "compression";
 
 import { Store } from "./store.js";
 import { createAuth } from "./auth.js";
-import { createAi } from "./ai/index.js";
+import { createAi, applyBrief } from "./ai/index.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
 import { saveUpload, deleteUpload } from "./media.js";
 import { buildStaticSite } from "./export.js";
@@ -25,7 +25,7 @@ import { deploy, testConnection } from "./deploy.js";
 import yazl from "yazl";
 import { renderPage } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
-import { createEmptySite, normalizeSite, findNode, slugify } from "../shared/schema.js";
+import { createEmptySite, normalizeSite, normalizePage, findNode, slugify } from "../shared/schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -68,6 +68,17 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || undefined; // e.g. 127.0.0.1 = only this computer
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, "data"));
 const BASE_DOMAIN = (process.env.BASE_DOMAIN || "").toLowerCase().replace(/^\.+/, "");
+
+// Demo mode: anyone can try the builder without a password, in their own
+// workspace. Publishing and FTP are off, AI use is capped, and demo sites
+// are deleted after DEMO_HOURS.
+const DEMO = /^(1|true|yes)$/i.test(process.env.DEMO_MODE || "");
+const DEMO_HOURS = Number(process.env.DEMO_HOURS) || 24;
+const DEMO_SITES = Number(process.env.DEMO_SITES) || 3;
+const DEMO_AI = Number(process.env.DEMO_AI_PER_VISITOR) || 15;
+const DEMO_AI_DAILY = Number(process.env.DEMO_AI_PER_DAY) || 300;
+const SUPPORT_EMAIL = (process.env.SUPPORT_EMAIL || "").trim();
+const VERSION = JSON.parse(await fs.readFile(path.join(ROOT, "package.json"), "utf8")).version;
 const SECURE_COOKIES = process.env.COOKIE_SECURE === "1" || process.env.NODE_ENV === "production";
 
 await fs.mkdir(DATA_DIR, { recursive: true });
@@ -279,12 +290,15 @@ app.get(["/s/:slug", "/s/:slug/*"], (req, res, next) => {
 
 app.get("/", (req, res) => res.redirect("/admin"));
 app.get("/admin/login", (req, res) => res.sendFile(path.join(ROOT, "public/admin/login.html")));
+app.get("/help", (req, res) => res.sendFile(path.join(ROOT, "public/help.html")));
+app.get("/support", (req, res) => res.sendFile(path.join(ROOT, "public/support.html")));
+app.get("/api/public-info", (req, res) => res.json({ demo: DEMO, supportEmail: SUPPORT_EMAIL, version: VERSION }));
 app.get("/admin", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/dashboard.html")));
 app.get("/admin/new", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/new.html")));
 app.get("/admin/sites/:id", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/editor.html")));
 app.get(["/admin/preview/:id", "/admin/preview/:id/*"], auth.requirePage, (req, res, next) => {
   const meta = store.getMeta(req.params.id);
-  if (!meta) return res.sendStatus(404);
+  if (!meta || !canSee(req.user, meta)) return res.sendStatus(404);
   if (!req.params[0] && !req.path.endsWith("/")) return res.redirect(`/admin/preview/${meta.id}/`);
   serveSite(req, res, meta, { base: `/admin/preview/${meta.id}/`, rest: req.params[0], draft: true, sandbox: true }).catch(next);
 });
@@ -309,13 +323,59 @@ api.use((req, res, next) => {
 
 api.post("/login", (req, res) => auth.login(req, res));
 api.post("/logout", (req, res) => auth.logout(req, res));
+api.post("/demo/start", (req, res) => {
+  if (!DEMO) return res.status(404).json({ error: "The demo isn't switched on here." });
+  auth.startDemo(req, res, DEMO_HOURS * 3600);
+  res.json({ ok: true });
+});
 api.use(auth.requireApi);
+
+// Demo visitors only see their own sites; the admin doesn't see demo sites.
+function canSee(user, meta) {
+  return user?.role === "demo" ? meta.owner === user.id : !meta.demo;
+}
 
 const siteOr404 = (req, res) => {
   const meta = store.getMeta(req.params.id);
-  if (!meta) res.status(404).json({ error: "Site not found." });
+  if (!meta || !canSee(req.user, meta)) {
+    res.status(404).json({ error: "Site not found." });
+    return null;
+  }
   return meta;
 };
+
+const isDemo = (req) => req.user?.role === "demo";
+// Things a demo visitor can't do. Returns true (and answers) when blocked.
+function demoBlocked(req, res, what) {
+  if (!isDemo(req)) return false;
+  res.status(403).json({ error: `${what} is switched off in the demo.` });
+  return true;
+}
+
+// Caps AI use in the demo: per visitor and per day for everyone.
+const demoAiUse = new Map();
+let demoAiDay = { date: "", count: 0 };
+function demoAiBlocked(req, res) {
+  if (!isDemo(req) || !ai.enabled) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  if (demoAiDay.date !== today) demoAiDay = { date: today, count: 0 };
+  const used = demoAiUse.get(req.user.id) || 0;
+  if (used >= DEMO_AI || demoAiDay.count >= DEMO_AI_DAILY) {
+    res.status(429).json({ error: "You've used all the AI in this demo. Everything else (editing by hand, styling, previews) still works." });
+    return true;
+  }
+  demoAiUse.set(req.user.id, used + 1);
+  demoAiDay.count++;
+  return false;
+}
+
+// Old demo sites are removed every hour.
+async function cleanDemoSites() {
+  const cutoff = Date.now() - DEMO_HOURS * 3600 * 1000;
+  for (const meta of store.list()) if (meta.demo && Date.parse(meta.createdAt) < cutoff) await store.remove(meta.id).catch(() => {});
+}
+cleanDemoSites();
+setInterval(cleanDemoSites, 3600 * 1000).unref();
 
 // Never send the hosting password to the browser; just say whether one is saved.
 const withUrl = (meta) => {
@@ -356,10 +416,16 @@ function startDeployJob(meta) {
 }
 
 api.get("/me", (req, res) => {
-  res.json({ ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model, editModel: ai.editModel }, baseDomain: BASE_DOMAIN || null });
+  res.json({
+    ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model, editModel: ai.editModel },
+    baseDomain: BASE_DOMAIN || null,
+    version: VERSION,
+    supportEmail: SUPPORT_EMAIL,
+    demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
+  });
 });
 
-api.get("/sites", (req, res) => res.json({ sites: store.list().map(withUrl) }));
+api.get("/sites", (req, res) => res.json({ sites: store.list().filter((m) => canSee(req.user, m)).map(withUrl) }));
 
 // ---- new-site wizard ----------------------------------------------------------
 
@@ -448,6 +514,7 @@ api.post("/wizard/media", express.raw({ type: () => true, limit: "20mb" }), asyn
 });
 
 api.post("/wizard/concept", async (req, res) => {
+  if (demoAiBlocked(req, res)) return;
   const brief = cleanBrief(req.body?.brief);
   if (!brief.name && !brief.description) return res.status(400).json({ error: "Add the business name or a description first." });
   const previous = Array.isArray(req.body?.previous) ? req.body.previous.map(String).slice(-6) : [];
@@ -460,13 +527,34 @@ api.post("/wizard/concept", async (req, res) => {
   res.json({ jobId: job.id });
 });
 
+// "Design each page": one design for one page, in the approved homepage's style.
+api.post("/wizard/page", async (req, res) => {
+  if (demoAiBlocked(req, res)) return;
+  const brief = cleanBrief(req.body?.brief);
+  const title = String(req.body?.title || "").trim().slice(0, 40);
+  if (!title || !req.body?.concept) return res.status(400).json({ error: "Missing the page or the approved design." });
+  const concept = normalizeSite(req.body.concept);
+  concept.pages = concept.pages.slice(0, 1); // just the home page, for the AI to match
+  const previous = Array.isArray(req.body?.previous) ? req.body.previous.map(String).slice(-6) : [];
+  const wishes = String(req.body?.wishes || "").trim().slice(0, 2000);
+  const job = startJob("page", null, async (progress) => {
+    const result = await ai.generatePage({ brief, concept, title, previous, wishes, onProgress: progress });
+    const holder = { ...concept, pages: [result.page] };
+    await fillPlaceholders(holder, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
+    return { page: holder.pages[0], layout: result.layout };
+  });
+  res.json({ jobId: job.id });
+});
+
 api.post("/wizard/refine", async (req, res) => {
+  if (ai.enabled && demoAiBlocked(req, res)) return;
   if (!ai.enabled) return res.status(400).json({ error: "Written changes need AI. Add your API key to settings.txt and restart the builder. You can still change everything by hand after you confirm." });
   const instruction = String(req.body?.instruction || "").trim().slice(0, 2000);
   if (!instruction || !req.body?.concept) return res.status(400).json({ error: "Describe the change you want." });
   const concept = normalizeSite(req.body.concept);
+  const pageSlug = typeof req.body.pageSlug === "string" ? req.body.pageSlug : undefined;
   const job = startJob("refine", null, async (progress) => {
-    const result = await ai.refineConcept({ concept, instruction, onProgress: progress });
+    const result = await ai.refineConcept({ concept, instruction, pageSlug, onProgress: progress });
     await fillPlaceholders(result.site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
     return result;
   });
@@ -474,6 +562,10 @@ api.post("/wizard/refine", async (req, res) => {
 });
 
 api.post("/sites", async (req, res) => {
+  if (isDemo(req) && store.list().filter((m) => m.owner === req.user.id).length >= DEMO_SITES) {
+    return res.status(400).json({ error: `The demo allows ${DEMO_SITES} websites. Delete one to make another.` });
+  }
+  const owner = isDemo(req) ? req.user.id : undefined;
   // From the wizard: build the full site from the approved concept.
   if (req.body?.concept) {
     const brief = cleanBrief(req.body.brief);
@@ -481,10 +573,28 @@ api.post("/sites", async (req, res) => {
     const requests = Array.isArray(req.body.requests) ? req.body.requests.map((r) => String(r).slice(0, 2000)).slice(0, 20) : [];
     const pageNotes = cleanPageNotes(req.body.pageNotes);
     const name = brief.name || concept.name;
-    const meta = await store.create({ name, prompt: brief.description });
+    const meta = await store.create({ name, prompt: brief.description, owner });
     const job = startJob("generate", meta.id, async (progress) => {
       try {
-        const { site } = await ai.buildFromConcept({ brief, concept, requests, pageNotes, onProgress: progress });
+        // Pages designed one by one in the wizard are used as they are; only
+        // pages that weren't designed are built here.
+        const designed = (Array.isArray(req.body.pages) ? req.body.pages : []).map((p, i) => normalizePage(p, i + 1)).filter(Boolean).slice(0, 12);
+        let site;
+        if (designed.length) {
+          const base = { ...concept, pages: [concept.pages[0], ...designed] };
+          base.header = { ...base.header, links: null }; // menu follows the pages
+          const missing = brief.pages.filter((t) => t.toLowerCase() !== "home" && !designed.some((p) => p.slug === slugify(t)));
+          if (missing.length) {
+            const built = (await ai.buildFromConcept({ brief: { ...brief, pages: missing }, concept: normalizeSite(base), requests, pageNotes, onProgress: progress })).site;
+            base.pages.push(...built.pages.filter((p) => missing.some((t) => slugify(t) === p.slug)));
+          }
+          site = applyBrief(normalizeSite(base), brief);
+          // Menu order: Home, then the pages in the order the owner listed them, Contact last.
+          const rank = (p) => (p.slug === "index" ? -1 : p.slug === "contact" ? 999 : brief.pages.map(slugify).indexOf(p.slug));
+          site.pages.sort((a, b) => rank(a) - rank(b));
+        } else {
+          site = (await ai.buildFromConcept({ brief, concept, requests, pageNotes, onProgress: progress })).site;
+        }
         await fillPlaceholders(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
         const adopted = await adoptTmpMedia(site, meta.id);
         await store.saveDraft(meta.id, adopted, { version: "Built from the approved design" });
@@ -505,11 +615,12 @@ api.post("/sites", async (req, res) => {
   if (!name && !prompt) return res.status(400).json({ error: "Give the site a name or a description." });
 
   if (!prompt || req.body?.blank) {
-    const meta = await store.create({ name: name || "New site", site: createEmptySite(name || "New site") });
+    const meta = await store.create({ name: name || "New site", site: createEmptySite(name || "New site"), owner });
     return res.json({ site: withUrl(meta) });
   }
 
-  const meta = await store.create({ name: name || "New site", prompt });
+  if (demoAiBlocked(req, res)) return;
+  const meta = await store.create({ name: name || "New site", prompt, owner });
   const job = startJob("generate", meta.id, async (progress) => {
     try {
       const { site } = await ai.generateSite({ name, prompt, onProgress: progress });
@@ -565,6 +676,7 @@ api.put("/sites/:id", async (req, res) => {
 });
 
 api.patch("/sites/:id/meta", async (req, res) => {
+  if (isDemo(req) && (req.body?.deploy || req.body?.domains)) return demoBlocked(req, res, "Hosting and domain settings");
   const meta = siteOr404(req, res);
   if (!meta) return;
   const patch = {};
@@ -603,6 +715,7 @@ api.post("/sites/:id/duplicate", async (req, res) => {
 });
 
 api.post("/sites/:id/publish", async (req, res) => {
+  if (demoBlocked(req, res, "Publishing")) return;
   const meta = siteOr404(req, res);
   if (!meta) return;
   if (req.body?.site) await store.saveDraft(meta.id, req.body.site);
@@ -613,6 +726,7 @@ api.post("/sites/:id/publish", async (req, res) => {
 });
 
 api.post("/sites/:id/deploy", async (req, res) => {
+  if (demoBlocked(req, res, "Uploading to hosting")) return;
   const meta = siteOr404(req, res);
   if (!meta) return;
   if (!meta.deploy?.host) return res.status(400).json({ error: "Add the hosting's FTP details first (Site tab)." });
@@ -621,6 +735,7 @@ api.post("/sites/:id/deploy", async (req, res) => {
 });
 
 api.post("/sites/:id/deploy/test", async (req, res) => {
+  if (demoBlocked(req, res, "Connecting to hosting")) return;
   const meta = siteOr404(req, res);
   if (!meta) return;
   const settings = cleanDeploySettings(req.body || {}, meta.deploy || {});
@@ -693,6 +808,7 @@ api.post("/sites/:id/versions/:vid/restore", async (req, res) => {
 });
 
 api.post("/sites/:id/ai", async (req, res) => {
+  if (demoAiBlocked(req, res)) return;
   const meta = siteOr404(req, res);
   if (!meta) return;
   if (!ai.enabled) return res.status(400).json({ error: "AI isn't set up on this server. Set ANTHROPIC_API_KEY and restart. You can still edit everything by hand." });
@@ -729,11 +845,12 @@ api.get("/sites/:id/media", async (req, res) => {
   res.json({ media: await store.listMedia(meta.id) });
 });
 
-api.post("/sites/:id/media", express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
+api.post("/sites/:id/media", express.raw({ type: () => true, limit: "45mb" }), async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;
   try {
-    const url = await saveUpload({ dir: store.mediaDir(meta.id), siteId: meta.id, buffer: req.body, filename: req.get("X-Filename") || "image" });
+    if (isDemo(req) && req.body?.length > 8 * 1024 * 1024) throw new Error("The demo accepts files up to 8 MB.");
+    const url = await saveUpload({ dir: store.mediaDir(meta.id), siteId: meta.id, buffer: req.body, filename: req.get("X-Filename") || "image", allowVideo: !isDemo(req) });
     res.json({ url });
   } catch (err) {
     res.status(400).json({ error: err.message });

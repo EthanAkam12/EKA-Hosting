@@ -96,7 +96,7 @@ export function fieldControl(field, value, onChange, ctx) {
     case "slider": {
       const { min = 0, max = 100, step = 1, unit = "px" } = field;
       const has = value !== null && value !== undefined && value !== "";
-      const range = h("input", { type: "range", class: `range${has ? "" : " unset"}`, min, max, step, value: has ? value : (field.placeholder ?? min), "aria-label": field.label });
+      const range = h("input", { type: "range", class: `range${has ? "" : " unset"}`, min, max, step, value: has ? value : (typeof field.placeholder === "number" ? field.placeholder : min), "aria-label": field.label });
       const num = h("input", { id, class: "input num", type: "number", min, max, step, value: has ? value : "", placeholder: field.placeholder !== undefined ? String(field.placeholder) : "auto" });
       const reset = h("button", { class: "icon-btn", type: "button", title: "Back to default", hidden: !has }, "↺");
       range.addEventListener("input", () => { num.value = range.value; range.classList.remove("unset"); reset.hidden = false; onChange(Number(range.value)); });
@@ -128,6 +128,24 @@ export function fieldControl(field, value, onChange, ctx) {
     // Margin / padding: four sides, per device, with a "link" toggle.
     case "box":
       return boxControl(field, value || {}, onChange, ctx);
+
+    // A video link (YouTube, Vimeo, .mp4) or an uploaded MP4/WebM.
+    case "video": {
+      const input = h("input", { id, class: "input", value: value ?? "", placeholder: "YouTube / Vimeo link, or upload an MP4" });
+      input.addEventListener("change", () => onChange(input.value.trim() || null, { rebuild: true }));
+      const status = h("span", { class: "small muted" });
+      const file = h("input", { type: "file", accept: "video/mp4,video/webm", hidden: true, onchange: async (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        status.textContent = `Uploading ${(f.size / 1048576).toFixed(1)} MB…`;
+        try { const url = await ctx.uploadFile(f); input.value = url; onChange(url, { rebuild: true }); }
+        catch (err) { status.textContent = err.message; }
+      } });
+      return wrap(h("div", { style: { display: "grid", gap: "6px" } }, input,
+        h("div", { class: "row" }, h("button", { class: "btn btn-sm", type: "button", onclick: () => file.click() }, "Upload video"),
+          value ? h("button", { class: "btn btn-sm btn-danger", type: "button", onclick: () => onChange(null, { rebuild: true }) }, "Remove") : null, status, file)),
+        field.hint);
+    }
 
     case "hide": {
       const v = value || {};

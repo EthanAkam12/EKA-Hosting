@@ -1,4 +1,4 @@
-import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "./ui.js";
+import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo, demoBanner } from "./ui.js";
 
 const list = document.getElementById("list");
 const notice = document.getElementById("notice");
@@ -8,6 +8,7 @@ const watching = new Set();
 
 async function load() {
   const [{ sites }, meData] = await Promise.all([api("/sites"), me ? Promise.resolve(me) : api("/me")]);
+  if (!me) demoBanner(meData);
   me = meData;
   notice.replaceChildren(
     me.ai.enabled

@@ -19,6 +19,10 @@
   button:disabled { opacity: .6; }
   .err { color: #b91c1c; font-size: 14px; min-height: 1.5em; margin: 0; }
   p.sub { margin: 0; color: #6b7385; }
+  .small { font-size: 13px; }
+  a { color: var(--brand); }
+  .or { text-align: center; color: #9aa1af; font-size: 13px; margin: -4px 0 10px; }
+  button.alt { width: 100%; background: #fff; color: var(--brand); border: 2px solid var(--brand); margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -27,9 +31,27 @@
   <label>Password<input id="pw" type="password" autocomplete="current-password" required autofocus></label>
   <button id="go">Log in</button>
   <p class="err" id="err" role="alert"></p>
+  <div id="demo" hidden>
+    <div class="or">or</div>
+    <button type="button" id="try" class="alt">Try the demo · no sign-up</button>
+    <p class="sub small">Build a website with AI in a private workspace. Nothing is published, and it's deleted after a day.</p>
+  </div>
+  <p class="sub small"><a href="/help">Help</a> · <a href="/support">Support</a></p>
 </form>
 <script>
   const f = document.getElementById("f"), go = document.getElementById("go"), err = document.getElementById("err");
+  fetch("/api/public-info").then((r) => r.json()).then((info) => {
+    if (!info.demo) return;
+    document.getElementById("demo").hidden = false;
+  }).catch(() => {});
+  document.getElementById("try").addEventListener("click", async () => {
+    err.textContent = "";
+    try {
+      const res = await fetch("/api/demo/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "The demo isn't available right now.");
+      location.href = "/admin/new";
+    } catch (e2) { err.textContent = e2.message; }
+  });
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     go.disabled = true; err.textContent = "";

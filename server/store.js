@@ -107,7 +107,8 @@ export class Store {
     return slug;
   }
 
-  async create({ name, prompt = "", site }) {
+  // `owner` is set for demo-mode sites (the visitor's demo id).
+  async create({ name, prompt = "", site, owner }) {
     const id = crypto.randomBytes(8).toString("hex");
     const now = new Date().toISOString();
     const meta = {
@@ -121,6 +122,7 @@ export class Store {
       createdAt: now,
       updatedAt: now,
       publishedAt: null,
+      ...(owner ? { owner, demo: true } : {}),
     };
     await fs.mkdir(path.join(this.dir(id), "versions"), { recursive: true });
     await fs.mkdir(path.join(this.dir(id), "media"), { recursive: true });

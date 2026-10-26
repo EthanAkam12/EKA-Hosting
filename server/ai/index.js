@@ -5,10 +5,10 @@
 //   { name, model, complete({ system, prompt, model, effort, onProgress }) → Promise<string> }
 // and register it in pickProvider() below. Everything else is shared.
 
-import { normalizeSite, normalizeSection, normalizeBlock, findNode } from "../../shared/schema.js";
+import { normalizeSite, normalizeSection, normalizeBlock, normalizePage, findNode, slugify } from "../../shared/schema.js";
 import { createAnthropicProvider } from "./anthropic.js";
 import { createDemoProvider } from "./demo.js";
-import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, describeLayout } from "./prompts.js";
+import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, describeLayout, describePage } from "./prompts.js";
 
 function pickProvider() {
   const choice = (process.env.AI_PROVIDER || "").toLowerCase();
@@ -80,10 +80,32 @@ export function createAi({ provider = pickProvider() } = {}) {
       return { site, layout: describeLayout(site) };
     },
 
-    // Applies a written change ("make it darker") to a concept.
-    async refineConcept({ concept, instruction, onProgress }) {
-      const result = await this.editSite({ site: concept, instruction, onProgress });
-      return { ...result, layout: describeLayout(result.site) };
+    // Applies a written change ("make it darker") to a concept. With pageSlug,
+    // the change is about that page (the wizard's "design each page" step).
+    async refineConcept({ concept, instruction, pageSlug, onProgress }) {
+      const page = pageSlug ? concept.pages.find((p) => p.slug === pageSlug) : null;
+      const result = await this.editSite({ site: concept, instruction, pageId: page?.id, onProgress });
+      return { ...result, layout: page ? describePage(result.site.pages.find((p) => p.slug === pageSlug) || page) : describeLayout(result.site) };
+    },
+
+    // One page in the approved style; `previous` = layouts already shown for it.
+    async generatePage({ brief, concept, title, previous = [], wishes = "", onProgress }) {
+      let page;
+      if (provider.generatePage) {
+        page = (await provider.generatePage({ brief, concept, title, variant: previous.length })).page;
+      } else {
+        const text = await provider.complete({
+          system: PAGE_SYSTEM,
+          prompt: pagePrompt({ brief, concept, title, previous, wishes }),
+          model: generateModel,
+          effort: conceptEffort,
+          onProgress,
+        });
+        const data = parseJson(text);
+        page = data.page || data;
+      }
+      page = normalizePage({ ...page, title, slug: slugify(title) }, 1);
+      return { page, layout: describePage(page) };
     },
 
     // Builds the remaining pages in the approved concept's style.

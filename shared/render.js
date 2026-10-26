@@ -142,12 +142,28 @@ const renderers = {
     return `<div class="eka-faq">${p.items.map((i) => `<details><summary>${esc(i.q)}</summary><p>${esc(i.a)}</p></details>`).join("")}</div>`;
   },
 
-  gallery(p, ctx) {
-    const imgs = p.images.filter((i) => i.src);
-    if (!imgs.length) return ctx.editor ? `<div class="eka-gallery g-${p.columns}">${placeholderImage("Add gallery images")}</div>` : "";
-    const sizes = `(max-width: 760px) 50vw, ${Math.round(100 / p.columns)}vw`;
+  gallery(p, ctx, block) {
+    const cols = Math.max(1, Math.min(8, Math.round(Number(p.columns) || 3)));
+    const tcols = Math.max(1, Math.min(6, Math.round(Number(p.tabletColumns) || Math.min(cols, 3))));
+    const mcols = Math.max(1, Math.min(4, Math.round(Number(p.mobileColumns) || 2)));
+    const gap = Math.max(0, Math.min(48, Number(p.gap ?? 12)));
+    const vars = `--gc:${cols};--gct:${tcols};--gcm:${mcols};--gg:${gap}px${p.ratio !== "auto" ? `;--gr:${String(p.ratio).replace(":", "/")}` : ""}`;
+    const cls = `eka-gallery ${p.layout === "masonry" ? "g-masonry" : "g-grid"} gh-${p.hover}${p.ratio === "auto" ? " g-auto" : ""}`;
+    let imgs = p.images.filter((i) => i.src);
+    if (!imgs.length) return ctx.editor ? `<div class="${cls}" style="${vars}">${placeholderImage("Add gallery images")}</div>` : "";
+    if (p.rows > 0) imgs = imgs.slice(0, p.rows * cols);
+    const sizes = `(max-width: 760px) ${Math.round(100 / mcols)}vw, ${Math.round(100 / cols)}vw`;
     const tag = imgs.some((i) => isPlaceholder(i.src)) ? phTag(ctx, "Placeholder photos · replace in the panel") : "";
-    return `<div class="eka-gallery g-${p.columns}">${tag}${imgs.map((i) => img(i.src, i.alt, ctx, { sizes })).join("")}</div>`;
+    const lb = p.lightbox && !ctx.editor;
+    const id = `g${String(block.id).replace(/[^\w-]/g, "")}`;
+    const items = imgs.map((i, n) => {
+      const cap = p.captions && i.alt ? `<figcaption>${esc(i.alt)}</figcaption>` : "";
+      const pic = img(i.src, i.alt, ctx, { sizes });
+      return lb ? `<figure><a href="#${id}-${n}" aria-label="View larger: ${esc(i.alt || `photo ${n + 1}`)}">${pic}</a>${cap}</figure>` : `<figure>${pic}${cap}</figure>`;
+    }).join("");
+    // Full-size viewer with no JavaScript: each photo is a #target that CSS shows.
+    const boxes = lb ? imgs.map((i, n) => `<div class="eka-lb" id="${id}-${n}" role="dialog" aria-label="${esc(i.alt || `Photo ${n + 1}`)}"><a class="eka-lb-bg" href="#_" aria-label="Close"></a><img src="${esc(safeUrl(i.src))}" alt="${esc(i.alt)}" loading="lazy" decoding="async">${n > 0 ? `<a class="eka-lb-prev" href="#${id}-${n - 1}" aria-label="Previous">‹</a>` : ""}${n < imgs.length - 1 ? `<a class="eka-lb-next" href="#${id}-${n + 1}" aria-label="Next">›</a>` : ""}<a class="eka-lb-x" href="#_" aria-label="Close">✕</a></div>`).join("") : "";
+    return `<div class="${cls}" style="${vars}">${tag}${items}</div>${boxes}`;
   },
 
   video(p, ctx) {
@@ -333,13 +349,39 @@ function styleNode(node, ctx, { kind, first }) {
 // Background image + tint, as two layers behind the content. A real <img>
 // (not CSS background) so it lazy-loads and phones get the small copy.
 const TINT_DIRS = { down: "to bottom", up: "to top", right: "to right", left: "to left", diagonal: "135deg" };
+// Video backgrounds: an uploaded/linked MP4 or WebM plays as a muted loop
+// (light and fast); YouTube and Vimeo work too but load their players.
+export function videoSource(url) {
+  const u = safeUrl(url);
+  if (!u) return null;
+  const e = videoEmbed(u);
+  if (e?.youtube) return { iframe: `https://www.youtube-nocookie.com/embed/${e.youtube}?autoplay=1&mute=1&loop=1&playlist=${e.youtube}&controls=0&playsinline=1&rel=0&modestbranding=1&disablekb=1` };
+  if (e?.src) return { iframe: `${e.src}&background=1&autoplay=1&muted=1&loop=1` };
+  if (/\.(mp4|webm)(\?|#|$)/i.test(u)) return { file: u, type: /\.webm/i.test(u) ? "video/webm" : "video/mp4" };
+  return null;
+}
+
+function bgVideo(st, ctx) {
+  const v = videoSource(st.bgVideo);
+  if (!v) return "";
+  // The editor re-draws on every change: don't reload a YouTube player each time.
+  if (ctx.editor && v.iframe) return `<span class="eka-ph-tag" style="left:auto;right:10px">▶ Video background · plays on the live site</span>`;
+  // Phones show the image instead unless asked: saves their data.
+  const phones = st.bgVideoPhones ? "" : " eka-bgv-desk";
+  if (v.iframe) return `<div class="eka-bgv eka-bgv-frame${phones}"><iframe src="${esc(v.iframe)}" title="" tabindex="-1" loading="lazy" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+  const media = st.bgVideoPhones ? "" : ' media="(min-width:761px)"';
+  return `<video class="eka-bgv${phones}" autoplay muted loop playsinline preload="metadata" disablepictureinpicture tabindex="-1" style="object-position:${st.bgPos || "center"}"><source src="${esc(v.file)}" type="${v.type}"${media}></video>`;
+}
+
 function bgLayers(node, ctx, { image, tintOpacity = 0, first }) {
   const st = node.style || {};
   const url = safeUrl(image);
+  const video = bgVideo(st, ctx);
   const opacity = st.tintOpacity ?? (st.tint ? 50 : tintOpacity);
-  const hasTint = opacity > 0 && (url || st.tint);
-  if (!url && !hasTint) return "";
+  const hasTint = opacity > 0 && (url || st.tint || video);
+  if (!url && !hasTint && !video) return "";
   let out = "";
+  if (video && !url) out += `<div class="eka-bgi" aria-hidden="true">${video}</div>`;
   if (url) {
     const fx = st.bgEffect ? ` fx-${st.bgEffect}${first ? "" : " fx-scroll"}` : "";
     const filters = [st.bgBlur && `blur(${st.bgBlur}px)`, st.bgGray && `grayscale(${st.bgGray}%)`, st.bgBright && st.bgBright !== 100 && `brightness(${st.bgBright}%)`].filter(Boolean);
@@ -356,7 +398,8 @@ function bgLayers(node, ctx, { image, tintOpacity = 0, first }) {
       const m = mobile ? `<source media="(max-width:760px)" srcset="${esc(/-o\.webp$/.test(mobile) ? mobile.replace(/-o\.webp$/, "-o-sm.webp") : mobile)}">` : "";
       media = `<picture class="eka-bgi-in">${m}${im}</picture>`;
     }
-    out += `<div class="eka-bgi${fx}" aria-hidden="true"${filters.length ? ` style="filter:${filters.join(" ")}"` : ""}>${media}</div>`;
+    // The image doubles as the video's poster: it shows while the video loads, on phones and for reduced motion.
+    out += `<div class="eka-bgi${fx}" aria-hidden="true"${filters.length ? ` style="filter:${filters.join(" ")}"` : ""}>${media}${video}</div>`;
   }
   if (hasTint) {
     const c1 = st.tint || "#000000";
@@ -560,6 +603,11 @@ p{margin:0 0 1em}
 .eka-bgi{overflow:clip}
 .eka-bgi-in{position:absolute;inset:0;display:block}.eka-bgi-in img{width:100%;height:100%;display:block}
 .fx-parallax .eka-bgi-in{inset:-15% 0}
+.eka-bgi{container-type:size}
+.eka-bgv{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.eka-bgv-frame{overflow:hidden}.eka-bgv-frame iframe{position:absolute;top:50%;left:50%;width:max(100%,calc(100cqh*16/9));height:max(100%,calc(100cqw*9/16));transform:translate(-50%,-50%);border:0}
+@media (max-width:760px){.eka-bgv-desk{display:none}}
+@media (prefers-reduced-motion:reduce){.eka-bgv{display:none}}
 @keyframes eka-bg-fade{from{opacity:0}}
 @keyframes eka-kb{from{transform:scale(1)}to{transform:scale(1.15)}}
 @keyframes eka-bg-zoomout{from{transform:scale(1.25)}}
@@ -639,9 +687,23 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-faq summary::after{content:"+";position:absolute;right:4px;top:10px;font-size:1.4rem;color:var(--c-primary);transition:transform .2s}
 .eka-faq details[open] summary::after{transform:rotate(45deg)}
 .eka-faq details p{padding-bottom:12px;opacity:.85}
-.eka-gallery{display:grid;gap:12px}.g-2{grid-template-columns:repeat(2,1fr)}.g-3{grid-template-columns:repeat(3,1fr)}.g-4{grid-template-columns:repeat(4,1fr)}
-@media (max-width:760px){.eka-gallery{grid-template-columns:repeat(2,1fr)}}
-.eka-gallery img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--r)}
+.eka-gallery{position:relative;--cols:var(--gc,3)}
+@media (max-width:1000px){.eka-gallery{--cols:var(--gct,2)}}
+@media (max-width:760px){.eka-gallery{--cols:var(--gcm,2)}}
+.g-grid{display:grid;gap:var(--gg,12px);grid-template-columns:repeat(var(--cols),minmax(0,1fr))}
+.eka-gallery figure{margin:0;overflow:clip;border-radius:var(--r)}.eka-gallery a{display:block}
+.g-masonry{columns:var(--cols);column-gap:var(--gg,12px)}.g-masonry figure{break-inside:avoid;margin-bottom:var(--gg,12px)}
+.eka-gallery img{width:100%;aspect-ratio:var(--gr,1);object-fit:cover;transition:transform .35s,filter .35s}
+.g-auto img,.g-masonry img{aspect-ratio:auto}
+.eka-gallery figcaption{font-size:.875rem;opacity:.8;padding:6px 2px 0}
+.gh-zoom figure:hover img{transform:scale(1.07)}.gh-darken figure:hover img{filter:brightness(.7)}.gh-colour img{filter:grayscale(1)}.gh-colour figure:hover img{filter:none}
+.gh-lift figure{transition:transform .25s,box-shadow .25s}.gh-lift figure:hover{transform:translateY(-4px);box-shadow:0 14px 28px -12px rgba(0,0,0,.4)}
+.eka-lb{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:4vh 4vw}.eka-lb:target{display:flex}
+.eka-lb-bg{position:absolute;inset:0;background:rgba(10,10,12,.9)}
+.eka-lb img{position:relative;max-width:100%;max-height:92vh;width:auto;height:auto;border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.eka-lb-prev,.eka-lb-next,.eka-lb-x{position:absolute;color:#fff;text-decoration:none;font:300 44px/1 system-ui,sans-serif;padding:10px 16px;opacity:.85}
+.eka-lb-prev{left:8px;top:50%;transform:translateY(-50%)}.eka-lb-next{right:8px;top:50%;transform:translateY(-50%)}.eka-lb-x{top:8px;right:8px;font-size:30px}
+.eka-lb a:hover{opacity:1}
 .eka-video{position:relative;aspect-ratio:16/9;border-radius:var(--r);overflow:hidden;background:#000}
 .eka-video iframe,.eka-map iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .eka-map{position:relative;border-radius:var(--r);overflow:hidden;background:var(--c-surface)}

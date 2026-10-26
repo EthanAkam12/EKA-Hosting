@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-size='11' font-weight='800' text-anchor='middle' fill='white' font-family='sans-serif'%3EEKA%3C/text%3E%3C/svg%3E">
+<title>Help · EKA Builder</title>
+<meta name="description" content="How to use EKA Builder: making websites with AI, the drag-and-drop editor, styling, publishing and online shops.">
+<style>
+  :root { --brand: #4f46e5; --text: #1c2230; --muted: #5b6475; --line: #e3e6ec; --bg: #f6f7f9; --panel: #fff; --soft: #eef0ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--bg); }
+  a { color: var(--brand); }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  .top { max-width: 1180px; margin: 0 auto; padding: 0 16px; min-height: 58px; display: flex; align-items: center; gap: 14px; }
+  .mark { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--brand); color: #fff; font: 800 12px system-ui; }
+  .top strong { font-size: 17px; }
+  .top nav { margin-left: auto; display: flex; gap: 16px; font-size: 14px; font-weight: 600; }
+  .top nav a { text-decoration: none; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 80px; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 36px; }
+  aside { position: sticky; top: 82px; align-self: start; max-height: calc(100vh - 100px); overflow-y: auto; }
+  aside ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  aside a { display: block; padding: 6px 10px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 14.5px; font-weight: 500; }
+  aside a:hover { background: var(--soft); color: var(--brand); }
+  main { min-width: 0; }
+  h1 { font-size: clamp(28px, 4vw, 38px); line-height: 1.15; margin: 0 0 8px; }
+  .lead { color: var(--muted); font-size: 18px; margin: 0 0 28px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 26px 28px; margin-bottom: 20px; scroll-margin-top: 80px; }
+  h2 { font-size: 22px; margin: 0 0 10px; }
+  h3 { font-size: 17px; margin: 22px 0 6px; }
+  p, ul, ol { margin: 0 0 12px; }
+  li { margin-bottom: 4px; }
+  kbd { font: 600 12.5px ui-monospace, Menlo, Consolas, monospace; background: #f1f2f5; border: 1px solid #d8dbe2; border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; }
+  code { font: 13.5px ui-monospace, Menlo, Consolas, monospace; background: #f1f2f5; padding: 1px 5px; border-radius: 4px; }
+  .tip { background: var(--soft); border-left: 3px solid var(--brand); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 8px 0 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  td code { white-space: nowrap; }
+  .table-scroll { overflow-x: auto; }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: 1fr; gap: 16px; }
+    aside { position: static; max-height: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
+    aside ol { grid-template-columns: 1fr 1fr; }
+    section { padding: 20px 18px; }
+  }
+</style>
+</head>
+<body>
+<header><div class="top">
+  <span class="mark">EKA</span><strong>EKA Builder · Help</strong>
+  <nav><a href="/support">Support</a><a href="/admin">Open the builder</a></nav>
+</div></header>
+
+<div class="wrap">
+  <aside aria-label="Help topics">
+    <ol>
+      <li><a href="#start">Getting started</a></li>
+      <li><a href="#new">Making a new website</a></li>
+      <li><a href="#editor">The editor</a></li>
+      <li><a href="#style">Styling</a></li>
+      <li><a href="#header">Header, footer &amp; menu</a></li>
+      <li><a href="#media">Images, galleries &amp; video</a></li>
+      <li><a href="#pages">Pages &amp; Google</a></li>
+      <li><a href="#ai">Using AI</a></li>
+      <li><a href="#forms">Contact forms</a></li>
+      <li><a href="#publish">Publishing</a></li>
+      <li><a href="#shop">Online shops</a></li>
+      <li><a href="#demo">Demo mode</a></li>
+      <li><a href="#settings">Settings</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+    </ol>
+  </aside>
+
+  <main>
+    <h1>How to use EKA Builder</h1>
+    <p class="lead">Describe a business, pick the designs you like, and get a fast, finished website you can change by asking the AI or by hand.</p>
+
+    <section id="start">
+      <h2>Getting started</h2>
+      <h3>On Windows</h3>
+      <ol>
+        <li>Install <strong>Node.js LTS</strong> from nodejs.org (Next, Next, Finish).</li>
+        <li>Download the builder as a ZIP, right-click it, choose <strong>Extract All</strong>, and open the extracted folder. Don't run it from inside the ZIP.</li>
+        <li>Double-click <code>start-windows.bat</code>. The first start installs what it needs, then opens the builder in your browser.</li>
+        <li>The first time, a random password is created and shown in the window. It's also saved in <code>settings.txt</code>.</li>
+      </ol>
+      <p>To update later, download the new ZIP and double-click <code>update-windows.bat</code> in your builder folder. Your websites and settings are kept.</p>
+      <h3>Logging in</h3>
+      <p>Go to <code>/admin</code> on the builder's address and enter the password from <code>settings.txt</code>. Forgotten it? Open <code>settings.txt</code> in Notepad, change <code>ADMIN_PASSWORD</code>, save, and restart the builder.</p>
+    </section>
+
+    <section id="new">
+      <h2>Making a new website</h2>
+      <p>Click <strong>+ New website</strong>. There are four short steps:</p>
+      <ol>
+        <li><strong>Brief:</strong> the business name and what they do, plus optional logo, phone, email, address, opening hours, social links, brand colours, a style and which pages they need.</li>
+        <li><strong>Pages:</strong> a sentence or two about what goes on each page. Leave one blank and it's written from the business description.</li>
+        <li><strong>Homepage:</strong> you're shown a homepage design. Click <strong>Generate another</strong> for a different layout and flick between them. Type changes in the boxes for the whole site or any page.</li>
+        <li><strong>Other pages:</strong> each page gets the same treatment: <strong>Use this design</strong>, <strong>Generate another</strong>, or describe a change. When every page is picked, the site is built. <strong>Build the site now</strong> skips ahead; unpicked pages are designed automatically.</li>
+      </ol>
+      <div class="tip">Photos are filled with tasteful placeholder pictures in the site's colours. In the editor they're marked “Placeholder”: double-click one to swap in a real photo.</div>
+      <p>Without an AI key, designs come from built-in templates using everything in the brief, and the changes you type are saved as a to-do list in the editor's <strong>AI</strong> tab.</p>
+    </section>
+
+    <section id="editor">
+      <h2>The editor</h2>
+      <p>The page is in the middle. On the left are five tabs: <strong>Add</strong> (blocks and ready-made sections), <strong>AI</strong>, <strong>Pages</strong>, <strong>Style</strong> (the whole site's look) and <strong>Site</strong> (address, hosting, forms). On the right are the settings for whatever you've selected.</p>
+      <ul>
+        <li><strong>Select</strong> anything by clicking it. Sections are the full-width bands; blocks are the pieces inside them.</li>
+        <li><strong>Add</strong> by dragging from the Add tab onto the page, or select something and click a block to add it after.</li>
+        <li><strong>Move</strong> by dragging the ⠿ handle on the selection bar, or with the ↑ ↓ buttons.</li>
+        <li><strong>Edit text</strong> by double-clicking it on the page. Bold, italic and links work as you'd expect.</li>
+        <li><strong>See it on other screens</strong> with the 🖥 ▭ 📱 buttons at the top.</li>
+        <li>Everything saves automatically. <strong>History</strong> keeps earlier versions you can go back to.</li>
+      </ul>
+      <h3>Keyboard shortcuts</h3>
+      <div class="table-scroll"><table>
+        <tr><th>Keys</th><th>Does</th></tr>
+        <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td>Undo</td></tr>
+        <tr><td><kbd>Ctrl</kbd> + <kbd>Y</kbd> or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Redo</td></tr>
+        <tr><td><kbd>Ctrl</kbd> + <kbd>D</kbd></td><td>Duplicate the selected item</td></tr>
+        <tr><td><kbd>Delete</kbd></td><td>Delete the selected item</td></tr>
+        <tr><td><kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd></td><td>Move the selected item up or down</td></tr>
+        <tr><td><kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save now</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Deselect</td></tr>
+      </table></div>
+      <p>On a Mac, use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.</p>
+    </section>
+
+    <section id="style">
+      <h2>Styling</h2>
+      <h3>The whole site: the Style tab on the left</h3>
+      <p>Colour presets and colours, fonts, text sizes, corner rounding, content width, space between sections, buttons (size, shape, weight, capitals, shadow and hover animation), and an animation for sections as they scroll into view.</p>
+      <h3>One item: the panel on the right</h3>
+      <p>Select a block or section and use its three tabs:</p>
+      <ul>
+        <li><strong>Content</strong> (or <strong>Layout</strong> for sections): what it says and shows, columns, background choice.</li>
+        <li><strong>Style</strong>: font, size, weight, capitals, italic, line height, letter spacing, text colour; background colour or gradient, background image or video, tint; border, corner radius and shadow; for buttons, size and hover animation.</li>
+        <li><strong>Advanced</strong>: margin and padding (separately for desktop, tablet and phone), max width, min height, entrance animation with speed and delay, hover effect, and hiding on desktop, tablet or phone.</li>
+      </ul>
+      <div class="tip">For phone- or tablet-only spacing, click 📱 or ▭ next to Margin or Padding (or at the top of the editor) and type the values. Empty boxes use the bigger screen's value.</div>
+      <p>Animations play on the live site and in Preview, not while you're editing. Use <strong>▶ Preview animation</strong> to see one. Visitors who've turned off motion on their device don't see them.</p>
+    </section>
+
+    <section id="header">
+      <h2>Header, footer &amp; menu</h2>
+      <p>Click the header or footer on the page, or use <strong>Edit header</strong> / <strong>Edit footer</strong> on the right when nothing is selected. Changes apply to every page.</p>
+      <ul>
+        <li><strong>Content:</strong> logo text or image, logo size (and on phones), the header button and its style, sticky header, menu links, footer text and links.</li>
+        <li><strong>Style:</strong> background, text colour, font, border, shadow, padding, and the <strong>Menu links</strong> group: font, size, weight, capitals, spacing, colours (normal, hover, current page), hover effect (colour, underline, line above, pill) and position (right, centre, left).</li>
+      </ul>
+      <p>The menu is built from your pages automatically. Untick that option in the header to write your own links. Want the logo somewhere else too? Add a <strong>Logo</strong> block.</p>
+    </section>
+
+    <section id="media">
+      <h2>Images, galleries &amp; video</h2>
+      <p>Uploaded photos are resized and converted to WebP automatically, with a smaller copy for phones, so big phone photos don't slow the site down. Images load only when they're about to be seen.</p>
+      <h3>Galleries</h3>
+      <p>Choose columns for desktop, tablets and phones, how many rows to show, the gap, the photo shape, grid or masonry layout, a hover effect, captions, and whether clicking a photo opens it full size (with next/previous arrows).</p>
+      <h3>Background images</h3>
+      <p>In a section's or block's <strong>Style</strong> tab: choose the image, a different one for phones, which part to keep in view, fill or fit, stay still while scrolling, or repeat as a pattern. Add a <strong>tint</strong> (a colour or gradient at any strength) to make text readable, an effect (fade in, slow zoom, zoom out, slow pan, parallax) and blur, black &amp; white or brightness.</p>
+      <h3>Background video</h3>
+      <p>Upload an MP4 (best: 10–20 seconds, 1280px wide, a few MB) or paste a YouTube or Vimeo link. It plays silently on a loop. Phones show the background image instead unless you tick <strong>Play on phones too</strong>. Builder previews show the image, because previews block autoplay; the video plays on the live site.</p>
+    </section>
+
+    <section id="pages">
+      <h2>Pages &amp; Google</h2>
+      <p>The <strong>Pages</strong> tab adds, renames, reorders and deletes pages. With nothing selected, the right-hand panel shows the page's name, web address, and the title and description Google shows in search results (aim for 120–155 characters).</p>
+    </section>
+
+    <section id="ai">
+      <h2>Using AI</h2>
+      <p>The AI designs new sites and makes changes you describe, for example “add a pricing section”, “make it feel more luxurious” or, with something selected, “make this punchier”. Every AI change can be undone.</p>
+      <h3>Turning it on</h3>
+      <ol>
+        <li>Create an account at <strong>console.anthropic.com</strong>, add a payment method, and create an API key.</li>
+        <li>Open <code>settings.txt</code>, paste the key after <code>ANTHROPIC_API_KEY=</code>, save, and restart the builder.</li>
+      </ol>
+      <p>You pay Anthropic for what you use. New sites use a stronger model; changes use a faster, cheaper one. Without a key everything else still works: designs come from templates and your requests become a to-do list in the AI tab.</p>
+    </section>
+
+    <section id="forms">
+      <h2>Contact forms</h2>
+      <p>Add a <strong>Contact form</strong> block and choose its fields. On sites hosted by the builder, messages appear under <strong>Site → Messages received here</strong>. On a customer's own hosting, they're emailed to the address in <strong>Site → Contact forms</strong>. Forms include spam protection.</p>
+    </section>
+
+    <section id="publish">
+      <h2>Publishing</h2>
+      <ul>
+        <li><strong>Preview</strong> shows your latest changes privately. <strong>Publish</strong> makes them live.</li>
+        <li><strong>On the builder's own server</strong>, each site gets an address, and you can add the customer's domain in <strong>Site → Address</strong>.</li>
+        <li><strong>On the customer's own hosting:</strong> in <strong>Site → Your hosting (FTP)</strong>, enter the FTP details from their hosting control panel, click <strong>Test connection</strong>, then <strong>Save</strong>. From then on, Publish uploads the site there. Only changed files are sent.</li>
+        <li>Prefer to upload by hand? <strong>Download the published site as files</strong> gives you a ZIP for any web host.</li>
+      </ul>
+      <p>Published pages are plain HTML with no JavaScript, so they load very quickly.</p>
+    </section>
+
+    <section id="shop">
+      <h2>Online shops</h2>
+      <p>For a shop, install <strong>CubeCart</strong> (free) on the hosting to run the basket, payments and orders, and design the look in EKA Builder. In <strong>Site → Online shop (CubeCart)</strong>, click <strong>Download as CubeCart skin</strong>, upload the ZIP into CubeCart's <code>skins</code> folder, extract it, and choose it in the CubeCart admin. Instructions are in the ZIP.</p>
+    </section>
+
+    <section id="demo">
+      <h2>Demo mode</h2>
+      <p>With <code>DEMO_MODE=1</code> in the settings, the login page shows <strong>Try the demo</strong>. Each visitor gets a private workspace without a password. They can do everything except publish or upload to hosting, AI use is capped, and their sites are deleted after a day.</p>
+    </section>
+
+    <section id="settings">
+      <h2>Settings</h2>
+      <p>Settings live in <code>settings.txt</code> (Windows) or environment variables (servers). Restart the builder after changing them.</p>
+      <div class="table-scroll"><table>
+        <tr><th>Setting</th><th>What it does</th></tr>
+        <tr><td><code>ADMIN_PASSWORD</code></td><td>Your login password.</td></tr>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Turns on AI.</td></tr>
+        <tr><td><code>AI_MODEL</code>, <code>AI_EDIT_MODEL</code></td><td>The AI models for new sites and for changes.</td></tr>
+        <tr><td><code>BASE_DOMAIN</code></td><td>Your domain for site addresses, e.g. <code>sites.example.com</code> gives <code>name.sites.example.com</code>.</td></tr>
+        <tr><td><code>PORT</code>, <code>HOST</code></td><td>Where the builder listens (default port 3000).</td></tr>
+        <tr><td><code>DATA_DIR</code></td><td>Where websites are stored (default: the <code>data</code> folder).</td></tr>
+        <tr><td><code>SUPPORT_EMAIL</code></td><td>Shown on the Support page.</td></tr>
+        <tr><td><code>DEMO_MODE</code></td><td><code>1</code> turns on the public demo. Also <code>DEMO_HOURS</code> (default 24), <code>DEMO_SITES</code> (3), <code>DEMO_AI_PER_VISITOR</code> (15) and <code>DEMO_AI_PER_DAY</code> (300).</td></tr>
+      </table></div>
+    </section>
+
+    <section id="trouble">
+      <h2>Troubleshooting</h2>
+      <h3>“The password is wrong”</h3>
+      <p>Check <code>ADMIN_PASSWORD</code> in <code>settings.txt</code> (no spaces around it), save, and restart the builder.</p>
+      <h3>The builder window closes straight away on Windows</h3>
+      <p>Make sure you extracted the ZIP first and that Node.js LTS is installed. Run <code>start-windows.bat</code> again and read the message in the window.</p>
+      <h3>“Port in use”</h3>
+      <p>The builder tries the next free port and shows the address it used. Or set <code>PORT</code> to another number.</p>
+      <h3>FTP won't connect</h3>
+      <p>Double-check the host, username and password in the hosting control panel. Some hosts need the folder set to <code>public_html</code>. Use <strong>Test connection</strong> to see the exact error.</p>
+      <h3>Still stuck?</h3>
+      <p>See <a href="/support">Support</a>.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>

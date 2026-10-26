@@ -1,6 +1,6 @@
 // Editor entry point: loads the site and wires the canvas, panels and top bar together.
 
-import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "../ui.js";
+import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo, demoBanner } from "../ui.js";
 import { createState } from "./state.js";
 import { createCanvas } from "./canvas.js";
 import { createInspector } from "./inspector.js";
@@ -273,6 +273,13 @@ async function boot() {
   const s = state.get();
   s.aiEnabled = me.ai.enabled;
   s.baseDomain = me.baseDomain;
+  s.demo = me.demo;
+  if (me.demo) {
+    demoBanner(me);
+    const pub = $("publish-btn");
+    pub.disabled = true;
+    pub.title = "Publishing is switched off in the demo. Use Preview to see the site.";
+  }
   await canvas.boot();
   layoutFrame();
   state.load(meta, site);

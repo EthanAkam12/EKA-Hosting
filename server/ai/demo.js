@@ -183,6 +183,79 @@ const EXTRA_PAGES = {
   ],
 };
 
+// ---- single pages, three looks each (for "design each page" in the wizard) --
+
+const PAGE_INTROS = {
+  about: "The people and the story behind the business.",
+  services: "What we do, and how we can help.",
+  gallery: "A look at our work.",
+  contact: "We'd love to hear from you.",
+  faq: "Answers to the questions we're asked most.",
+  pricing: "Clear prices, no surprises.",
+};
+
+function pageIntro(brief, title) {
+  const info = String(brief.pageInfo?.[title] || "").trim();
+  return info || PAGE_INTROS[slugify(title)] || `Find out more about ${brief.name || "us"}.`;
+}
+
+const PAGE_HEADERS = [
+  (title, intro) => s({ background: "surface", width: "narrow", align: "center", padding: "lg" }, [[b("heading", { text: title, level: 1, align: "center" }), b("text", { html: `<p>${esc(intro)}</p>`, align: "center" })]]),
+  (title, intro) => s({ background: "dark", padding: "xl" }, [[b("heading", { text: title, level: 1 }), b("text", { html: `<p>${esc(intro)}</p>` })]]),
+  (title, intro) => s({ background: "image", overlay: 50, padding: "xl", align: "center", width: "narrow" }, [[b("heading", { text: title, level: 1, align: "center" }), b("text", { html: `<p>${esc(intro)}</p>`, align: "center" })]]),
+];
+
+const PAGE_BODIES = {
+  about: [
+    (brief) => [s({ layout: "1-1", valign: "center" }, [[b("heading", { text: "Our story", level: 2 }), b("text", { html: `<p>${esc(about(brief))}</p>` }), b("list")], [b("image", { ratio: "4:3" })]])],
+    (brief, name) => [s({ background: "surface" }, [[b("stats")]]), s({ width: "narrow", align: "center" }, [[b("heading", { text: `Why people choose ${name}`, level: 2, align: "center" }), b("text", { html: `<p>${esc(about(brief))}</p>`, align: "center" })]])],
+    (brief) => [s({ layout: "1-2", valign: "center" }, [[b("image", { ratio: "3:4" })], [b("heading", { text: "Who we are", level: 2 }), b("text", { html: `<p>${esc(about(brief))}</p>` })]]), s({ layout: "1-1-1", background: "surface" }, cards())],
+  ],
+  services: [
+    () => [s({ layout: "1-1-1" }, cards())],
+    () => cards().map(([card], i) => s({ layout: "1-1", valign: "center", background: i % 2 ? "surface" : "default" }, i % 2 ? [[b("image", { ratio: "4:3" })], [b("heading", { text: card.props.title, level: 2 }), b("text", { html: `<p>${esc(card.props.text)}</p>` })]] : [[b("heading", { text: card.props.title, level: 2 }), b("text", { html: `<p>${esc(card.props.text)}</p>` })], [b("image", { ratio: "4:3" })]])),
+    () => [s({ layout: "1-1-1", valign: "top" }, [[b("pricing", { name: "Basic" })], [b("pricing", { name: "Standard", featured: true })], [b("pricing", { name: "Premium" })]])],
+  ],
+  gallery: [
+    () => [s({}, [[b("gallery", { columns: 3 })]])],
+    () => [s({ width: "wide" }, [[b("gallery", { columns: 3, layout: "masonry", ratio: "auto", gap: 8, hover: "colour" })]])],
+    () => [s({ width: "wide" }, [[b("gallery", { columns: 2, ratio: "3:2", captions: true, hover: "darken" })]])],
+  ],
+  contact: [
+    (brief) => [contactSection(brief), ...(brief.address ? [s({ padding: "sm" }, [[b("map", { address: brief.address })]])] : [])],
+    (brief) => [s({ layout: "1-1-1", padding: "md" }, [
+      [b("card", { icon: "📞", title: "Call", text: brief.phone || "Phone number coming soon", style: "outline", align: "center" })],
+      [b("card", { icon: "✉️", title: "Email", text: brief.email || "Email address coming soon", style: "outline", align: "center" })],
+      [b("card", { icon: "📍", title: "Visit", text: brief.address || "Visits by appointment", style: "outline", align: "center" })],
+    ]), s({ width: "narrow" }, [[b("form")]])],
+    (brief) => [contactSection(brief, { background: "dark" })],
+  ],
+  faq: [
+    () => [s({ width: "narrow" }, [[b("faq")]])],
+    () => [s({ layout: "1-2" }, [[b("heading", { text: "Common questions", level: 2 }), b("text", { html: "<p>Can't find your answer? Just ask.</p>" })], [b("faq")]])],
+    (brief) => [s({ width: "narrow" }, [[b("faq")]]), contactSection(brief, { background: "surface" })],
+  ],
+  pricing: [
+    () => [s({ layout: "1-1-1" }, [[b("pricing", { name: "Basic" })], [b("pricing", { name: "Standard", featured: true })], [b("pricing", { name: "Premium" })]])],
+    () => [s({ layout: "1-1", width: "normal" }, [[b("pricing", { name: "Standard" })], [b("pricing", { name: "Premium", featured: true })]])],
+    () => [s({ layout: "1-1-1" }, [[b("pricing", { name: "Basic" })], [b("pricing", { name: "Standard", featured: true })], [b("pricing", { name: "Premium" })]]), s({ width: "narrow", background: "surface" }, [[b("faq")]])],
+  ],
+  other: [
+    (brief, name, title) => [s({ width: "narrow" }, [[b("text", { html: `<p>${esc(pageIntro(brief, title))}</p>` })]])],
+    (brief, name, title) => [s({ layout: "1-1", valign: "center" }, [[b("text", { html: `<p>${esc(pageIntro(brief, title))}</p>` }), b("buttons")], [b("image", { ratio: "4:3" })]])],
+    () => [s({ layout: "1-1-1" }, cards())],
+  ],
+};
+
+export function demoPage(brief, name, title, variant) {
+  const slug = slugify(title);
+  const bodies = PAGE_BODIES[slug] || PAGE_BODIES.other;
+  const v = variant % 3;
+  const page = createPage(title, slug);
+  page.sections = [PAGE_HEADERS[(v + (slug.length % 3)) % 3](title, pageIntro(brief, title)), ...bodies[v](brief, name, title)];
+  return page;
+}
+
 export function createDemoProvider() {
   return {
     name: "demo",
@@ -218,6 +291,10 @@ export function createDemoProvider() {
       // Pages may have been added after the design was picked: refresh the menu.
       if (plannedPages(brief).length) site.header.links = headerLinks(brief);
       return { site };
+    },
+
+    async generatePage({ brief, concept, title, variant = 0 }) {
+      return { page: demoPage(brief, concept.name, title, variant) };
     },
 
     // Old "describe it" flow: same as the first concept, built in one go.

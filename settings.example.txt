@@ -7,3 +7,10 @@ ADMIN_PASSWORD=change-me
 # To turn on AI, paste your Claude API key after the = sign (it starts with sk-ant-).
 # Leave it empty to use the builder without AI (new sites start from a template).
 ANTHROPIC_API_KEY=
+
+# Optional: the email address shown on the Support page.
+SUPPORT_EMAIL=
+
+# Optional: set to 1 to let anyone try the builder from the login page
+# (private workspaces, no publishing, AI use capped, deleted after a day).
+DEMO_MODE=

@@ -61,6 +61,10 @@
   .page-box[open] summary::before { transform: rotate(90deg); }
   .page-box .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
   .page-card textarea { margin-top: 10px; }
+  .page-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .page-step { border: 1px solid var(--line-strong); background: #fff; border-radius: 99px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .page-step.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+  .page-step.done:not(.on) { color: #15803d; border-color: #bbf7d0; background: #f0fdf4; }
   @media (max-width: 900px) {
     .design { display: block; }
     .side { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
@@ -72,7 +76,7 @@
 <header class="top"><div class="top-in">
   <a class="icon-btn" href="/admin" title="All websites" aria-label="All websites">←</a>
   <h1>New website</h1>
-  <div class="steps"><span data-step="1">1 · Brief</span><span data-step="2">2 · Pages</span><span data-step="3">3 · Pick a design</span></div>
+  <div class="steps"><span data-step="1">1 · Brief</span><span data-step="2">2 · Pages</span><span data-step="3">3 · Homepage</span><span data-step="4">4 · Other pages</span></div>
 </div></header>
 <div id="app" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
 <script type="module" src="/admin/assets/new.js"></script>

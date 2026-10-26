@@ -103,3 +103,38 @@ test("background images: real <img> layer, tint, effects, phone image", () => {
   assert.match(html, /background-image:url\(&quot;\/_m\/s1\/card-o\.webp&quot;\)[^"]*background-attachment:fixed/);
   assert.doesNotMatch(html, /<script/);
 });
+
+test("gallery: columns per device, rows limit, shape and a no-JS full-size viewer", () => {
+  const site = createEmptySite("x");
+  const gallery = createBlock("gallery", { images: Array.from({ length: 10 }, (_, i) => ({ src: `/_m/s/p${i}-o.webp`, alt: `Photo ${i}` })), columns: 4, mobileColumns: 1, rows: 2, ratio: "16:9", captions: true });
+  site.pages[0].sections = [createSection({}, [[gallery]])];
+  const n = normalizeSite(site);
+  const html = renderPage(n, n.pages[0]);
+  assert.match(html, /class="eka-gallery g-grid gh-zoom" style="--gc:4;--gct:3;--gcm:1;--gg:12px;--gr:16\/9"/);
+  assert.equal((html.match(/<figure>/g) || []).length, 8); // 2 rows × 4 columns
+  assert.match(html, /<figcaption>Photo 0<\/figcaption>/);
+  assert.match(html, /<a href="#g[\w-]+-1" aria-label="View larger: Photo 1">/);
+  assert.match(html, /class="eka-lb" id="g[\w-]+-7"[\s\S]*?class="eka-lb-prev"/);
+  assert.doesNotMatch(html, /<script/);
+  // Old sites (columns as 2/3/4 from a dropdown) keep working.
+  assert.equal(normalizeSite({ pages: [{ sections: [{ columns: [{ blocks: [{ type: "gallery", props: { columns: 2 } }] }] }] }] }).pages[0].sections[0].columns[0].blocks[0].props.columns, 2);
+});
+
+test("video backgrounds: MP4 loop with the image as poster, YouTube embed, phones skip it", async () => {
+  const { videoSource } = await import("../shared/render.js");
+  assert.equal(videoSource("https://youtu.be/dQw4w9WgXcQ").iframe.includes("youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ"), true);
+  assert.deepEqual(videoSource("/_m/s/clip.mp4"), { file: "/_m/s/clip.mp4", type: "video/mp4" });
+  assert.equal(videoSource("https://example.com/page"), null);
+  const site = createEmptySite("x");
+  const hero = createSection({ background: "image", image: "/_m/s/poster-o.webp" });
+  hero.style = { bgVideo: "/_m/s/clip.mp4" };
+  const card = createBlock("card");
+  card.style = { bgVideo: "https://vimeo.com/76979871", bgVideoPhones: true };
+  site.pages[0].sections = [hero, createSection({}, [[card]])];
+  const n = normalizeSite(site);
+  const html = renderPage(n, n.pages[0]);
+  assert.match(html, /<picture class="eka-bgi-in">[\s\S]*?<\/picture><video class="eka-bgv eka-bgv-desk" autoplay muted loop playsinline[^>]*><source src="\/_m\/s\/clip\.mp4" type="video\/mp4" media="\(min-width:761px\)">/);
+  assert.match(html, /<div class="eka-bgv eka-bgv-frame"><iframe src="https:\/\/player\.vimeo\.com\/video\/76979871\?dnt=1&amp;background=1/);
+  const editor = renderPage(n, n.pages[0], { editor: true });
+  assert.doesNotMatch(editor, /player\.vimeo\.com/); // no player reloads while editing
+});

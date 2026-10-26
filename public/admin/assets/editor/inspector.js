@@ -1,7 +1,7 @@
 // Right-hand property panel for whatever is selected.
 
 import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
-import { h } from "../ui.js";
+import { h, api } from "../ui.js";
 import { fieldControl } from "./fields.js";
 
 export function createInspector({ state, canvas, root, head, pickImage, askAi }) {
@@ -12,7 +12,8 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     return out;
   }
 
-  const ctx = () => ({ pickImage, links: linkOptions(), device: state.get().device, setDevice: (d) => state.setDevice(d) });
+  const uploadFile = (file) => api(`/sites/${state.get().siteId}/media`, { method: "POST", raw: true, body: file, headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) } }).then((r) => r.url);
+  const ctx = () => ({ pickImage, uploadFile, links: linkOptions(), device: state.get().device, setDevice: (d) => state.setDevice(d) });
   let tab = "content"; // Content / Style / Advanced, kept while moving between elements
 
   // Updates a value somewhere in the site. Text inputs don't rebuild the
@@ -161,6 +162,12 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
       styleField(node, "bgSize", { label: "Fit", type: "select", options: ["default", "contain"], labels: ["Fill the space (crop)", "Show the whole image"] });
       styleField(node, "bgFixed", { label: "Stay still while the page scrolls", type: "checkbox" });
       styleField(node, "bgRepeat", { label: "Repeat as a pattern", type: "checkbox" });
+    }
+    group("Background video");
+    styleField(node, "bgVideo", { label: "Video", type: "video", hint: "Plays silently on a loop behind the content. An uploaded MP4 (10–20 seconds) is fastest; YouTube and Vimeo work but load their players. The image above shows while it loads, and in Preview (the builder's preview blocks autoplay); the video plays on the live site." });
+    if (st.bgVideo) {
+      if (isSection && node.props.background !== "image") root.append(h("button", { class: "btn btn-sm", style: { marginBottom: "12px" }, onclick: () => set(`sec:${node.id}:background`, (site) => { const n = findNode(site, node.id); if (n) n.node.props.background = "image"; }, { rebuild: true }) }, "Use white text and a dark tint"));
+      styleField(node, "bgVideoPhones", { label: "Play on phones too (uses their data)", type: "checkbox" });
     }
     group("Tint over the image");
     if (!image) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "A see-through colour on top of the background. Most useful over an image, to make text readable."));

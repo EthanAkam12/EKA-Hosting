@@ -2,7 +2,7 @@
 // 3) pick a homepage design (generate another, or ask for changes, page by
 // page), then confirm to build the full site.
 
-import { h, api, waitForJob, toast } from "./ui.js";
+import { h, api, waitForJob, toast, demoBanner } from "./ui.js";
 import { renderPage } from "/admin/shared/render.js";
 
 const STYLES = ["Let the AI decide", "Modern", "Classic", "Bold", "Minimal", "Warm & friendly", "Luxury", "Playful"];
@@ -19,7 +19,7 @@ let me = { ai: { enabled: false } };
 
 // Everything the wizard knows. Saved in the tab so a refresh doesn't lose work.
 let state = load() || {
-  version: 2,
+  version: 3,
   step: 1,
   brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", logoUrl: "", colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
   concepts: [], // [{ site, layout, requests: [], history: [] }]
@@ -35,7 +35,7 @@ let device = "desktop";
 function load() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(SAVE_KEY));
-    return saved?.version === 2 ? saved : null; // older wizard layout: start again
+    return saved?.version === 3 ? saved : null; // older wizard layout: start again
   } catch { return null; }
 }
 function save() {
@@ -50,7 +50,7 @@ function setStep(n) {
 
 function render() {
   document.querySelectorAll("[data-step]").forEach((el) => el.classList.toggle("on", Number(el.dataset.step) === state.step));
-  app.replaceChildren(state.step === 1 ? renderBrief() : state.step === 2 ? renderPages() : renderDesign());
+  app.replaceChildren(state.step === 1 ? renderBrief() : state.step === 2 ? renderPages() : state.step === 3 ? renderDesign() : renderPageDesign());
 }
 
 // ------------------------------------------------------------------ step 1 --
@@ -279,27 +279,144 @@ async function refine(instruction, key) {
   }
 }
 
-async function confirm() {
+// Pages other than Home, in menu order (Contact last).
+function otherPages() {
+  const list = state.brief.pages.filter((p) => p.toLowerCase() !== "home");
+  return list.sort((a, b) => (a.toLowerCase() === "contact") - (b.toLowerCase() === "contact"));
+}
+
+async function useHomeDesign() {
   // With AI, changes typed for the whole site or the homepage are made first,
-  // so the other pages are built from the final design.
+  // so the other pages are designed from the final homepage.
   if (me.ai.enabled) {
     for (const key of ["Whole site", "Home"]) {
       const text = (state.notes[key] || "").trim();
       if (text && !(await refine(text, key))) return;
     }
   }
+  if (!otherPages().length) return buildSite();
+  state.pw = { i: 0, d: {} };
+  setStep(4); // the page step starts designing the first page itself
+}
+
+async function buildSite() {
   const c = currentConcept();
   const pageNotes = Object.fromEntries(Object.entries(state.notes).filter(([, v]) => v && v.trim()));
+  // Pages picked in step 4 are used as they are; the rest are built automatically.
+  const pages = otherPages().map((t) => state.pw?.d[t]).filter((d) => d?.chosen).map((d) => d.options[d.current].page);
   try {
     busy = "Building the full site…";
     render();
-    const { site } = await api("/sites", { method: "POST", body: { brief: state.brief, concept: c.site, requests: c.requests, pageNotes } });
+    const { site } = await api("/sites", { method: "POST", body: { brief: state.brief, concept: c.site, requests: c.requests, pageNotes, pages } });
     clearAndGo(`/admin/sites/${site.id}`);
   } catch (err) {
     busy = null;
     toast(err.message, { error: true });
     render();
   }
+}
+
+// ------------------------------------------------------------------ step 4 --
+
+function pageWork(title = otherPages()[state.pw.i]) {
+  return (state.pw.d[title] ||= { options: [], current: 0, requests: [], history: [], chosen: false });
+}
+
+async function newPageDesign() {
+  const title = otherPages()[state.pw.i];
+  if (!title || busy) return;
+  const d = pageWork(title);
+  try {
+    const result = await runJob(d.options.length ? `Designing another ${title} page…` : `Designing the ${title} page…`, () => api("/wizard/page", { method: "POST", body: {
+      brief: state.brief, concept: currentConcept().site, title,
+      previous: d.options.map((o) => o.layout),
+      wishes: me.ai.enabled ? (state.notes[title] || "") : "",
+    } }));
+    d.options.push({ page: result.page, layout: result.layout });
+    d.current = d.options.length - 1;
+    d.failed = false;
+    save();
+  } catch (err) {
+    d.failed = true;
+    toast(err.message, { error: true });
+  }
+  render();
+}
+
+async function refinePage(instruction) {
+  const title = otherPages()[state.pw.i];
+  const d = pageWork(title);
+  const opt = d.options[d.current];
+  const home = currentConcept().site;
+  try {
+    const result = await runJob("Making your change…", () => api("/wizard/refine", { method: "POST", body: { concept: { ...home, pages: [home.pages[0], opt.page] }, instruction, pageSlug: opt.page.slug } }));
+    const page = result.site.pages.find((p) => p.slug === opt.page.slug);
+    if (result.changed && page) {
+      d.history.push(structuredClone(opt));
+      d.options[d.current] = { page, layout: result.layout };
+    }
+    d.requests.push(instruction);
+    state.notes[title] = "";
+    save();
+    toast(result.summary || "Done.");
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+  render();
+}
+
+async function choosePage() {
+  pageWork().chosen = true;
+  const titles = otherPages();
+  const next = titles.findIndex((t) => !state.pw.d[t]?.chosen);
+  if (next === -1) return buildSite();
+  state.pw.i = next;
+  save();
+  render();
+}
+
+function renderPageDesign() {
+  const titles = otherPages();
+  if (state.pw.i >= titles.length) state.pw.i = 0;
+  const title = titles[state.pw.i];
+  const d = pageWork(title);
+  const opt = d.options[d.current];
+  const ai = me.ai.enabled;
+  if (!opt && !busy && !d.failed) queueMicrotask(newPageDesign);
+
+  const box = h("textarea", { class: "textarea", rows: "3", disabled: !!busy, placeholder: ai ? `e.g. put the photos first, add opening hours, make it shorter` : "Write what you'd change; it's saved with the site as a to-do" }, state.notes[title] || "");
+  box.addEventListener("input", () => { state.notes[title] = box.value; save(); });
+  const applyChange = () => { const v = box.value.trim(); if (v) refinePage(v); };
+  if (ai) box.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) applyChange(); });
+
+  const side = h("aside", { class: "side" },
+    h("h2", { style: { fontSize: "18px" } }, "Design each page"),
+    h("p", { class: "small muted", style: { margin: "4px 0 10px" } }, "Pick a design for each page, like you did for the homepage."),
+    h("div", { class: "page-steps" }, titles.map((t, i) => h("button", {
+      class: `page-step${i === state.pw.i ? " on" : ""}${state.pw.d[t]?.chosen ? " done" : ""}`, disabled: !!busy,
+      onclick: () => { state.pw.i = i; save(); render(); },
+    }, state.pw.d[t]?.chosen ? `✓ ${t}` : t))),
+    d.options.length > 1 ? h("div", { class: "options" }, d.options.map((_, i) => h("button", {
+      class: `opt${i === d.current ? " on" : ""}`, disabled: !!busy, onclick: () => { d.current = i; save(); render(); },
+    }, `Design ${i + 1}`))) : h("div", { style: { height: "12px" } }),
+    h("button", { class: "btn btn-primary big", disabled: !!busy || !opt, onclick: choosePage }, d.chosen ? `✓ Keep this ${title} design` : `✓ Use this ${title} design`),
+    h("button", { class: "btn big", style: { marginTop: "10px" }, disabled: !!busy, onclick: newPageDesign }, "↻ Generate another"),
+    h("hr", { class: "sep" }),
+    h("label", { style: { fontWeight: 600, display: "block", marginBottom: "6px" } }, `Change the ${title} page`),
+    box,
+    h("div", { class: "row", style: { marginTop: "6px" } },
+      ai ? h("button", { class: "btn btn-sm", disabled: !!busy || !opt, onclick: applyChange }, "Apply to preview") : h("span", { class: "small muted" }, "Without an AI key, this becomes a to-do in the editor."),
+      d.history.length ? h("button", { class: "btn btn-sm btn-ghost", disabled: !!busy, onclick: () => { d.options[d.current] = d.history.pop(); d.requests.pop(); save(); render(); } }, "↶ Undo") : null),
+    d.requests.length ? h("ul", { class: "changes" }, d.requests.map((r) => h("li", {}, r))) : null,
+    h("hr", { class: "sep" }),
+    h("button", { class: "btn", disabled: !!busy, onclick: buildSite }, "Build the site now"),
+    h("p", { class: "field-hint" }, "Pages you haven't picked a design for are designed automatically."),
+    h("a", { href: "#", class: "small", onclick: (e) => { e.preventDefault(); if (!busy) setStep(3); } }, "← Back to the homepage"),
+  );
+
+  const home = currentConcept().site;
+  const site = opt ? { ...home, pages: [home.pages[0], opt.page] } : null;
+  return h("div", { class: "design" }, side, previewStage(opt ? `${title} · design ${d.current + 1}` : "", site, site?.pages[1]));
 }
 
 function clearAndGo(url) {
@@ -354,7 +471,7 @@ function renderDesign() {
       onclick: () => { state.current = i; save(); render(); },
     }, `Design ${i + 1}`))) : h("div", { style: { height: "14px" } }),
 
-    h("button", { class: "btn btn-primary big", disabled: !!busy || !c, onclick: confirm }, "✓ Use this design"),
+    h("button", { class: "btn btn-primary big", disabled: !!busy || !c, onclick: useHomeDesign }, otherPages().length ? "✓ Use this design, then design the other pages" : "✓ Use this design"),
     h("button", { class: "btn big", style: { marginTop: "10px" }, disabled: !!busy, onclick: newConcept }, "↻ Generate another"),
 
     h("hr", { class: "sep" }),
@@ -376,16 +493,22 @@ function renderDesign() {
       h("a", { href: "#", class: "small", onclick: (e) => { e.preventDefault(); if (!busy) setStep(2); } }, "← Page descriptions")),
   );
 
+  const label = c ? `Homepage · design ${state.current + 1}${c.requests.length ? ` · ${c.requests.length} change${c.requests.length > 1 ? "s" : ""}` : ""}` : "";
+  return h("div", { class: "design" }, side, previewStage(label, c?.site, c?.site.pages[0]));
+}
+
+// The preview: a page at its real width, scaled to fit, as in the editor.
+function previewStage(label, site, page) {
   const frame = h("div", { class: `frame${device === "mobile" ? " mobile" : ""}` });
   const inner = h("div", { class: "frame-in" });
   const iframe = h("iframe", { title: "Design preview", sandbox: "allow-same-origin" });
   inner.append(iframe);
   frame.append(inner);
-  if (busy || !c) frame.append(h("div", { class: "busy" }, h("div", {}, h("div", { class: "spinner" }), h("div", { id: "busy-text", style: { fontWeight: 600 } }, busy || "Loading…"), h("div", { class: "small muted", style: { marginTop: "6px" } }, me.ai.enabled ? "This usually takes under a minute." : ""))));
+  if (busy || !site) frame.append(h("div", { class: "busy" }, h("div", {}, h("div", { class: "spinner" }), h("div", { id: "busy-text", style: { fontWeight: 600 } }, busy || "Loading…"), h("div", { class: "small muted", style: { marginTop: "6px" } }, me.ai.enabled ? "This usually takes under a minute." : ""))));
 
   const stage = h("main", { class: "stage" },
     h("div", { class: "stage-bar" },
-      h("span", { class: "small muted" }, c ? `Design ${state.current + 1}${c.requests.length ? ` · ${c.requests.length} change${c.requests.length > 1 ? "s" : ""}` : ""}` : ""),
+      h("span", { class: "small muted" }, label),
       h("span", { class: "grow" }),
       h("button", { class: `icon-btn${device === "desktop" ? " active" : ""}`, title: "Desktop", onclick: () => { device = "desktop"; render(); } }, "🖥"),
       h("button", { class: `icon-btn${device === "mobile" ? " active" : ""}`, title: "Mobile", onclick: () => { device = "mobile"; render(); } }, "📱"),
@@ -393,29 +516,24 @@ function renderDesign() {
     frame,
   );
 
-  const wrap = h("div", { class: "design" }, side, stage);
-
-  // Show the homepage at its real width, scaled to fit, as in the editor.
   requestAnimationFrame(() => {
     const logical = device === "mobile" ? 390 : 1280;
     const scale = Math.min(1, frame.clientWidth / logical);
     inner.style.width = `${logical}px`;
     inner.style.height = `${frame.clientHeight / scale}px`;
     inner.style.transform = scale < 1 ? `scale(${scale})` : "";
-    if (c) {
-      // Links in the preview don't go anywhere.
-      iframe.srcdoc = renderPage(c.site, c.site.pages[0], { base: "/" }).replace("</head>", "<style>a,button{pointer-events:none}</style></head>");
-    }
+    // Links in the preview don't go anywhere.
+    if (site && page) iframe.srcdoc = renderPage(site, page, { base: "/" }).replace("</head>", "<style>a,button{pointer-events:none}</style></head>");
   });
-  return wrap;
+  return stage;
 }
 
-window.addEventListener("resize", () => { if (state.step === 3) render(); });
+window.addEventListener("resize", () => { if (state.step >= 3) render(); });
 
 // ------------------------------------------------------------------- start --
 
-api("/me").then((m) => { me = m; }).catch(() => {}).finally(() => {
+api("/me").then((m) => { me = m; demoBanner(m); }).catch(() => {}).finally(() => {
   // A refresh in the middle of generating: show what we have.
-  if (state.step === 3 && !state.concepts.length) state.step = 2;
+  if (state.step >= 3 && !state.concepts.length) state.step = 2;
   render();
 });

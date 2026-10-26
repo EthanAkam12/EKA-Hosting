@@ -201,13 +201,22 @@ export const BLOCKS = {
   },
   gallery: {
     label: "Gallery", icon: "▦", group: "Media",
-    defaults: () => ({ images: [], columns: 3 }),
+    defaults: () => ({ images: [], columns: 3, tabletColumns: null, mobileColumns: 2, rows: 0, gap: 12, ratio: "1:1", layout: "grid", hover: "zoom", lightbox: true, captions: false }),
     fields: [
       { key: "images", label: "Images", type: "list", itemLabel: "alt", itemDefaults: () => ({ src: "", alt: "" }), itemFields: [
         { key: "src", label: "Image", type: "image" },
-        { key: "alt", label: "Alt text", type: "text" },
+        { key: "alt", label: "Alt text / caption", type: "text" },
       ] },
-      { key: "columns", label: "Columns", type: "select", options: [2, 3, 4] },
+      { key: "columns", label: "Columns (desktop)", type: "slider", min: 1, max: 8, placeholder: 3, unit: "" },
+      { key: "tabletColumns", label: "Columns on tablets", type: "slider", min: 1, max: 6, placeholder: "auto", unit: "" },
+      { key: "mobileColumns", label: "Columns on phones", type: "slider", min: 1, max: 4, placeholder: 2, unit: "" },
+      { key: "rows", label: "Rows to show (0 = all)", type: "slider", min: 0, max: 12, placeholder: 0, unit: "" },
+      { key: "gap", label: "Space between photos", type: "slider", min: 0, max: 48, placeholder: 12 },
+      { key: "ratio", label: "Photo shape", type: "select", options: ["1:1", "4:3", "3:2", "16:9", "3:4", "auto"], labels: ["Square", "4:3", "3:2", "Wide 16:9", "Portrait 3:4", "Original shape"] },
+      { key: "layout", label: "Layout", type: "select", options: ["grid", "masonry"], labels: ["Grid (rows line up)", "Masonry (Pinterest-style)"] },
+      { key: "hover", label: "Hover effect", type: "select", options: ["zoom", "darken", "colour", "lift", "none"], labels: ["Zoom in", "Darken", "Black & white → colour", "Lift up", "None"] },
+      { key: "lightbox", label: "Click a photo to see it full size", type: "checkbox" },
+      { key: "captions", label: "Show captions (from the alt text)", type: "checkbox" },
     ],
   },
   video: {
@@ -455,7 +464,7 @@ export function normalizeStyle(style) {
   one("btnSize", ["sm", "md", "lg", "xl"]);
   one("align", ["left", "center", "right"]);
   // Background image (blocks; sections use props.image) and its settings.
-  for (const k of ["bgImage", "bgImageMobile"]) {
+  for (const k of ["bgImage", "bgImageMobile", "bgVideo"]) {
     const v = str(style[k]).trim();
     if (/^(\/|https?:\/\/)/.test(v)) out[k] = v;
   }
@@ -463,6 +472,7 @@ export function normalizeStyle(style) {
   one("bgSize", ["contain"]);
   if (style.bgFixed === true) out.bgFixed = true;
   if (style.bgRepeat === true) out.bgRepeat = true;
+  if (style.bgVideoPhones === true) out.bgVideoPhones = true;
   for (const k of ["tint", "tint2"]) if (typeof style[k] === "string" && HEX.test(style[k].trim())) out[k] = style[k].trim();
   one("tintDir", ["up", "right", "left", "diagonal", "radial"]);
   one("bgEffect", BG_EFFECTS);

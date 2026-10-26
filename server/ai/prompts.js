@@ -1,7 +1,7 @@
 // Prompt text for the site generator and editor. The block reference is built
 // from shared/schema.js so the AI always knows exactly what the editor supports.
 
-import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, ENTRANCE_EFFECTS } from "../../shared/schema.js";
+import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, ENTRANCE_EFFECTS, slugify } from "../../shared/schema.js";
 
 function describeField(f) {
   switch (f.type) {
@@ -54,7 +54,8 @@ STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; l
   "hide": { "d"|"t"|"m": true }, "minHeight": px,
   background image: "bgImage": URL (blocks only; sections use props.background "image" + props.image), "bgImageMobile": URL, "bgPos": "center"|"top"|"bottom"|"left"|"right"|"top left"|…, "bgSize": "contain",
   "bgFixed": true, "bgRepeat": true, "tint": hex, "tint2": hex (gradient tint), "tintDir": "up"|"right"|"left"|"diagonal"|"radial", "tintOpacity": 0-100 (sections default to props.overlay),
-  "bgEffect": "fade"|"zoom"|"zoom-out"|"pan"|"parallax", "bgBlur": px, "bgGray": %, "bgBright": % }
+  "bgEffect": "fade"|"zoom"|"zoom-out"|"pan"|"parallax", "bgBlur": px, "bgGray": %, "bgBright": %,
+  "bgVideo": YouTube/Vimeo/.mp4 URL (only if the owner gives one), "bgVideoPhones": true }
 HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.
 Prefer the section/block props and theme settings first; use STYLE for specific tweaks the owner asks for (spacing, borders, animations, hiding on mobile…).
 
@@ -182,10 +183,25 @@ export function buildPrompt({ brief, concept, requests = [], pageNotes = {} }) {
 
 // One line describing a concept's layout, so "generate another" can avoid it.
 export function describeLayout(site) {
-  const home = site.pages[0];
-  const sections = home.sections.map((s) => {
+  return `fonts ${site.theme.fonts.heading}/${site.theme.fonts.body}, primary ${site.theme.colors.primary}; sections: ${describePage(site.pages[0])}`;
+}
+
+export function describePage(page) {
+  return page.sections.map((s) => {
     const kinds = [...new Set(s.columns.flatMap((c) => c.blocks.map((b) => b.type)))].join("+") || "empty";
     return `${s.props.background}/${s.props.layout}:${kinds}`;
-  });
-  return `fonts ${site.theme.fonts.heading}/${site.theme.fonts.body}, primary ${site.theme.colors.primary}; sections: ${sections.join(" | ")}`;
+  }).join(" | ");
+}
+
+export const PAGE_SYSTEM = `${GENERATE_SYSTEM}
+
+YOU ARE DESIGNING ONE PAGE of a site whose home page design is approved. Use exactly the same theme, fonts, colours, tone of voice and kinds of section styling as the approved site, but give this page a layout that suits its purpose.
+${CONTACT_RULES}
+Respond with ONLY a JSON object: { "page": { "title", "slug", "seo": { "title", "description" }, "sections": [SECTION] } }. Do not change the theme, header or footer.`;
+
+export function pagePrompt({ brief, concept, title, previous = [], wishes = "" }) {
+  const prev = previous.length ? `\n\nThe owner has already seen these layouts for this page; make this one clearly DIFFERENT (different section order, backgrounds and block types):\n${previous.map((p, i) => `${i + 1}. ${p}`).join("\n")}` : "";
+  const info = brief.pageInfo?.[title] ? `\nWhat the owner wants on this page: ${brief.pageInfo[title]}` : "";
+  const extra = wishes ? `\nThe owner also asked: ${wishes}` : "";
+  return `APPROVED SITE (theme, header, footer and home page):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}\n\nDESIGN THIS PAGE: "${title}" (slug "${slugify(title)}").${info}${extra}${prev}`;
 }
