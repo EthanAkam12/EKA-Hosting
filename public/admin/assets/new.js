@@ -27,6 +27,9 @@ let state = load() || {
   notes: {}, // change requests per page: { "Whole site": "", "Home": "", "About": "" }
 };
 state.notes ||= {};
+// Tags this wizard run's AI calls so their cost is credited to the site it becomes.
+state.wizardId ||= Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => x.toString(16).padStart(2, "0")).join("");
+const wapi = (path, opts = {}) => api(path, { ...opts, headers: { ...opts.headers, "X-EKA-Wizard": state.wizardId } });
 state.brief.pageInfo ||= {};
 let busy = null; // text while waiting on the AI
 const openBoxes = new Set(["Home"]); // which page change boxes are expanded
@@ -244,7 +247,7 @@ async function newConcept() {
   try {
     const previous = state.concepts.map((c) => c.layout);
     const label = state.concepts.length ? "Designing another option…" : "Designing the homepage…";
-    const result = await runJob(label, () => api("/wizard/concept", { method: "POST", body: { brief: state.brief, previous } }));
+    const result = await runJob(label, () => wapi("/wizard/concept", { method: "POST", body: { brief: state.brief, previous } }));
     state.concepts.push({ site: result.site, layout: result.layout, requests: [], history: [] });
     state.current = state.concepts.length - 1;
     save();
@@ -260,7 +263,7 @@ async function newConcept() {
 async function refine(instruction, key) {
   const c = currentConcept();
   try {
-    const result = await runJob("Making your change…", () => api("/wizard/refine", { method: "POST", body: { concept: c.site, instruction } }));
+    const result = await runJob("Making your change…", () => wapi("/wizard/refine", { method: "POST", body: { concept: c.site, instruction } }));
     if (result.changed) {
       c.history.push(c.site);
       c.site = result.site;
@@ -307,7 +310,7 @@ async function buildSite() {
   try {
     busy = "Building the full site…";
     render();
-    const { site } = await api("/sites", { method: "POST", body: { brief: state.brief, concept: c.site, requests: c.requests, pageNotes, pages } });
+    const { site } = await wapi("/sites", { method: "POST", body: { brief: state.brief, concept: c.site, requests: c.requests, pageNotes, pages } });
     clearAndGo(`/admin/sites/${site.id}`);
   } catch (err) {
     busy = null;
@@ -327,7 +330,7 @@ async function newPageDesign() {
   if (!title || busy) return;
   const d = pageWork(title);
   try {
-    const result = await runJob(d.options.length ? `Designing another ${title} page…` : `Designing the ${title} page…`, () => api("/wizard/page", { method: "POST", body: {
+    const result = await runJob(d.options.length ? `Designing another ${title} page…` : `Designing the ${title} page…`, () => wapi("/wizard/page", { method: "POST", body: {
       brief: state.brief, concept: currentConcept().site, title,
       previous: d.options.map((o) => o.layout),
       wishes: me.ai.enabled ? (state.notes[title] || "") : "",
@@ -349,7 +352,7 @@ async function refinePage(instruction) {
   const opt = d.options[d.current];
   const home = currentConcept().site;
   try {
-    const result = await runJob("Making your change…", () => api("/wizard/refine", { method: "POST", body: { concept: { ...home, pages: [home.pages[0], opt.page] }, instruction, pageSlug: opt.page.slug } }));
+    const result = await runJob("Making your change…", () => wapi("/wizard/refine", { method: "POST", body: { concept: { ...home, pages: [home.pages[0], opt.page] }, instruction, pageSlug: opt.page.slug } }));
     const page = result.site.pages.find((p) => p.slug === opt.page.slug);
     if (result.changed && page) {
       d.history.push(structuredClone(opt));

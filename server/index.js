@@ -16,6 +16,7 @@ import compression from "compression";
 import { Store } from "./store.js";
 import { createAuth } from "./auth.js";
 import { createAi, applyBrief } from "./ai/index.js";
+import { usageContext, initUsageLog, usageSummary } from "./ai/usage.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
 import { saveUpload, deleteUpload } from "./media.js";
 import { buildStaticSite } from "./export.js";
@@ -198,6 +199,7 @@ function simplePage(title, body) {
 // ---------------------------------------------------------------------------
 
 // Images uploaded in the new-site wizard before the site exists (admin only).
+initUsageLog(DATA_DIR);
 const TMP_MEDIA = path.join(DATA_DIR, "tmp-media");
 await fs.mkdir(TMP_MEDIA, { recursive: true });
 app.get("/_tmp/:file", (req, res) => {
@@ -329,6 +331,10 @@ api.post("/demo/start", (req, res) => {
   res.json({ ok: true });
 });
 api.use(auth.requireApi);
+// Tag every AI call with who made it and, below, which website it's for.
+const wizardId = (req) => (/^[a-f0-9]{16}$/.test(req.get("X-EKA-Wizard") || "") ? req.get("X-EKA-Wizard") : undefined);
+api.use((req, res, next) => usageContext.run({ user: req.user, wizard: wizardId(req) }, next));
+api.param("id", (req, res, next, id) => usageContext.run({ user: req.user, siteId: id }, next));
 
 // Demo visitors only see their own sites; the admin doesn't see demo sites.
 function canSee(user, meta) {
@@ -425,6 +431,19 @@ api.get("/me", (req, res) => {
   });
 });
 
+// AI usage and estimated cost (admin only): this month and all time.
+api.get("/usage", async (req, res) => {
+  if (isDemo(req)) return res.status(403).json({ error: "Not available in the demo." });
+  const month = new Date();
+  month.setUTCDate(1); month.setUTCHours(0, 0, 0, 0);
+  const metas = store.list().filter((m) => !m.demo);
+  const names = Object.fromEntries(metas.map((m) => [m.id, m.name]));
+  // Designs made in the wizard count towards the site they became.
+  const wizards = Object.fromEntries(metas.filter((m) => m.wizardId).map((m) => [m.wizardId, m.id]));
+  const [thisMonth, allTime] = await Promise.all([usageSummary({ since: month.toISOString(), wizards }), usageSummary({ wizards })]);
+  res.json({ thisMonth, allTime, names });
+});
+
 api.get("/sites", (req, res) => res.json({ sites: store.list().filter((m) => canSee(req.user, m)).map(withUrl) }));
 
 // ---- new-site wizard ----------------------------------------------------------
@@ -484,7 +503,15 @@ async function briefImages(brief) {
   const mediaType = { webp: "image/webp", png: "image/png", jpg: "image/jpeg", gif: "image/gif" }[ext];
   if (!mediaType) return [];
   try {
-    return [{ mediaType, data: (await fs.readFile(file)).toString("base64") }];
+    let data = await fs.readFile(file);
+    let type = mediaType;
+    // A small copy is plenty for matching colours, and costs far fewer tokens.
+    try {
+      const sharp = (await import("sharp")).default;
+      data = await sharp(data).resize({ width: 400, height: 400, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+      type = "image/png";
+    } catch { /* send the original */ }
+    return [{ mediaType: type, data: data.toString("base64") }];
   } catch {
     return [];
   }
@@ -574,7 +601,8 @@ api.post("/sites", async (req, res) => {
     const pageNotes = cleanPageNotes(req.body.pageNotes);
     const name = brief.name || concept.name;
     const meta = await store.create({ name, prompt: brief.description, owner });
-    const job = startJob("generate", meta.id, async (progress) => {
+    if (wizardId(req)) await store.updateMeta(meta.id, { wizardId: wizardId(req) });
+    const job = usageContext.run({ user: req.user, siteId: meta.id }, () => startJob("generate", meta.id, async (progress) => {
       try {
         // Pages designed one by one in the wizard are used as they are; only
         // pages that weren't designed are built here.
@@ -605,7 +633,7 @@ api.post("/sites", async (req, res) => {
         await store.updateMeta(meta.id, { status: "error", error: err.message });
         throw err;
       }
-    });
+    }));
     await store.updateMeta(meta.id, { jobId: job.id });
     return res.json({ site: withUrl(store.getMeta(meta.id)), jobId: job.id });
   }
@@ -621,7 +649,7 @@ api.post("/sites", async (req, res) => {
 
   if (demoAiBlocked(req, res)) return;
   const meta = await store.create({ name: name || "New site", prompt, owner });
-  const job = startJob("generate", meta.id, async (progress) => {
+  const job = usageContext.run({ user: req.user, siteId: meta.id }, () => startJob("generate", meta.id, async (progress) => {
     try {
       const { site } = await ai.generateSite({ name, prompt, onProgress: progress });
       await fillPlaceholders(site, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/` });
@@ -632,7 +660,7 @@ api.post("/sites", async (req, res) => {
       await store.updateMeta(meta.id, { status: "error", error: err.message });
       throw err;
     }
-  });
+  }));
   await store.updateMeta(meta.id, { jobId: job.id });
   res.json({ site: withUrl(store.getMeta(meta.id)), jobId: job.id });
 });

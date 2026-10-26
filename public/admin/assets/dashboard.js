@@ -10,6 +10,7 @@ async function load() {
   const [{ sites }, meData] = await Promise.all([api("/sites"), me ? Promise.resolve(me) : api("/me")]);
   if (!me) demoBanner(meData);
   me = meData;
+  showUsageButton();
   notice.replaceChildren(
     me.ai.enabled
       ? ""
@@ -121,3 +122,45 @@ document.getElementById("logout").addEventListener("click", async () => {
 });
 
 load().catch((e) => toast(e.message, { error: true }));
+
+// ---- AI usage ---------------------------------------------------------------
+
+const money = (usd) => (usd < 0.01 && usd > 0 ? "under 1¢" : `$${usd.toFixed(2)}`);
+
+async function showUsageButton() {
+  const btn = document.getElementById("usage");
+  if (me.demo || !me.ai.enabled) return;
+  try {
+    const { thisMonth } = await api("/usage");
+    btn.textContent = `AI this month: ${money(thisMonth.total.cost)}`;
+    btn.hidden = false;
+    btn.onclick = openUsage;
+  } catch { /* leave hidden */ }
+}
+
+const KIND_NAMES = {
+  concept: "Homepage designs", "concept-another": "Homepage: generate another",
+  page: "Page designs", "page-another": "Pages: generate another",
+  build: "Building the rest of a site", edit: "Changes (AI tab and wizard)", generate: "Whole sites (quick start)",
+};
+
+async function openUsage() {
+  const { thisMonth, allTime, names } = await api("/usage");
+  const t = thisMonth.total;
+  const table = (rows) => h("table", { class: "usage-table" },
+    h("tr", {}, h("th", {}, ""), h("th", {}, "Calls"), h("th", {}, "Cost")),
+    rows.sort((a, b) => b[1].cost - a[1].cost).map(([label, v]) => h("tr", {}, h("td", {}, label), h("td", {}, String(v.calls)), h("td", {}, money(v.cost)))));
+  const saved = t.cacheRead ? Math.round((t.cacheRead / (t.input + t.cacheRead + t.cacheWrite)) * 100) : 0;
+  modal({
+    title: "AI usage",
+    wide: true,
+    body: h("div", {},
+      h("p", {}, h("strong", {}, `This month: ${money(t.cost)}`), ` from ${t.calls} AI calls. All time: ${money(allTime.total.cost)}.`),
+      h("p", { class: "small muted" }, `Estimated from Anthropic's list prices; your Anthropic bill is the exact figure. ${saved ? `${saved}% of what the AI read this month came from the cache at a fraction of the price.` : ""}`),
+      h("h3", {}, "By type of job"),
+      table(Object.entries(thisMonth.byKind).map(([k, v]) => [KIND_NAMES[k] || k, v])),
+      h("h3", {}, "By website"),
+      table(Object.entries(thisMonth.bySite).map(([id, v]) => [names[id] || ({ "(not saved yet)": "Designs not built yet", "(demo visitors)": "Demo visitors" })[id] || "Deleted website", v])),
+    ),
+  });
+}

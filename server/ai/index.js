@@ -7,6 +7,7 @@
 
 import { normalizeSite, normalizeSection, normalizeBlock, normalizePage, findNode, slugify } from "../../shared/schema.js";
 import { createAnthropicProvider } from "./anthropic.js";
+import { applyChanges } from "./changes.js";
 import { createDemoProvider } from "./demo.js";
 import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, describeLayout, describePage } from "./prompts.js";
 
@@ -26,8 +27,9 @@ function pickProvider() {
 // `provider` can be injected (used by the tests); normally it comes from env.
 export function createAi({ provider = pickProvider() } = {}) {
   const generateEffort = process.env.AI_GENERATE_EFFORT || "high";
-  // Concepts are previews the owner may regenerate several times: keep them quicker.
-  const conceptEffort = process.env.AI_CONCEPT_EFFORT || "medium";
+  // Homepage and page designs are what the owner judges first: a strong first
+  // design saves rounds of changes, so they get the same effort as full builds.
+  const conceptEffort = process.env.AI_CONCEPT_EFFORT || "high";
   // New sites use the strongest model; changes use a faster, cheaper one.
   const generateModel = process.env.AI_MODEL || provider.model;
   const editModel = process.env.AI_EDIT_MODEL || (provider.name === "claude" ? "claude-sonnet-5-5" : provider.model);
@@ -44,6 +46,7 @@ export function createAi({ provider = pickProvider() } = {}) {
         return { ...result, site: normalizeSite(result.site) };
       }
       const text = await provider.complete({
+        kind: "generate",
         system: GENERATE_SYSTEM,
         prompt: generatePrompt({ name, prompt, media }),
         model: generateModel,
@@ -66,6 +69,7 @@ export function createAi({ provider = pickProvider() } = {}) {
         site = normalizeSite((await provider.generateConcept({ brief, variant: previous.length })).site);
       } else {
         const text = await provider.complete({
+          kind: previous.length ? "concept-another" : "concept",
           system: CONCEPT_SYSTEM,
           prompt: conceptPrompt({ brief: { ...brief, logoAttached: images.length > 0 }, previous }),
           images,
@@ -95,6 +99,7 @@ export function createAi({ provider = pickProvider() } = {}) {
         page = (await provider.generatePage({ brief, concept, title, variant: previous.length })).page;
       } else {
         const text = await provider.complete({
+          kind: previous.length ? "page-another" : "page",
           system: PAGE_SYSTEM,
           prompt: pagePrompt({ brief, concept, title, previous, wishes }),
           model: generateModel,
@@ -114,6 +119,7 @@ export function createAi({ provider = pickProvider() } = {}) {
         return { site: applyBrief(normalizeSite((await provider.buildFromConcept({ brief, concept, pageNotes })).site), brief) };
       }
       const text = await provider.complete({
+        kind: "build",
         system: BUILD_SYSTEM,
         prompt: buildPrompt({ brief, concept, requests, pageNotes }),
         model: generateModel,
@@ -135,6 +141,7 @@ export function createAi({ provider = pickProvider() } = {}) {
       const selected = selectedId ? findNode(site, selectedId) : null;
       const page = site.pages.find((p) => p.id === pageId) || site.pages[0];
       const text = await provider.complete({
+        kind: "edit",
         system: EDIT_SYSTEM,
         prompt: editPrompt({
           site,
@@ -158,6 +165,12 @@ export function createAi({ provider = pickProvider() } = {}) {
         replacement.id = selectedId;
         target.parent[target.index] = replacement;
         return { site: normalizeSite(next), summary, changed: true };
+      }
+      if (Array.isArray(data.changes)) {
+        const result = applyChanges(site, data.changes);
+        if (!result.applied && data.changes.length) throw new Error("The AI's change didn't fit this site. Please try again, or rephrase it.");
+        if (result.failed.length) console.warn("Some AI changes were skipped:", result.failed.join("; "));
+        return { site: result.site, summary, changed: result.applied > 0 };
       }
       if (data.site) return { site: normalizeSite(data.site), summary, changed: true };
       throw new Error("The AI's answer wasn't in the expected format. Please try again.");

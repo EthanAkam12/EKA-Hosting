@@ -159,6 +159,8 @@ test("wizard: AI concept, refine and build keep the approved home page", async (
   const provider = {
     name: "claude", model: "claude-opus-5-5",
     complete: async (args) => {
+      // Prompts can come in parts; the first, shared part is cached.
+      args = { ...args, parts: args.prompt, prompt: typeof args.prompt === "string" ? args.prompt : args.prompt.map((p) => p.text).join("\n") };
       calls.push(args);
       if (args.prompt.startsWith("Design a home page concept")) {
         return JSON.stringify({ name: "x", theme: { colors: { primary: "#000000" } }, pages: [{ title: "Home", slug: "index", sections: [{ type: "section", props: {}, columns: [{ blocks: [{ type: "heading", props: { text: "Hello" } }] }] }] }] });
@@ -173,6 +175,8 @@ test("wizard: AI concept, refine and build keep the approved home page", async (
   assert.equal(c.site.theme.colors.primary, "#112233", "owner's colours win");
   assert.equal(c.site.name, "Smith");
   assert.match(calls[0].prompt, /CLEARLY different/);
+  assert.equal(calls[0].parts[0].cache, true, "the brief is cached for the next design");
+  assert.doesNotMatch(calls[0].parts[0].text, /CLEARLY different/, "the varying part comes after the cached part");
   assert.equal(calls[0].images.length, 1, "logo is shown to the AI");
   const r = await ai.refineConcept({ concept: c.site, instruction: "darker" });
   assert.equal(r.changed, false);

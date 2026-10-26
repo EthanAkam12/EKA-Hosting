@@ -81,10 +81,20 @@ ${blockReference()}
 ${DESIGN_GUIDE}`;
 
 export const EDIT_SYSTEM = `You are an expert web designer editing a small-business website in a block-based website builder.
-You receive the current site as JSON plus a change request from the site owner. Make exactly the change requested — keep everything else the same, including every existing "id". New sections/blocks may omit "id".
-Respond with ONLY a single JSON object (no prose, no markdown fences), in one of these shapes:
-  { "summary": "<one or two sentences describing what you changed>", "site": <the complete updated site JSON> }
-  { "summary": "...", "node": <the complete updated SELECTED section or block> }   ← only when a selected element is given AND the change only affects it
+You receive the current site as JSON plus a change request from the site owner. Make exactly the change requested and nothing else.
+Respond with ONLY a single JSON object (no prose, no markdown fences): { "summary": "<one or two sentences describing what you changed>", "changes": [CHANGE, ...] }
+Return ONLY what changes, never the whole site. CHANGE is one of:
+  { "op": "theme", "theme": { only the theme fields that change, e.g. { "colors": { "primary": "#1f3a5f" } } } }
+  { "op": "header", "header": { only the header fields that change } }
+  { "op": "footer", "footer": { only the footer fields that change } }
+  { "op": "site", "name"?: string, "customCss"?: string }
+  { "op": "replace", "id": "<existing section or block id>", "node": <the complete updated section or block, same id> }
+  { "op": "insert", "page": "<page slug>", "after": "<section id, or null for the top of the page>", "section": <new SECTION> }
+  { "op": "remove", "id": "<section or block id>" }
+  { "op": "move", "id": "<section id>", "after": "<section id on the same page, or null for the top>" }
+  { "op": "page", "page": <a complete page> }   (adds a page, or replaces the page with the same slug)
+  { "op": "removePage", "slug": "<page slug>" }
+Use the smallest changes that do the job: to change one block, replace that block; to add a block to a section, replace that section. Keep existing ids; new sections and blocks may omit "id".
 If the request can't be done in this builder, return { "summary": "<explain why and suggest an alternative>", "noop": true }.
 
 ${blockReference()}
@@ -162,7 +172,8 @@ export function conceptPrompt({ brief, previous = [] }) {
   const prev = previous.length
     ? `\n\nThe owner has already seen ${previous.length} concept(s) and asked for something different. Earlier concepts were:\n${previous.map((p, i) => `${i + 1}. ${p}`).join("\n")}\nMake this one CLEARLY different: a different hero treatment, different section order and mix, different background rhythm${brief.colors?.primary ? "" : ", and a different colour palette and fonts"}. Keep the same business details.`
     : "";
-  return `Design a home page concept for this business.\n\n${formatBrief(brief)}${prev}`;
+  // The brief is the same for every "generate another", so it's cached.
+  return [{ text: `Design a home page concept for this business.\n\n${formatBrief(brief)}`, cache: true }, { text: prev.trim() }];
 }
 
 export const BUILD_SYSTEM = `${GENERATE_SYSTEM}
@@ -203,5 +214,10 @@ export function pagePrompt({ brief, concept, title, previous = [], wishes = "" }
   const prev = previous.length ? `\n\nThe owner has already seen these layouts for this page; make this one clearly DIFFERENT (different section order, backgrounds and block types):\n${previous.map((p, i) => `${i + 1}. ${p}`).join("\n")}` : "";
   const info = brief.pageInfo?.[title] ? `\nWhat the owner wants on this page: ${brief.pageInfo[title]}` : "";
   const extra = wishes ? `\nThe owner also asked: ${wishes}` : "";
-  return `APPROVED SITE (theme, header, footer and home page):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}\n\nDESIGN THIS PAGE: "${title}" (slug "${slugify(title)}").${info}${extra}${prev}`;
+  // The approved site and brief are the same for every page and every
+  // "generate another", so they're cached; only the page request varies.
+  return [
+    { text: `APPROVED SITE (theme, header, footer and home page):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}`, cache: true },
+    { text: `DESIGN THIS PAGE: "${title}" (slug "${slugify(title)}").${info}${extra}${prev}` },
+  ];
 }
