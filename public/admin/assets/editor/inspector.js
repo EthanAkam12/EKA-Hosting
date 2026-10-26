@@ -1,6 +1,6 @@
 // Right-hand property panel for whatever is selected.
 
-import { BLOCKS, SECTION_FIELDS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
+import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
 import { h } from "../ui.js";
 import { fieldControl } from "./fields.js";
 
@@ -85,10 +85,10 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
   function styleField(node, key, field) {
     const st = node.style || {};
     root.append(fieldControl({ key, ...field }, st[key], (v, opts) => set(`style:${node.id}:${key}`, (site) => {
-      const n = findNode(site, node.id);
+      const n = node.id === "header" || node.id === "footer" ? { node: site[node.id] } : findNode(site, node.id);
       if (!n) return;
       const next = { ...(n.node.style || {}) };
-      if (v === null || v === undefined || v === "" || v === "default") delete next[key];
+      if (v === null || v === undefined || v === "" || v === "default" || v === false) delete next[key];
       else next[key] = v;
       n.node.style = next;
     }, opts), ctx()));
@@ -100,9 +100,15 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     const isSection = kind === "section";
     if (isSection || TEXTY.includes(node.type)) {
       group("Text");
+      styleField(node, "fontFamily", { label: "Font", type: "select", options: ["default", ...Object.keys(FONT_CHOICES)], labels: ["Site default", ...Object.values(FONT_CHOICES).map((f) => f.label)] });
+      if (isSection) root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Changes all the text in this section."));
       if (!isSection) {
         styleField(node, "fontSize", { label: "Font size", type: "slider", min: 10, max: 120 });
         styleField(node, "fontWeight", { label: "Weight", type: "select", options: ["default", 300, 400, 500, 600, 700, 800, 900], labels: ["Default", "Light", "Normal", "Medium", "Semi-bold", "Bold", "Extra bold", "Black"] });
+        styleField(node, "textTransform", { label: "Capitals", type: "select", options: ["default", "uppercase", "lowercase", "capitalize", "none"], labels: ["Default", "ALL CAPITALS", "all lower case", "Capital Each Word", "As typed"] });
+        styleField(node, "italic", { label: "Italic", type: "checkbox" });
+        styleField(node, "lineHeight", { label: "Line height", type: "slider", min: 80, max: 250, step: 5, unit: "%" });
+        styleField(node, "letterSpacing", { label: "Letter spacing", type: "slider", min: -3, max: 20 });
       }
       styleField(node, "color", { label: "Text colour", type: "coloropt" });
     }
@@ -163,11 +169,20 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
   }
 
   function renderHeader() {
-    head.textContent = "Header";
+    head.textContent = "Header (every page)";
     const hd = state.get().site.header;
+    tabs({ content: "Content", style: "Style" });
+    if (tab !== "content") return frameStyle({ id: "header", style: hd.style });
     const field = (f) => root.append(fieldControl(f, hd[f.key], (v, opts) => set(`header:${f.key}`, (site) => { site.header[f.key] = v; }, opts), ctx()));
     field({ key: "logoText", label: "Logo text", type: "text" });
     field({ key: "logoImage", label: "Logo image (optional, replaces text)", type: "image" });
+    const slider = (key, label, min, max, def) => root.append(fieldControl({ key, label, type: "slider", min, max, placeholder: def ?? "auto" }, hd[key] === def ? null : hd[key], (v) => set(`header:${key}`, (site) => { site.header[key] = v ?? def; }), ctx()));
+    if (hd.logoImage) {
+      slider("logoHeight", "Logo size", 20, 160, 40);
+      slider("logoHeightMobile", "Logo size on phones", 16, 120, null);
+    } else {
+      slider("logoTextSize", "Logo text size", 12, 72, 20);
+    }
     field({ key: "ctaText", label: "Button text (leave empty for none)", type: "text" });
     field({ key: "ctaHref", label: "Button link", type: "url" });
     field({ key: "sticky", label: "Stick to top when scrolling", type: "checkbox" });
@@ -182,16 +197,35 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
   }
 
   function renderFooter() {
-    head.textContent = "Footer";
+    head.textContent = "Footer (every page)";
     const ft = state.get().site.footer;
+    tabs({ content: "Content", style: "Style" });
+    if (tab !== "content") return frameStyle({ id: "footer", style: ft.style });
     root.append(fieldControl({ key: "text", label: "Footer text", type: "textarea" }, ft.text, (v, opts) => set("footer:text", (site) => { site.footer.text = v; }, opts), ctx()));
     root.append(fieldControl({ ...menuField, label: "Footer links" }, ft.links, (v, opts) => set("footer:links", (site) => { site.footer.links = v; }, opts), ctx()));
+  }
+
+  // Header and footer: the same style controls as a section, on one tab.
+  function frameStyle(node) {
+    group("Colours & text");
+    styleField(node, "bg", { label: "Background", type: "coloropt" });
+    styleField(node, "color", { label: "Text & link colour", type: "coloropt" });
+    styleField(node, "fontFamily", { label: "Font", type: "select", options: ["default", ...Object.keys(FONT_CHOICES)], labels: ["Site default", ...Object.values(FONT_CHOICES).map((f) => f.label)] });
+    group("Border & shadow");
+    styleField(node, "borderWidth", { label: "Border width", type: "slider", min: 0, max: 20, placeholder: 0 });
+    if (node.style?.borderWidth) styleField(node, "borderColor", { label: "Border colour", type: "coloropt" });
+    styleField(node, "shadow", { label: "Shadow", type: "select", options: ["default", "sm", "md", "lg", "xl"], labels: ["None", "Small", "Medium", "Large", "Extra large"] });
+    group("Spacing");
+    styleField(node, "padding", { label: "Padding (inside)", type: "box" });
   }
 
   function renderPage() {
     const page = state.page();
     head.textContent = "Page settings";
     root.append(h("div", { class: "empty-insp" }, h("div", { class: "big" }, "👆"), "Click anything on the page to edit it, or drag new blocks in from the Add tab."));
+    root.append(h("div", { class: "row", style: { justifyContent: "center", marginTop: "-6px" } },
+      h("button", { class: "btn btn-sm", onclick: () => state.select("header") }, "Edit header"),
+      h("button", { class: "btn btn-sm", onclick: () => state.select("footer") }, "Edit footer")));
     root.append(h("hr", { class: "sep" }));
     const pf = (f, get, apply) => root.append(fieldControl(f, get(), (v, opts) => set(`page:${page.id}:${f.key}`, (site) => {
       const p = site.pages.find((x) => x.id === page.id);

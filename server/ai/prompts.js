@@ -7,7 +7,8 @@ function describeField(f) {
   switch (f.type) {
     case "select": return `${f.key}: one of ${f.options.map((o) => JSON.stringify(o)).join("|")}`;
     case "checkbox": return `${f.key}: boolean`;
-    case "number": return `${f.key}: number`;
+    case "number":
+    case "slider": return `${f.key}: number`;
     case "lines": return `${f.key}: string[]`;
     case "richtext": return `${f.key}: HTML string (only p, br, strong, em, a, ul, ol, li)`;
     case "image": return `${f.key}: image URL or ""`;
@@ -47,7 +48,7 @@ ${blocks}
 STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; leave out what you don't need):
 { "margin"|"padding": { "d"|"t"|"m": { "t", "r", "b", "l" } } (px per side; d = desktop, t = tablet override, m = mobile override),
   "bg": hex, "bg2": hex (gradient end), "color": hex (text), "radius": px, "borderWidth": px, "borderStyle": "solid"|"dashed"|"dotted"|"double", "borderColor": hex,
-  "shadow": "sm"|"md"|"lg"|"xl", "fontSize": px, "fontWeight": 300-900, "maxWidth": px, "align": "center"|"right" (with maxWidth), "gap": px (sections: space between columns),
+  "shadow": "sm"|"md"|"lg"|"xl", "fontSize": px, "fontWeight": 300-900, "fontFamily": FONT, "lineHeight": % (e.g. 150), "letterSpacing": px, "textTransform": "uppercase"|"lowercase"|"capitalize"|"none", "italic": true, "maxWidth": px, "align": "center"|"right" (with maxWidth), "gap": px (sections: space between columns),
   "animation": ANIMATION, "speed": "fast"|"slow", "delay": ms, "hover": HOVER (buttons blocks: button hover animation; other blocks: hover effect), "btnSize": "sm"|"md"|"lg"|"xl",
   "hide": { "d"|"t"|"m": true } }
 HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.

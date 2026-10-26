@@ -51,3 +51,20 @@ test("page descriptions and per-page changes reach the AI and the templates", as
   const { site } = await demo.buildFromConcept({ brief, concept: normalizeSite(concept) });
   assert.match(JSON.stringify(site.pages.find((p) => p.slug === "about")), /Margaret/);
 });
+
+test("a font picked for one element only loads on the page that uses it", async () => {
+  const { fontsHref } = await import("../shared/render.js");
+  const site = createEmptySite("x");
+  const heading = createBlock("heading");
+  heading.style = { fontFamily: "pacifico", textTransform: "uppercase" };
+  site.pages[0].sections = [createSection({}, [[heading]])];
+  site.pages.push({ title: "About", slug: "about", sections: [] });
+  site.header.style = { bg: "#112233", color: "#ffffff" };
+  const n = normalizeSite(site);
+  assert.match(fontsHref(n, n.pages[0]), /Pacifico/);
+  assert.equal(fontsHref(n, n.pages[1]), "");
+  const html = renderPage(n, n.pages[0]);
+  assert.match(html, /font-family:"Pacifico", cursive/);
+  assert.match(html, /class="eka-header sticky x-header"/);
+  assert.match(html, /\.x-header\.x-header\{background-color:#112233;color:#ffffff\}/);
+});

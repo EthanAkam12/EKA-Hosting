@@ -89,6 +89,16 @@ const renderers = {
       .join("")}</div>`;
   },
 
+  logo(p, ctx) {
+    const hd = ctx.site.header;
+    const src = p.image || hd.logoImage;
+    const hgt = Math.max(20, Math.min(400, Number(p.height) || 80));
+    const inner = src
+      ? `<img src="${esc(safeUrl(src))}" alt="${esc(hd.logoText || ctx.site.name)}" style="height:${hgt}px;width:auto" loading="lazy" decoding="async">`
+      : `<span class="eka-logo-text" style="font-size:${Math.round(hgt * 0.45)}px">${esc(hd.logoText || ctx.site.name)}</span>`;
+    return `<div class="eka-logo-b j-${p.align}">${p.link ? `<a ${attrHref("/", ctx)}>${inner}</a>` : inner}</div>`;
+  },
+
   image(p, ctx) {
     const ratio = p.ratio === "auto" ? "" : ` r-${p.ratio.replace(":", "-")}`;
     const inner = p.src ? img(p.src, p.alt, ctx, { sizes: "(max-width: 760px) 100vw, 50vw" }) : ctx.editor ? placeholderImage() : "";
@@ -288,11 +298,24 @@ function styleNode(node, ctx, { kind, first }) {
   if (st.borderWidth) add(`border:${st.borderWidth}px ${st.borderStyle || "solid"} ${st.borderColor || "color-mix(in srgb,currentColor 25%,transparent)"}`);
   if (st.shadow) add(`box-shadow:${SHADOW_CSS[st.shadow]}`);
   if (st.gap !== undefined && kind === "section") rules.push(`${sel} .eka-cols{gap:${st.gap}px}`);
+  if (kind === "header") {
+    if (st.color) rules.push(`${sel} :is(.eka-logo,.eka-nav a:not(.eka-btn)){color:${st.color}}${sel} .eka-burger span,${sel} .eka-burger span::before,${sel} .eka-burger span::after{background:${st.color}}`);
+    if (st.bg) rules.push(`${sel} .eka-nav{background:${st.bg}}`);
+  }
   if (st.fontSize) {
     const fs = st.fontSize > 24 ? `clamp(${Math.round(st.fontSize * 0.6)}px,${(st.fontSize / 12.8).toFixed(2)}vw,${st.fontSize}px)` : `${st.fontSize}px`;
     rules.push(`${sel},${sel} :is(h1,h2,h3,h4,blockquote,.eka-btn){font-size:${fs}}`);
   }
-  if (st.fontWeight) rules.push(`${sel},${sel} :is(h1,h2,h3,h4,.eka-btn){font-weight:${st.fontWeight}}`);
+  // Typography: on the element and on headings/buttons inside, which
+  // otherwise use the site's heading and button settings.
+  const type = [];
+  if (st.fontWeight) type.push(`font-weight:${st.fontWeight}`);
+  if (st.fontFamily && FONT_CHOICES[st.fontFamily]) type.push(`font-family:${FONT_CHOICES[st.fontFamily].stack}`);
+  if (st.lineHeight) type.push(`line-height:${(st.lineHeight / 100).toFixed(2)}`);
+  if (st.letterSpacing !== undefined) type.push(`letter-spacing:${st.letterSpacing}px`);
+  if (st.textTransform) type.push(`text-transform:${st.textTransform}`);
+  if (st.italic) type.push("font-style:italic");
+  if (type.length) rules.push(`${sel},${sel} :is(h1,h2,h3,h4,blockquote,summary,.eka-btn,.eka-stats strong,.eka-price-amt strong){${type.join(";")}}`);
   for (const dev of Object.keys(st.hide || {})) {
     // The editor shows hidden elements faded so they can still be selected.
     rules.push(`${HIDE_MEDIA[dev]}{${sel}{${ctx.editor ? "opacity:.3;filter:grayscale(1)" : "display:none!important"}}}`);
@@ -372,8 +395,12 @@ function navLinks(site) {
 function renderHeader(site, ctx) {
   const h = site.header;
   const logo = h.logoImage
-    ? `<img src="${esc(safeUrl(h.logoImage))}" alt="${esc(h.logoText || site.name)}" height="40" fetchpriority="high">`
+    ? `<img src="${esc(safeUrl(h.logoImage))}" alt="${esc(h.logoText || site.name)}" height="${h.logoHeight || 40}" fetchpriority="high">`
     : `<span>${esc(h.logoText || site.name)}</span>`;
+  // Logo size: --lh (image height) and --lt (text size), smaller on phones.
+  const lh = h.logoHeight || 40, lt = h.logoTextSize || 20;
+  const lhm = h.logoHeightMobile || Math.min(lh, 48);
+  const logoVars = lh !== 40 || lt !== 20 || h.logoHeightMobile ? ` style="--lh:${lh}px;--lhm:${lhm}px;--lt:${lt}px"` : "";
   const links = navLinks(site);
   const current = pageUrl(ctx.page, ctx.base);
   const nav = links
@@ -386,13 +413,15 @@ function renderHeader(site, ctx) {
   const burger = links.length || cta
     ? `<input type="checkbox" id="eka-nav-t" class="eka-nav-t"><label for="eka-nav-t" class="eka-burger" aria-label="Open menu"><span></span></label>`
     : "";
-  return `<header class="eka-header${h.sticky ? " sticky" : ""}"${ctx.editor ? ' data-eka-kind="header" data-eka-id="header"' : ""}><div class="eka-wrap eka-header-in"><a class="eka-logo" ${attrHref("/", ctx)}>${logo}</a>${burger}<nav class="eka-nav" aria-label="Main">${nav}${cta}</nav></div></header>`;
+  const extra = ctx.css ? styleNode({ id: "header", type: "header", style: h.style }, ctx, { kind: "header" }) : [];
+  return `<header class="eka-header${h.sticky ? " sticky" : ""}${extra.length ? " " + extra.join(" ") : ""}"${ctx.editor ? ' data-eka-kind="header" data-eka-id="header"' : ""}><div class="eka-wrap eka-header-in"><a class="eka-logo"${logoVars} ${attrHref("/", ctx)}>${logo}</a>${burger}<nav class="eka-nav" aria-label="Main">${nav}${cta}</nav></div></header>`;
 }
 
 function renderFooter(site, ctx) {
   const f = site.footer;
   const links = f.links.length ? `<nav class="eka-footer-links">${f.links.map((l) => `<a ${attrHref(l.href, ctx)}>${esc(l.text)}</a>`).join("")}</nav>` : "";
-  return `<footer class="eka-footer"${ctx.editor ? ' data-eka-kind="footer" data-eka-id="footer"' : ""}><div class="eka-wrap eka-footer-in"><p>${esc(f.text)}</p>${links}</div></footer>`;
+  const extra = ctx.css ? styleNode({ id: "footer", type: "footer", style: f.style }, ctx, { kind: "footer" }) : [];
+  return `<footer class="eka-footer${extra.length ? " " + extra.join(" ") : ""}"${ctx.editor ? ' data-eka-kind="footer" data-eka-id="footer"' : ""}><div class="eka-wrap eka-footer-in"><p>${esc(f.text)}</p>${links}</div></footer>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -433,7 +462,10 @@ p{margin:0 0 1em}
 .eka-header.sticky{position:sticky;top:0}
 .eka-header-in{display:flex;align-items:center;gap:20px;min-height:68px}
 .eka-logo{display:flex;align-items:center;font-family:var(--f-head);font-weight:700;font-size:1.25rem;color:var(--c-text);text-decoration:none;margin-right:auto}
-.eka-logo img{height:40px;width:auto}
+.eka-logo{font-size:var(--lt,1.25rem)}.eka-logo img{height:var(--lh,40px);width:auto}
+@media (max-width:760px){.eka-logo img{height:var(--lhm,40px)}}
+.eka-logo-b{display:flex}.eka-logo-b a{display:inline-flex;text-decoration:none;color:inherit}.eka-logo-b img{max-width:100%;object-fit:contain}
+.eka-logo-text{font-family:var(--f-head);font-weight:700;line-height:1.1}
 .eka-nav{display:flex;align-items:center;gap:22px}
 .eka-nav a:not(.eka-btn){color:var(--c-text);text-decoration:none;font-weight:500;font-size:.98rem}
 .eka-nav a[aria-current=page]:not(.eka-btn),.eka-nav a:not(.eka-btn):hover{color:var(--c-primary)}
@@ -559,12 +591,22 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 @media (prefers-reduced-motion:no-preference){.an{animation:var(--an) var(--an-d,.8s) cubic-bezier(.2,.7,.2,1) var(--an-delay,0s) both}@supports (animation-timeline:view()){.an-scroll{animation-duration:auto;animation-delay:0s;animation-timeline:view();animation-range:entry var(--an-rs,0%) entry var(--an-re,70%)}}}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}`;
 
-function fontLinks(theme) {
-  const families = [...new Set([theme.fonts.heading, theme.fonts.body])]
-    .map((k) => FONT_CHOICES[k]?.google)
-    .filter(Boolean);
-  if (!families.length) return "";
-  const href = `https://fonts.googleapis.com/css2?${families.map((f) => `family=${f}`).join("&")}&display=swap`;
+// Google Fonts URL for the site's fonts plus any picked for single elements
+// on this page (so a font used once doesn't load on every page).
+export function fontsHref(site, page) {
+  const keys = new Set([site.theme.fonts.heading, site.theme.fonts.body]);
+  const walk = (node) => {
+    if (node.style?.fontFamily) keys.add(node.style.fontFamily);
+    for (const c of node.columns || []) c.blocks.forEach(walk);
+  };
+  [site.header, site.footer, ...(page?.sections || [])].forEach(walk);
+  const families = [...keys].map((k) => FONT_CHOICES[k]?.google).filter(Boolean);
+  return families.length ? `https://fonts.googleapis.com/css2?${families.map((f) => `family=${f}`).join("&")}&display=swap` : "";
+}
+
+function fontLinks(site, page) {
+  const href = fontsHref(site, page);
+  if (!href) return "";
   return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${href}">`;
 }
 
@@ -580,9 +622,10 @@ function fontLinks(theme) {
 export function renderBody(site, page, opts = {}) {
   const ctx = { site, page, base: opts.base || "/", editor: !!opts.editor, formAction: opts.formAction, eagerImages: 2, css: [] };
   const sections = page.sections.map((s, i) => { ctx.sectionIndex = i; return renderSection(s, ctx); }).join("");
+  const header = renderHeader(site, ctx), footer = renderFooter(site, ctx);
   const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
   const empty = ctx.editor && !page.sections.length ? `<div class="eka-page-empty">This page is empty. Drag a section or block here, or ask the AI to build it.</div>` : "";
-  return `${nodeCss}${renderHeader(site, ctx)}<main id="main">${sections}${empty}</main>${renderFooter(site, ctx)}`;
+  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}`;
 }
 
 export function renderCss(site) {
@@ -593,7 +636,7 @@ export function renderPage(site, page, opts = {}) {
   const title = page.seo.title || (page.slug === "index" ? site.name : `${page.title} | ${site.name}`);
   const desc = page.seo.description;
   const canonical = opts.canonical ? `<link rel="canonical" href="${esc(opts.canonical)}">` : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ""}<meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ""}${canonical}<meta name="theme-color" content="${esc(site.theme.colors.primary)}"><link rel="icon" href="data:,">${fontLinks(site.theme)}<style>${renderCss(site)}</style></head><body>${renderBody(site, page, opts)}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ""}<meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ""}${canonical}<meta name="theme-color" content="${esc(site.theme.colors.primary)}"><link rel="icon" href="data:,">${fontLinks(site, page)}<style>${renderCss(site)}</style></head><body>${renderBody(site, page, opts)}</body></html>`;
 }
 
 export { BLOCKS, LAYOUT_COLUMNS };

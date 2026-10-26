@@ -32,6 +32,19 @@ export const FONT_CHOICES = {
   lora: { label: "Lora", stack: '"Lora", Georgia, serif', google: "Lora:wght@400;600;700" },
   montserrat: { label: "Montserrat", stack: '"Montserrat", system-ui, sans-serif', google: "Montserrat:wght@400;600;700" },
   dmsans: { label: "DM Sans", stack: '"DM Sans", system-ui, sans-serif', google: "DM+Sans:wght@400;600;700" },
+  roboto: { label: "Roboto", stack: '"Roboto", system-ui, sans-serif', google: "Roboto:wght@400;500;700" },
+  opensans: { label: "Open Sans", stack: '"Open Sans", system-ui, sans-serif', google: "Open+Sans:wght@400;600;700" },
+  lato: { label: "Lato", stack: '"Lato", system-ui, sans-serif', google: "Lato:wght@400;700" },
+  nunito: { label: "Nunito", stack: '"Nunito", system-ui, sans-serif', google: "Nunito:wght@400;600;700" },
+  worksans: { label: "Work Sans", stack: '"Work Sans", system-ui, sans-serif', google: "Work+Sans:wght@400;600;700" },
+  raleway: { label: "Raleway", stack: '"Raleway", system-ui, sans-serif', google: "Raleway:wght@400;600;700" },
+  oswald: { label: "Oswald (tall, condensed)", stack: '"Oswald", "Arial Narrow", sans-serif', google: "Oswald:wght@400;500;700" },
+  bebas: { label: "Bebas Neue (headline caps)", stack: '"Bebas Neue", "Arial Narrow", sans-serif', google: "Bebas+Neue" },
+  merriweather: { label: "Merriweather", stack: '"Merriweather", Georgia, serif', google: "Merriweather:wght@400;700" },
+  cormorant: { label: "Cormorant Garamond", stack: '"Cormorant Garamond", Georgia, serif', google: "Cormorant+Garamond:wght@400;600;700" },
+  baskerville: { label: "Libre Baskerville", stack: '"Libre Baskerville", Georgia, serif', google: "Libre+Baskerville:wght@400;700" },
+  dancing: { label: "Dancing Script (handwritten)", stack: '"Dancing Script", cursive', google: "Dancing+Script:wght@400;700" },
+  pacifico: { label: "Pacifico (fun script)", stack: '"Pacifico", cursive', google: "Pacifico" },
 };
 
 export const DEFAULT_THEME = {
@@ -94,6 +107,16 @@ export const BLOCKS = {
         { key: "icon", label: "Icon", type: "select", options: ["none", "arrow", "phone", "email", "download", "play", "cart", "check"], labels: ["None", "→ Arrow", "☎ Phone", "✉ Email", "↓ Download", "▶ Play", "🛒 Basket", "✓ Tick"] },
       ] },
       { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  logo: {
+    label: "Logo", icon: "◎", group: "Basic",
+    defaults: () => ({ image: "", height: 80, align: "center", link: true }),
+    fields: [
+      { key: "image", label: "Image (leave empty to use the site logo)", type: "image" },
+      { key: "height", label: "Size", type: "slider", min: 20, max: 400, placeholder: 80 },
+      { key: "align", label: "Align", ...ALIGN },
+      { key: "link", label: "Clicking it goes to the home page", type: "checkbox" },
     ],
   },
   image: {
@@ -364,9 +387,10 @@ function normalizeField(field, value, fallback) {
     }
     case "checkbox":
       return typeof value === "boolean" ? value : fallback;
-    case "number": {
+    case "number":
+    case "slider": {
       const n = Number(value);
-      return Number.isFinite(n) ? n : fallback;
+      return value !== null && value !== "" && Number.isFinite(n) ? n : fallback;
     }
     case "lines":
       return Array.isArray(value) ? value.map((v) => str(v)).filter((v) => v !== "") : fallback;
@@ -395,6 +419,7 @@ function clampNum(v, min, max, fallback) {
 //   radius, borderWidth, fontSize, maxWidth, gap: px
 //   bg, bg2 (gradient end), color, borderColor: hex
 //   borderStyle, shadow, fontWeight, animation, speed, delay (ms), hover, btnSize
+//   fontFamily (FONT_CHOICES key), lineHeight (%), letterSpacing (px), textTransform, italic
 //   hide: { d, t, m }
 export const DEVICES = ["d", "t", "m"];
 const SIDES = ["t", "r", "b", "l"];
@@ -426,6 +451,11 @@ export function normalizeStyle(style) {
   one("hover", HOVER_EFFECTS);
   one("btnSize", ["sm", "md", "lg", "xl"]);
   one("align", ["left", "center", "right"]);
+  if (FONT_CHOICES[style.fontFamily]) out.fontFamily = style.fontFamily;
+  num("lineHeight", 80, 300); // % of the font size
+  num("letterSpacing", -5, 30);
+  one("textTransform", ["uppercase", "lowercase", "capitalize", "none"]);
+  if (style.italic === true) out.italic = true;
   const fw = Number(style.fontWeight);
   if ([300, 400, 500, 600, 700, 800, 900].includes(fw)) out.fontWeight = fw;
   if (isObj(style.hide)) {
@@ -522,10 +552,15 @@ export function normalizeSite(site) {
       sticky: typeof header.sticky === "boolean" ? header.sticky : true,
       // null = build navigation from pages automatically
       links: navLinks && navLinks.length ? navLinks : null,
+      logoHeight: clampNum(header.logoHeight, 20, 160, 40),
+      logoHeightMobile: clampNum(header.logoHeightMobile, 16, 120, null), // null = same as desktop, capped
+      logoTextSize: clampNum(header.logoTextSize, 12, 72, 20),
+      ...(normalizeStyle(header.style) ? { style: normalizeStyle(header.style) } : {}),
     },
     footer: {
       text: str(footer.text, `© ${new Date().getFullYear()} ${name}`),
       links: Array.isArray(footer.links) ? footer.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : [],
+      ...(normalizeStyle(footer.style) ? { style: normalizeStyle(footer.style) } : {}),
     },
     pages,
     customCss: str(s.customCss),

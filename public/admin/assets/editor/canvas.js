@@ -6,8 +6,8 @@
 // transparent overlay covers the iframe so the editor receives every pointer
 // move, and drop positions are worked out from the iframe's layout.
 
-import { renderBody, renderCss } from "/admin/shared/render.js";
-import { createBlock, createSection, findNode, reId, BLOCKS, FONT_CHOICES } from "/admin/shared/schema.js";
+import { renderBody, renderCss, fontsHref } from "/admin/shared/render.js";
+import { createBlock, createSection, findNode, reId, BLOCKS } from "/admin/shared/schema.js";
 import { sanitizeRichText } from "/admin/shared/sanitize.js";
 import { h } from "../ui.js";
 
@@ -116,7 +116,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
     const y = keepScroll ? win.scrollY : 0;
     if (inline) stopInline({ commit: false });
     doc.getElementById("eka-theme").textContent = renderCss(s.site);
-    const fonts = fontHref(s.site.theme);
+    const fonts = fontsHref(s.site, page);
     if (fonts !== lastFonts) {
       lastFonts = fonts;
       const link = doc.getElementById("eka-fonts");
@@ -126,11 +126,6 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
     hoverEl = null;
     win.scrollTo(0, y);
     updateSelection();
-  }
-
-  function fontHref(theme) {
-    const fam = [...new Set([theme.fonts.heading, theme.fonts.body])].map((k) => FONT_CHOICES[k]?.google).filter(Boolean);
-    return fam.length ? `https://fonts.googleapis.com/css2?${fam.map((f) => `family=${f}`).join("&")}&display=swap` : "";
   }
 
   // ------------------------------------------------------------ selection --
