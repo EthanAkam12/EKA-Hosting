@@ -39,7 +39,7 @@ test("sitemap lists every page; exports include it when the domain is known", as
 
 test("Call / WhatsApp buttons appear on phones when switched on", () => {
   const site = shop();
-  assert.doesNotMatch(renderPage(site, site.pages[0]), /eka-fab /, "off by default");
+  assert.doesNotMatch(renderPage(site, site.pages[0]), /class="eka-fab/, "off by default");
   site.business.contactButton = "both";
   site.business.whatsapp = "+44 7700 900123";
   const html = renderPage(site, site.pages[0]);
