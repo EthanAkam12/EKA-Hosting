@@ -11,7 +11,8 @@ export function startJob(kind, siteId, run) {
   const job = { id, kind, siteId, status: "running", progress: { chars: 0 }, result: null, error: null, startedAt: Date.now(), finishedAt: null };
   jobs.set(id, job);
   Promise.resolve()
-    .then(() => run((progress) => Object.assign(job.progress, progress)))
+    // Raw AI text (`text`) stays on the server; only counts and previews are shown.
+    .then(() => run(({ text, ...progress }) => Object.assign(job.progress, progress)))
     .then((result) => { job.status = "done"; job.result = result; })
     .catch((err) => { job.status = "error"; job.error = err?.message || String(err); console.error(`[job ${kind}]`, err); })
     .finally(() => {

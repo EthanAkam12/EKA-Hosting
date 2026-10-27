@@ -229,14 +229,33 @@ function currentConcept() {
   return state.concepts[state.current];
 }
 
-async function runJob(label, start) {
+// While the AI writes a design, the server sends what's finished so far; it's
+// shown in the preview straight away. `kind`: "site" (homepage) or "page".
+let liveKind = null, liveCount = 0;
+function showLive(preview) {
+  const iframe = document.getElementById("preview-frame");
+  if (!iframe || !preview) return;
+  let html;
+  if (liveKind === "page") {
+    const home = currentConcept().site;
+    html = renderPage({ ...home, pages: [home.pages[0], preview] }, preview, { base: "/" });
+  } else html = renderPage(preview, preview.pages[0], { base: "/" });
+  iframe.srcdoc = html.replace("</head>", "<style>a,button{pointer-events:none}</style></head>");
+  liveCount = (liveKind === "page" ? preview : preview.pages[0]).sections.length;
+  document.getElementById("busy")?.classList.add("live");
+}
+
+async function runJob(label, start, kind = null) {
   busy = label;
+  liveKind = kind;
+  liveCount = 0;
   render();
   try {
     const { jobId } = await start();
     return await waitForJob(jobId, (job) => {
+      if (job.progress.preview) showLive(job.progress.preview);
       const el = document.getElementById("busy-text");
-      if (el) el.textContent = `${label} ${Math.round(job.elapsedMs / 1000)}s`;
+      if (el) el.textContent = `${label} ${liveCount ? `${liveCount} section${liveCount > 1 ? "s" : ""} so far · ` : ""}${Math.round(job.elapsedMs / 1000)}s`;
     });
   } finally {
     busy = null;
@@ -247,7 +266,7 @@ async function newConcept() {
   try {
     const previous = state.concepts.map((c) => c.layout);
     const label = state.concepts.length ? "Designing another option…" : "Designing the homepage…";
-    const result = await runJob(label, () => wapi("/wizard/concept", { method: "POST", body: { brief: state.brief, previous } }));
+    const result = await runJob(label, () => wapi("/wizard/concept", { method: "POST", body: { brief: state.brief, previous } }), "site");
     state.concepts.push({ site: result.site, layout: result.layout, requests: [], history: [] });
     state.current = state.concepts.length - 1;
     save();
@@ -336,7 +355,7 @@ async function newPageDesign() {
       // So stock photos already used on other pages aren't repeated.
       otherPages: Object.entries(state.pw.d).filter(([t]) => t !== title).map(([, x]) => x.options[x.current]?.page).filter(Boolean),
       wishes: me.ai.enabled ? (state.notes[title] || "") : "",
-    } }));
+    } }), "page");
     d.options.push({ page: result.page, layout: result.layout });
     d.current = d.options.length - 1;
     d.failed = false;
@@ -476,7 +495,7 @@ function renderDesign() {
       onclick: () => { state.current = i; save(); render(); },
     }, `Design ${i + 1}`))) : h("div", { style: { height: "14px" } }),
 
-    h("button", { class: "btn btn-primary big", disabled: !!busy || !c, onclick: useHomeDesign }, otherPages().length ? "✓ Use this design, then design the other pages" : "✓ Use this design"),
+    h("button", { class: "btn btn-primary big", disabled: !!busy || !c, onclick: useHomeDesign }, otherPages().length ? "✓ Use this design →" : "✓ Use this design"),
     h("button", { class: "btn big", style: { marginTop: "10px" }, disabled: !!busy, onclick: newConcept }, "↻ Generate another"),
 
     h("hr", { class: "sep" }),
@@ -506,10 +525,10 @@ function renderDesign() {
 function previewStage(label, site, page) {
   const frame = h("div", { class: `frame${device === "mobile" ? " mobile" : ""}` });
   const inner = h("div", { class: "frame-in" });
-  const iframe = h("iframe", { title: "Design preview", sandbox: "allow-same-origin" });
+  const iframe = h("iframe", { id: "preview-frame", title: "Design preview", sandbox: "allow-same-origin" });
   inner.append(iframe);
   frame.append(inner);
-  if (busy || !site) frame.append(h("div", { class: "busy" }, h("div", {}, h("div", { class: "spinner" }), h("div", { id: "busy-text", style: { fontWeight: 600 } }, busy || "Loading…"), h("div", { class: "small muted", style: { marginTop: "6px" } }, me.ai.enabled ? "This usually takes under a minute." : ""))));
+  if (busy || !site) frame.append(h("div", { class: "busy", id: "busy" }, h("div", {}, h("div", { class: "spinner" }), h("div", { id: "busy-text", style: { fontWeight: 600 } }, busy || "Loading…"), h("div", { class: "small muted", style: { marginTop: "6px" } }, me.ai.enabled ? "This usually takes under a minute." : ""))));
 
   const stage = h("main", { class: "stage" },
     h("div", { class: "stage-bar" },

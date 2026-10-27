@@ -36,9 +36,12 @@ export function createAnthropicProvider({ model, effort } = {}) {
         fallbacks: "default",
       });
       let chars = 0;
+      let text = "";
       stream.on("text", (delta) => {
         chars += delta.length;
-        onProgress?.({ chars });
+        text += delta;
+        // `text` is for callers that preview the answer as it's written; it isn't sent to the browser.
+        onProgress?.({ chars, text });
       });
       const message = await stream.finalMessage();
       await recordUsage({ kind, model: message.model || callModel || model, usage: message.usage });

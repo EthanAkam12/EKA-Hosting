@@ -8,6 +8,7 @@
 import { normalizeSite, normalizeSection, normalizeBlock, normalizePage, findNode, slugify } from "../../shared/schema.js";
 import { createAnthropicProvider } from "./anthropic.js";
 import { applyChanges } from "./changes.js";
+import { partialDesign } from "./partial.js";
 import { createDemoProvider } from "./demo.js";
 import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, describeLayout, describePage } from "./prompts.js";
 
@@ -75,7 +76,10 @@ export function createAi({ provider = pickProvider() } = {}) {
           images,
           model: generateModel,
           effort: conceptEffort,
-          onProgress,
+          onProgress: previewProgress(onProgress, (part) => applyBrief(normalizeSite({
+            name: brief.name, theme: part.theme, header: part.header, footer: part.footer,
+            pages: [{ title: "Home", slug: "index", sections: part.sections }],
+          }), brief)),
         });
         const data = parseJson(text);
         site = normalizeSite(data.site && data.pages === undefined ? data.site : data);
@@ -104,7 +108,7 @@ export function createAi({ provider = pickProvider() } = {}) {
           prompt: pagePrompt({ brief, concept, title, previous, wishes }),
           model: generateModel,
           effort: conceptEffort,
-          onProgress,
+          onProgress: previewProgress(onProgress, (part) => normalizePage({ title, slug: slugify(title), sections: part.sections }, 1)),
         });
         const data = parseJson(text);
         page = data.page || data;
@@ -175,6 +179,22 @@ export function createAi({ provider = pickProvider() } = {}) {
       if (data.site) return { site: normalizeSite(data.site), summary, changed: true };
       throw new Error("The AI's answer wasn't in the expected format. Please try again.");
     },
+  };
+}
+
+// Wraps a job's progress callback so the browser gets a preview of the design
+// so far (finished sections only), at most about once a second, never the raw text.
+function previewProgress(onProgress, build) {
+  let last = 0, lastCount = -1;
+  return ({ chars, text }) => {
+    const now = Date.now();
+    if (!onProgress) return;
+    if (text === undefined || now - last < 900) return onProgress({ chars });
+    last = now;
+    const part = partialDesign(text);
+    if (part.sections.length === lastCount) return onProgress({ chars });
+    lastCount = part.sections.length;
+    try { onProgress({ chars, preview: build(part) }); } catch { onProgress({ chars }); }
   };
 }
 
