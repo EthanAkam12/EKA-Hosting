@@ -8,9 +8,11 @@ ADMIN_PASSWORD=change-me
 # Leave it empty to use the builder without AI (new sites start from a template).
 ANTHROPIC_API_KEY=
 
-# Optional: a free Pexels API key for stock photos (on pexels.com, click
-# "Image & Video API" at the bottom of the page). New designs
-# then get real photos that suit the business instead of placeholder artwork.
+# Optional: a free stock photo key, so new designs get real photos that suit
+# the business instead of placeholder artwork. Get one at pixabay.com/api/docs
+# (make a free account, log in, and the key is shown on that page).
+PIXABAY_API_KEY=
+# (A Pexels key works too, if you have one.)
 PEXELS_API_KEY=
 
 # Optional: the email address shown on the Support page.

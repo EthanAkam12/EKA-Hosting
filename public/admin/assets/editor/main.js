@@ -19,7 +19,7 @@ const state = createState({ siteId });
 
 // Image picking: either for a field (callback) or for an image block on the canvas.
 // The stock photo search starts with the business's photo keywords (or the image's description).
-const stockOptions = (query) => ({ stock: state.get().stockPhotos, query: query || state.get().site.business.keywords || state.get().site.business.type || "" });
+const stockOptions = (query) => ({ stock: state.get().stockPhotos, source: state.get().stockSource, query: query || state.get().site.business.keywords || state.get().site.business.type || "" });
 
 function pickImage(cb) {
   openMediaPicker(siteId, cb, stockOptions());
@@ -330,6 +330,7 @@ async function boot() {
   s.baseDomain = me.baseDomain;
   s.demo = me.demo;
   s.stockPhotos = me.stockPhotos;
+  s.stockSource = me.stockSource;
   if (me.demo) {
     demoBanner(me);
     const pub = $("publish-btn");

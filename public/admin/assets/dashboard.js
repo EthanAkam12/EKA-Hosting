@@ -35,7 +35,7 @@ function gettingStarted(sites) {
   const steps = [
     { done: sites.length > 0, title: "Make your first website", text: "Describe a business and pick the designs you like.", action: h("a", { class: "btn btn-sm btn-primary", href: "/admin/new" }, "+ New website") },
     { done: me.ai.enabled, title: "Turn on AI", text: "For AI-written designs and changes you describe. Paste your Anthropic API key into settings.txt.", action: h("a", { class: "btn btn-sm", href: "/help#ai", target: "_blank" }, "How") },
-    { done: me.stockPhotos, title: "Turn on stock photos (optional)", text: "New designs get real photos that suit the business. A free Pexels API key goes in settings.txt.", action: h("a", { class: "btn btn-sm", href: "/help#media", target: "_blank" }, "How") },
+    { done: me.stockPhotos, title: "Turn on stock photos (optional)", text: "New designs get real photos that suit the business. A free Pixabay API key goes in settings.txt.", action: h("a", { class: "btn btn-sm", href: "/help#media", target: "_blank" }, "How") },
     { done: sites.some((s) => s.review), title: "Send a customer a review link", text: "They comment on the draft and approve it. In the editor: Site tab → Customer review.", action: null },
     { done: sites.some((s) => s.deploy?.enabled), title: "Connect a customer's hosting", text: "Publish then uploads the site there by FTP. In the editor: Site tab → Your hosting.", action: h("a", { class: "btn btn-sm", href: "/help#publish", target: "_blank" }, "How") },
     { done: sites.some((s) => s.publishedAt), title: "Publish a website", text: "Press Publish in the editor. The site check catches anything unfinished first.", action: null },

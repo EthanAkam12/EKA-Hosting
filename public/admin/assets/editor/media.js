@@ -2,7 +2,7 @@
 
 import { h, api, modal, toast, confirmDialog } from "../ui.js";
 
-export function openMediaPicker(siteId, onPick, { stock = false, query = "" } = {}) {
+export function openMediaPicker(siteId, onPick, { stock = false, source = { name: "Pexels", site: "https://www.pexels.com" }, query = "" } = {}) {
   const grid = h("div", { class: "media-grid" });
   const status = h("span", { class: "small muted" });
   const fileInput = h("input", { type: "file", accept: "image/jpeg,image/png,image/webp,image/gif,image/avif", multiple: true, hidden: true, onchange: (e) => upload([...e.target.files]) });
@@ -22,7 +22,7 @@ export function openMediaPicker(siteId, onPick, { stock = false, query = "" } = 
     upload([...e.dataTransfer.files].filter((f) => f.type.startsWith("image/")));
   });
 
-  // Free stock photos (Pexels), downloaded into the site's images when chosen.
+  // Free stock photos (Pexels or Pixabay), downloaded into the site's images when chosen.
   const stockGrid = h("div", { class: "media-grid stock-grid" });
   const stockStatus = h("span", { class: "small muted" });
   const stockInput = h("input", { class: "input", placeholder: "Search free stock photos, e.g. vintage clock", value: query || "" });
@@ -45,7 +45,7 @@ export function openMediaPicker(siteId, onPick, { stock = false, query = "" } = 
         m.close();
       } catch (e) { stockStatus.textContent = ` ${e.message}`; }
     };
-    return h("div", { class: "media-item", role: "button", tabindex: "0", title: `${p.alt || "Photo"} · by ${p.photographer} on Pexels`, onclick: pick, onkeydown: (e) => { if (e.key === "Enter") pick(); } },
+    return h("div", { class: "media-item", role: "button", tabindex: "0", title: `${p.alt || "Photo"} · by ${p.photographer} on ${source.name}`, onclick: pick, onkeydown: (e) => { if (e.key === "Enter") pick(); } },
       h("img", { src: p.thumb, alt: p.alt || "", loading: "lazy" }),
       h("span", { class: "credit" }, p.photographer));
   }
@@ -53,7 +53,7 @@ export function openMediaPicker(siteId, onPick, { stock = false, query = "" } = 
   const stockBox = stock ? h("div", { class: "stock-box" },
     h("div", { class: "row" }, stockInput, h("button", { class: "btn", type: "button", onclick: searchStock }, "Search"), stockStatus),
     stockGrid,
-    h("p", { class: "small muted", style: { margin: "6px 0 0" } }, "Photos provided by ", h("a", { href: "https://www.pexels.com", target: "_blank", rel: "noopener" }, "Pexels"), ". Free to use on websites."),
+    h("p", { class: "small muted", style: { margin: "6px 0 0" } }, "Photos provided by ", h("a", { href: source.site, target: "_blank", rel: "noopener" }, source.name), ". Free to use on websites."),
     h("div", { class: "group-title", style: { marginTop: "16px" } }, "Your images"),
   ) : null;
 

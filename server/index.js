@@ -509,6 +509,7 @@ api.get("/me", (req, res) => {
     ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model, editModel: ai.editModel },
     baseDomain: BASE_DOMAIN || null,
     stockPhotos: stock.enabled,
+    stockSource: stock.enabled ? { name: stock.name, site: stock.site } : null,
     version: VERSION,
     supportEmail: SUPPORT_EMAIL,
     demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
@@ -988,7 +989,7 @@ api.post("/sites/:id/stock", async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;
   try {
-    const url = await stock.download(String(req.body?.url || ""), { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, name: `pexels-${Number(req.body?.id) || "photo"}` });
+    const url = await stock.download(String(req.body?.url || ""), { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, name: `${stock.provider}-${Number(req.body?.id) || "photo"}` });
     res.json({ url });
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -61,3 +61,31 @@ test("without a key (or if a download fails) the placeholder artwork is used", a
   assert.equal(keywordsFromBrief({ description: "Antique shop by the sea selling clocks, silver and furniture." }), "Antique shop by the sea selling clocks");
   await fs.rm(dir, { recursive: true });
 });
+
+test("Pixabay works the same way (its tags become the photo descriptions)", async () => {
+  const jpeg = await sharp({ create: { width: 64, height: 48, channels: 3, background: "#335577" } }).jpeg().toBuffer();
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    if (url.startsWith("https://pixabay.com/api/")) {
+      const hits = [1, 2, 3].map((id) => ({ id, tags: "clock, antique, time", webformatURL: `https://pixabay.com/get/w${id}.jpg`, largeImageURL: `https://pixabay.com/get/l${id}.jpg`, user: "Ann", user_id: 7, pageURL: `https://pixabay.com/photos/${id}` }));
+      return { ok: true, status: 200, json: async () => ({ hits }) };
+    }
+    return { ok: true, status: 200, arrayBuffer: async () => jpeg };
+  };
+  const stock = createStock({ provider: "pixabay", apiKey: "pk", fetchImpl });
+  const photos = await stock.search("antique clock", { orientation: "landscape" });
+  assert.match(urls[0], /^https:\/\/pixabay\.com\/api\/\?key=pk&q=antique\+clock&image_type=photo&safesearch=true.*orientation=horizontal/);
+  assert.equal(photos[0].alt, "clock, antique, time");
+  assert.equal(photos[0].large, "https://pixabay.com/get/l1.jpg");
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "eka-stock-"));
+  const site = createEmptySite("x");
+  site.pages[0].sections = [createSection({ background: "image" })];
+  assert.equal(await fillStockPhotos(site, { stock, dir, urlPrefix: "/_tmp/", keywords: "antique clock" }), 1);
+  assert.match(site.pages[0].sections[0].props.image, /^\/_tmp\/pixabay-\d+-[a-f0-9]+-o\.webp$/);
+  await assert.rejects(stock.download("https://images.pexels.com/x.jpg", { dir, urlPrefix: "/" }), /isn't a Pixabay photo/);
+  const { stockFromEnv } = await import("../server/stock.js");
+  assert.deepEqual(stockFromEnv({ PIXABAY_API_KEY: "a" }), { provider: "pixabay", apiKey: "a" });
+  assert.equal(stockFromEnv({ PIXABAY_API_KEY: "a", PEXELS_API_KEY: "b" }).provider, "pexels");
+  await fs.rm(dir, { recursive: true });
+});
