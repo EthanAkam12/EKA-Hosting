@@ -3,6 +3,7 @@
 import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
 import { h, api } from "../ui.js";
 import { fieldControl } from "./fields.js";
+import { readabilityIssues } from "/admin/shared/checks.js";
 
 export function createInspector({ state, canvas, root, head, pickImage, askAi }) {
   function linkOptions() {
@@ -46,12 +47,19 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
       h("button", { class: tab === key ? "active" : "", role: "tab", onclick: () => { tab = key; render(); } }, label))));
   }
 
+  // A warning when the text colour is hard to read on the background.
+  function readability(section, block = null) {
+    const issues = readabilityIssues(state.get().site, section, block);
+    if (issues.length) root.append(h("div", { class: "notice", style: { marginBottom: "12px", fontSize: "13px" } }, "⚠ ", issues[0], " Try a darker or lighter text colour (Style tab)."));
+  }
+
   function renderBlock(sel) {
     const block = sel.node;
     const def = BLOCKS[block.type];
     head.textContent = def.label;
     root.append(actions(block.id));
     tabs({ content: "Content", style: "Style", advanced: "Advanced" });
+    if (block.style?.color || block.style?.bg) readability(sel.section, block);
     if (tab === "style") return styleControls(block, "block");
     if (tab === "advanced") return advancedControls(block, "block");
     for (const f of def.fields) {
@@ -70,6 +78,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (fromColumn) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Drag blocks from the Add tab into this column. The settings below apply to the whole section."));
     root.append(actions(section.id));
     tabs({ content: "Layout", style: "Style", advanced: "Advanced" });
+    readability(section);
     if (tab === "style") return styleControls(section, "section");
     if (tab === "advanced") return advancedControls(section, "section");
     if (section.props.background === "image") root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Tint, focus point, effects and more for the image are in the Style tab."));

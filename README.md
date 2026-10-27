@@ -74,6 +74,14 @@ Sites don't have to be hosted by the builder. In the editor's **Site** tab, unde
 
 From then on **Publish** uploads the site straight to the host. Only changed files are sent, and the builder only ever removes files it uploaded itself. Contact forms work through a small `contact.php` that emails the owner (the host needs PHP, which almost all do). Prefer to upload by hand? Use **Download the published site as files** for a ZIP.
 
+## Working with customers
+
+- **Stock photos** (`PEXELS_API_KEY`, free from pexels.com/api): new designs get photos that suit the business instead of placeholder artwork, and the image picker searches Pexels.
+- **Site check**: before publishing, the builder lists anything visitors would notice (placeholders, template text, broken links, hard-to-read text, a form with nowhere to send messages) with a Show button for each.
+- **Customer review links**: send the customer a link to the draft; they click anything to comment and press Approve. Comments appear in the editor's Site tab.
+- **For Google and sharing**: every page gets an icon and share picture, the home page carries the business details (LocalBusiness), and live sites serve a sitemap.
+- **Phone contact button**: an optional floating Call / WhatsApp button on phones.
+
 ## Help, support and the public demo
 
 - **Help pages** are at `/help` and a **Support** page at `/support` (both public). Set `SUPPORT_EMAIL` to show your support address; the Support page fills in a ready-made email with the user's system details.

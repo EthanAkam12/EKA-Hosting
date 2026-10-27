@@ -563,6 +563,22 @@ function menuCss(h) {
   return rules;
 }
 
+// Floating Call / WhatsApp buttons for phones (Site tab → Business details).
+function contactButtons(site, ctx) {
+  const b = site.business || {};
+  const want = b.contactButton || "none";
+  if (want === "none") return "";
+  const phone = String(b.phone || "").replace(/[^\d+]/g, "");
+  const wa = String(b.whatsapp || b.phone || "").replace(/\D/g, "");
+  const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  const out = [];
+  if ((want === "call" || want === "both") && phone) out.push(`<a class="eka-fab fab-call" href="tel:${esc(phone)}">${icon(BUTTON_ICONS.phone)}<span>Call</span></a>`);
+  if ((want === "whatsapp" || want === "both") && wa) out.push(`<a class="eka-fab fab-wa" href="https://wa.me/${esc(wa)}" target="_blank" rel="noopener">${icon('<path d="M20.5 3.5A11 11 0 0 0 3.2 17.3L2 22l4.8-1.2A11 11 0 1 0 20.5 3.5zM12 20a8.6 8.6 0 0 1-4.4-1.2l-.3-.2-2.8.7.7-2.7-.2-.3A8.7 8.7 0 1 1 12 20zm4.8-6.5c-.3-.1-1.6-.8-1.8-.9s-.4-.1-.6.1-.7.9-.8 1-.3.2-.6.1a7.1 7.1 0 0 1-3.5-3c-.3-.5.3-.4.7-1.3.1-.2 0-.3 0-.5l-.8-2c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.5-.4z" fill="currentColor" stroke="none"/>')}<span>WhatsApp</span></a>`);
+  if (!out.length) return ctx.editor ? `<div class="eka-fabs eka-fabs-show"><span class="eka-hint">Add a phone number in Site → Business details for the contact button</span></div>` : "";
+  // The editor shows them at every size so they can be seen while designing.
+  return `<div class="eka-fabs${ctx.editor ? " eka-fabs-show" : ""}">${out.join("")}</div>`;
+}
+
 function renderFooter(site, ctx) {
   const f = site.footer;
   const links = f.links.length ? `<nav class="eka-footer-links">${f.links.map((l) => `<a ${attrHref(l.href, ctx)}>${esc(l.text)}</a>`).join("")}</nav>` : "";
@@ -753,6 +769,12 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-footer-in{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;justify-content:space-between}
 .eka-footer p{margin:0;opacity:.8}.eka-footer-links{display:flex;flex-wrap:wrap;gap:20px}.eka-footer a{color:inherit;opacity:.85;text-decoration:none}.eka-footer a:hover{opacity:1}
 .eka-hint{font-size:.85rem;opacity:.6;padding:8px;border:1px dashed currentColor;border-radius:6px}
+.eka-fabs{position:fixed;right:14px;bottom:14px;z-index:60;display:none;flex-direction:column;gap:10px;align-items:flex-end}
+@media (max-width:760px){.eka-fabs{display:flex}body:has(.eka-fabs) footer{padding-bottom:90px}}
+.eka-fabs.eka-fabs-show{display:flex}
+.eka-fab{display:inline-flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border-radius:999px;color:#fff;text-decoration:none;font-weight:700;font-size:1rem;box-shadow:0 8px 22px -6px rgba(0,0,0,.45)}
+.eka-fab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fab-call{background:var(--c-primary);color:var(--c-on-primary)}.fab-wa{background:#25d366;color:#fff}
 @keyframes eka-pulse{50%{transform:scale(1.06)}}
 @keyframes eka-wobble{20%{transform:rotate(-4deg)}40%{transform:rotate(3deg)}60%{transform:rotate(-2deg)}80%{transform:rotate(1deg)}}
 @keyframes eka-shine{to{transform:translateX(100%)}}
@@ -836,7 +858,7 @@ export function renderBody(site, page, opts = {}) {
   const header = renderHeader(site, ctx), footer = renderFooter(site, ctx);
   const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
   const empty = ctx.editor && !page.sections.length ? `<div class="eka-page-empty">This page is empty. Drag a section or block here, or ask the AI to build it.</div>` : "";
-  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}`;
+  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}${contactButtons(site, ctx)}`;
 }
 
 export function renderCss(site) {

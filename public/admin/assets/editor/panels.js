@@ -6,6 +6,7 @@ import { fieldControl } from "./fields.js";
 import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
 import { followDeploy } from "./deploy-ui.js";
 import { showChecklist, siteIssues } from "./checklist.js";
+import { contrast } from "/admin/shared/checks.js";
 
 const PALETTES = [
   { name: "Ocean", colors: { primary: "#2563eb", accent: "#f59e0b", background: "#ffffff", surface: "#f1f5fb", text: "#111827", muted: "#6b7280", dark: "#0f172a" } },
@@ -315,6 +316,16 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     for (const [k, label] of Object.entries(names)) {
       root.append(fieldControl({ key: k, label, type: "color" }, theme.colors[k], (v) => set(`theme:c:${k}`, (site) => { site.theme.colors[k] = v; }), {}));
     }
+    // Readability of the main colour pairs (contrast 4.5:1 is the usual minimum for text).
+    const c = theme.colors;
+    const pairs = [
+      [c.text, c.background, "Text on the page background"],
+      [c.text, c.surface, "Text on light panels"],
+      [c.muted, c.background, "Soft text on the page background"],
+      ["#111111", c.accent, "Accent-coloured buttons (dark text)"],
+      [c.primary, c.background, "Links in the main colour"],
+    ].filter(([a, b]) => contrast(a, b) < 4.5);
+    if (pairs.length) root.append(h("div", { class: "notice", style: { fontSize: "13px", marginBottom: "14px" } }, h("strong", {}, "Hard to read: "), pairs.map(([, , what]) => what).join("; "), ". Make the colours more different from each other."));
     root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Fonts"));
     const fontField = (key, label) => ({ key, label, type: "select", options: Object.keys(FONT_CHOICES), labels: Object.values(FONT_CHOICES).map((f) => f.label) });
     root.append(fieldControl(fontField("heading", "Headings"), theme.fonts.heading, (v) => set("theme:fh", (site) => { site.theme.fonts.heading = v; }, { rebuild: true }), {}));
@@ -369,6 +380,9 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     bf("address", { label: "Address", type: "textarea" });
     bf("hours", { label: "Opening hours", type: "textarea" });
     bf("socials", { label: "Social media links (one per line)", type: "textarea" });
+    bf("whatsapp", { label: "WhatsApp number (with country code, e.g. 44 7700 900123)", type: "text" });
+    bf("contactButton", { label: "Contact button on phones", type: "select", options: ["none", "call", "whatsapp", "both"], labels: ["None", "Call", "WhatsApp", "Call and WhatsApp"] });
+    if (biz.contactButton !== "none") root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "A button that stays in the corner of the screen on phones. Uses the phone number above (and the WhatsApp number, or the phone number if that's empty)."));
     root.append(fieldControl({ key: "favicon", label: "Browser tab icon (optional; the logo is used if empty)", type: "image" }, s.site.favicon, (v) => state.mutate((site) => { site.favicon = v || ""; }, { key: "site:favicon" }), { pickImage }));
 
     const slug = h("input", { class: "input", value: meta.slug });

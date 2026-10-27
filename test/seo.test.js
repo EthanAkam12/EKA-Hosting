@@ -36,3 +36,14 @@ test("sitemap lists every page; exports include it when the domain is known", as
   assert.match(get("robots.txt"), /Sitemap: https:\/\/harbour\.test\/sitemap\.xml/);
   assert.match(get("index.html"), /og:image" content="https:\/\/harbour\.test\/media\/shop-o\.webp"/, "media links point at the exported folder");
 });
+
+test("Call / WhatsApp buttons appear on phones when switched on", () => {
+  const site = shop();
+  assert.doesNotMatch(renderPage(site, site.pages[0]), /eka-fab /, "off by default");
+  site.business.contactButton = "both";
+  site.business.whatsapp = "+44 7700 900123";
+  const html = renderPage(site, site.pages[0]);
+  assert.match(html, /<a class="eka-fab fab-call" href="tel:01234567890">/);
+  assert.match(html, /<a class="eka-fab fab-wa" href="https:\/\/wa\.me\/447700900123"/);
+  assert.match(html, /@media \(max-width:760px\)\{\.eka-fabs\{display:flex\}/, "phones only");
+});
