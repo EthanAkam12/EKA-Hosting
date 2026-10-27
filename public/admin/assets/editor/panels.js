@@ -5,6 +5,7 @@ import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "../ui.
 import { fieldControl } from "./fields.js";
 import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
 import { followDeploy } from "./deploy-ui.js";
+import { showChecklist, siteIssues } from "./checklist.js";
 
 const PALETTES = [
   { name: "Ocean", colors: { primary: "#2563eb", accent: "#f59e0b", background: "#ffffff", surface: "#f1f5fb", text: "#111827", muted: "#6b7280", dark: "#0f172a" } },
@@ -294,7 +295,24 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
   function renderSettings() {
     const s = state.get();
     const meta = s.meta;
+    const issues = siteIssues(state);
+    const fixes = issues.filter((i) => i.level === "fix").length;
+    root.append(h("button", { class: `btn btn-block${fixes ? "" : " btn-ok"}`, style: { marginBottom: "16px" }, onclick: () => showChecklist(state) },
+      fixes ? `⚠ Site check: ${fixes} thing${fixes > 1 ? "s" : ""} to fix` : issues.length ? `✓ Site check: ${issues.length} tip${issues.length > 1 ? "s" : ""}` : "✓ Site check: all good"));
     root.append(fieldControl({ key: "name", label: "Site name", type: "text" }, s.site.name, (v) => state.mutate((site) => { site.name = v; }, { key: "site:name", source: "panel" }), {}));
+
+    // Business details: shown to Google (and used by the phone contact button).
+    const biz = s.site.business;
+    const bf = (key, field) => root.append(fieldControl({ key, ...field }, biz[key], (v, opts) => state.mutate((site) => { site.business[key] = v ?? ""; }, { key: `biz:${key}`, source: opts?.rebuild ? null : "panel" }), {}));
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Business details"));
+    root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Google reads these to show the business in search results and on Maps. Only fill in what's true."));
+    bf("type", { label: "What the business is", type: "text", placeholder: "e.g. Antique shop" });
+    bf("phone", { label: "Phone", type: "text" });
+    bf("email", { label: "Email", type: "text" });
+    bf("address", { label: "Address", type: "textarea" });
+    bf("hours", { label: "Opening hours", type: "textarea" });
+    bf("socials", { label: "Social media links (one per line)", type: "textarea" });
+    root.append(fieldControl({ key: "favicon", label: "Browser tab icon (optional; the logo is used if empty)", type: "image" }, s.site.favicon, (v) => state.mutate((site) => { site.favicon = v || ""; }, { key: "site:favicon" }), { pickImage }));
 
     const slug = h("input", { class: "input", value: meta.slug });
     const domains = h("textarea", { class: "textarea", rows: "2", placeholder: "www.customer.com" }, (meta.domains || []).join("\n"));

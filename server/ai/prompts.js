@@ -37,7 +37,8 @@ export function blockReference() {
     "menu"?: { "font": FONT, "size": px, "weight": 300-900, "transform": "uppercase"|"lowercase"|"capitalize", "letterSpacing": px, "color", "hoverColor", "activeColor": hex, "hover": "color"|"underline"|"overline"|"pill"|"none", "gap": px, "align": "center"|"left" } },
   "footer": { "text": string, "links": [{ "text", "href" }] },
   "pages": [ { "id"?, "title": string, "slug": string ("index" for the home page, first), "seo": { "title", "description" }, "sections": [SECTION] } ],
-  "customCss": string (usually "")
+  "customCss": string (usually ""),
+  "business": { "type": string, "keywords": string }
 }
 
 SECTION = { "id"?, "type": "section", "props": { ${section} }, "columns": [ { "id"?, "blocks": [BLOCK] } ] }
@@ -72,7 +73,7 @@ const DESIGN_GUIDE = `DESIGN & CONTENT GUIDELINES
 - Strong home page structure, e.g.: hero (minHeight true, background "dark", "primary" or "image", big H1, one-line value proposition, 1-2 buttons) → services/features as cards in a "1-1-1" layout → about / why choose us in "1-1" with a list → stats or testimonials → FAQ → final call-to-action → contact section (anchor "contact", form + details in "1-1").
 - Alternate section backgrounds ("default", "surface", "dark"/"primary") so the page has rhythm. Use padding "lg" or "xl" for most sections.
 - Pick a colour palette and fonts that suit the business and have good contrast. Text colour must be readable on background and surface. Prefer the "system" fonts unless a web font clearly fits the brand (web fonts slow the site slightly).
-- Images: NEVER invent image URLs. Use URLs from the media library provided where they fit. Otherwise put image blocks, galleries and "image" section backgrounds wherever a real business site would show photos (a photo hero, an about picture, a gallery) and leave their URL fields "" — the builder fills them with placeholder pictures the owner replaces later. Write useful alt text for each image.
+- Images: NEVER invent image URLs. Use URLs from the media library provided where they fit. Otherwise put image blocks, galleries and "image" section backgrounds wherever a real business site would show photos (a photo hero, an about picture, a gallery) and leave their URL fields "" — the builder fills them with matching stock photos. So give every image block alt text that describes a concrete, photographable scene (e.g. "brass carriage clock on an oak sideboard", not "our quality"), and set "business": { "type": "<what the business is, e.g. Antique shop>", "keywords": "<3-6 words to search stock photos for the backgrounds and gallery, e.g. antique shop interior vintage>" }.
 - Keep it fast: no custom code blocks unless asked.`;
 
 export const GENERATE_SYSTEM = `You are an expert web designer and conversion copywriter who builds small-business websites in a block-based website builder.

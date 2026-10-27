@@ -2,7 +2,7 @@
 
 import { h, api, modal, toast, confirmDialog } from "../ui.js";
 
-export function openMediaPicker(siteId, onPick) {
+export function openMediaPicker(siteId, onPick, { stock = false, query = "" } = {}) {
   const grid = h("div", { class: "media-grid" });
   const status = h("span", { class: "small muted" });
   const fileInput = h("input", { type: "file", accept: "image/jpeg,image/png,image/webp,image/gif,image/avif", multiple: true, hidden: true, onchange: (e) => upload([...e.target.files]) });
@@ -22,10 +22,45 @@ export function openMediaPicker(siteId, onPick) {
     upload([...e.dataTransfer.files].filter((f) => f.type.startsWith("image/")));
   });
 
+  // Free stock photos (Pexels), downloaded into the site's images when chosen.
+  const stockGrid = h("div", { class: "media-grid stock-grid" });
+  const stockStatus = h("span", { class: "small muted" });
+  const stockInput = h("input", { class: "input", placeholder: "Search free stock photos, e.g. vintage clock", value: query || "" });
+  async function searchStock() {
+    const q = stockInput.value.trim();
+    if (!q) return;
+    stockStatus.textContent = " Searching…";
+    try {
+      const { photos } = await api(`/stock/search?q=${encodeURIComponent(q)}`);
+      stockGrid.replaceChildren(...(photos.length ? photos.map(stockItem) : [h("p", { class: "muted", style: { gridColumn: "1/-1" } }, "No photos found. Try different words.")]));
+      stockStatus.textContent = "";
+    } catch (e) { stockStatus.textContent = ` ${e.message}`; }
+  }
+  function stockItem(p) {
+    const pick = async () => {
+      stockStatus.textContent = " Adding the photo…";
+      try {
+        const { url } = await api(`/sites/${siteId}/stock`, { method: "POST", body: { url: p.large, id: p.id } });
+        onPick(url);
+        m.close();
+      } catch (e) { stockStatus.textContent = ` ${e.message}`; }
+    };
+    return h("div", { class: "media-item", role: "button", tabindex: "0", title: `${p.alt || "Photo"} · by ${p.photographer} on Pexels`, onclick: pick, onkeydown: (e) => { if (e.key === "Enter") pick(); } },
+      h("img", { src: p.thumb, alt: p.alt || "", loading: "lazy" }),
+      h("span", { class: "credit" }, p.photographer));
+  }
+  stockInput.addEventListener("keydown", (e) => { if (e.key === "Enter") searchStock(); });
+  const stockBox = stock ? h("div", { class: "stock-box" },
+    h("div", { class: "row" }, stockInput, h("button", { class: "btn", type: "button", onclick: searchStock }, "Search"), stockStatus),
+    stockGrid,
+    h("p", { class: "small muted", style: { margin: "6px 0 0" } }, "Photos provided by ", h("a", { href: "https://www.pexels.com", target: "_blank", rel: "noopener" }, "Pexels"), ". Free to use on websites."),
+    h("div", { class: "group-title", style: { marginTop: "16px" } }, "Your images"),
+  ) : null;
+
   const m = modal({
     title: "Images",
     wide: true,
-    body: h("div", {}, zone, grid, h("div", { class: "row", style: { marginTop: "16px" } }, urlInput, h("button", { class: "btn", type: "button", onclick: () => {
+    body: h("div", {}, stockBox, zone, grid, h("div", { class: "row", style: { marginTop: "16px" } }, urlInput, h("button", { class: "btn", type: "button", onclick: () => {
       const v = urlInput.value.trim();
       if (!/^https:\/\//i.test(v)) return toast("Use a full https:// image link.", { error: true });
       onPick(v);
@@ -73,4 +108,5 @@ export function openMediaPicker(siteId, onPick) {
   }
 
   refresh().catch((e) => toast(e.message, { error: true }));
+  if (stock && query) searchStock();
 }

@@ -142,3 +142,15 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 .notes-card { border: 1px solid #f3d9a4; background: #fffaf0; border-radius: 10px; padding: 12px; margin-bottom: 14px; }
 .notes-card .note + .note { border-top: 1px solid #f3e3c0; margin-top: 10px; padding-top: 10px; }
 .notes-card .note p { margin: 4px 0 8px; font-size: 13px; white-space: pre-wrap; }
+
+.stock-box { margin-bottom: 14px; }
+.stock-grid { margin-top: 10px; max-height: 330px; overflow-y: auto; }
+.media-item .credit { position: absolute; left: 4px; bottom: 4px; right: 4px; font-size: 10.5px; color: #fff; background: rgba(0,0,0,.55); padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+
+.check-list { list-style: none; margin: 6px 0 18px; padding: 0; display: grid; gap: 6px; }
+.check-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+.check-icon { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 12px system-ui; color: #fff; }
+.check-item.fix .check-icon { background: #d97706; }
+.check-item.tip .check-icon { background: #64748b; font-style: italic; }
+.check-ok { font-weight: 600; color: #15803d; }
+.btn-ok { color: #15803d; }

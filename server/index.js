@@ -22,9 +22,10 @@ import { saveUpload, deleteUpload } from "./media.js";
 import { buildStaticSite } from "./export.js";
 import { buildCubecartSkin } from "./cubecart-skin.js";
 import { fillPlaceholders } from "./placeholders.js";
+import { createStock, fillStockPhotos, keywordsFromBrief } from "./stock.js";
 import { deploy, testConnection } from "./deploy.js";
 import yazl from "yazl";
-import { renderPage } from "../shared/render.js";
+import { renderPage, pageUrl, sitemapXml } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
 import { createEmptySite, normalizeSite, normalizePage, findNode, slugify } from "../shared/schema.js";
 
@@ -155,7 +156,7 @@ function findPage(site, rest) {
   return site.pages.find((p) => p.slug === slug) || null;
 }
 
-async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = false }) {
+async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = false, origin = `${req.protocol}://${req.get("host")}`, live = false }) {
   const site = draft ? await store.getDraft(meta.id) : await store.getPublished(meta.id);
   if (sandbox) {
     // Previews on the builder's own domain share its origin, so block any
@@ -171,15 +172,17 @@ async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = 
     return res.status(404).type("html").send(simplePage("Page not found", `<a href="${base}">Go to the ${escapeHtml(home.title)} page</a>`));
   }
   const formAction = `/_forms/${meta.id}`;
+  // On the site's own address, tell search engines the page's one true URL.
+  const canonical = live ? origin + pageUrl(page, "/") : undefined;
   if (draft) {
     res.setHeader("Cache-Control", "no-store");
     // Draft previews get a bar on top so it's obvious how to get back. Plain
     // HTML only: previews block scripts.
     const bar = `<div style="position:relative;z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;background:#1c2230;color:#fff;font:600 14px/1.4 system-ui,sans-serif"><span>Preview: this is how visitors will see your latest changes.</span><a href="/admin/sites/${meta.id}" style="margin-left:auto;background:#4f46e5;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none">&larr; Back to editor</a></div>`;
-    return res.type("html").send(renderPage(site, page, { base, formAction }).replace("<body>", `<body>${bar}`));
+    return res.type("html").send(renderPage(site, page, { base, formAction, origin }).replace("<body>", `<body>${bar}`));
   }
-  const key = `${meta.id}|${meta.publishedAt}|${base}|${page.slug}`;
-  const { html, etag } = cachedRender(key, () => renderPage(site, page, { base, formAction }));
+  const key = `${meta.id}|${meta.publishedAt}|${origin}|${base}|${page.slug}`;
+  const { html, etag } = cachedRender(key, () => renderPage(site, page, { base, formAction, origin, canonical }));
   res.setHeader("ETag", etag);
   res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=600");
   if (req.headers["if-none-match"] === etag) return res.status(304).end();
@@ -200,6 +203,15 @@ function simplePage(title, body) {
 
 // Images uploaded in the new-site wizard before the site exists (admin only).
 initUsageLog(DATA_DIR);
+const stock = createStock();
+
+// Empty picture spots get matching stock photos where possible, and
+// placeholder artwork otherwise.
+async function fillImages(site, { dir, urlPrefix, brief, avoid }) {
+  await fillStockPhotos(site, { stock, dir, urlPrefix, avoid, keywords: keywordsFromBrief(brief || { name: site.name }) });
+  await fillPlaceholders(site, { dir, urlPrefix });
+  return site;
+}
 const TMP_MEDIA = path.join(DATA_DIR, "tmp-media");
 await fs.mkdir(TMP_MEDIA, { recursive: true });
 app.get("/_tmp/:file", (req, res) => {
@@ -275,8 +287,12 @@ app.use((req, res, next) => {
   if (!meta) return next();
   if (meta.missing) return res.status(404).type("html").send(simplePage("Site not found", "There's no website at this address yet."));
   if (req.method !== "GET" && req.method !== "HEAD") return res.sendStatus(405);
-  if (req.path === "/robots.txt") return res.type("text").send("User-agent: *\nAllow: /\n");
-  serveSite(req, res, meta, { base: "/", rest: req.path }).catch(next);
+  const origin = `${req.protocol}://${req.get("host")}`;
+  if (req.path === "/robots.txt") return res.type("text").send(`User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
+  if (req.path === "/sitemap.xml") {
+    return store.getPublished(meta.id).then((site) => (site ? res.type("application/xml").send(sitemapXml(site, origin)) : res.sendStatus(404))).catch(next);
+  }
+  serveSite(req, res, meta, { base: "/", rest: req.path, origin, live: true }).catch(next);
 });
 
 // ---------------------------------------------------------------------------
@@ -425,6 +441,7 @@ api.get("/me", (req, res) => {
   res.json({
     ai: { enabled: ai.enabled, provider: ai.provider, model: ai.model, editModel: ai.editModel },
     baseDomain: BASE_DOMAIN || null,
+    stockPhotos: stock.enabled,
     version: VERSION,
     supportEmail: SUPPORT_EMAIL,
     demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
@@ -548,7 +565,7 @@ api.post("/wizard/concept", async (req, res) => {
   const images = await briefImages(brief);
   const job = startJob("concept", null, async (progress) => {
     const result = await ai.generateConcept({ brief, previous, images, onProgress: progress });
-    await fillPlaceholders(result.site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
+    await fillImages(result.site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });
     return result;
   });
   res.json({ jobId: job.id });
@@ -567,7 +584,7 @@ api.post("/wizard/page", async (req, res) => {
   const job = startJob("page", null, async (progress) => {
     const result = await ai.generatePage({ brief, concept, title, previous, wishes, onProgress: progress });
     const holder = { ...concept, pages: [result.page] };
-    await fillPlaceholders(holder, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
+    await fillImages(holder, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief, avoid: JSON.stringify(req.body.concept) + JSON.stringify(req.body.otherPages || []) });
     return { page: holder.pages[0], layout: result.layout };
   });
   res.json({ jobId: job.id });
@@ -582,7 +599,7 @@ api.post("/wizard/refine", async (req, res) => {
   const pageSlug = typeof req.body.pageSlug === "string" ? req.body.pageSlug : undefined;
   const job = startJob("refine", null, async (progress) => {
     const result = await ai.refineConcept({ concept, instruction, pageSlug, onProgress: progress });
-    await fillPlaceholders(result.site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
+    await fillImages(result.site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
     return result;
   });
   res.json({ jobId: job.id });
@@ -623,7 +640,7 @@ api.post("/sites", async (req, res) => {
         } else {
           site = (await ai.buildFromConcept({ brief, concept, requests, pageNotes, onProgress: progress })).site;
         }
-        await fillPlaceholders(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/" });
+        await fillImages(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });
         const adopted = await adoptTmpMedia(site, meta.id);
         await store.saveDraft(meta.id, adopted, { version: "Built from the approved design" });
         const notes = ai.enabled ? {} : notesBySlug(pageNotes, adopted);
@@ -652,7 +669,7 @@ api.post("/sites", async (req, res) => {
   const job = usageContext.run({ user: req.user, siteId: meta.id }, () => startJob("generate", meta.id, async (progress) => {
     try {
       const { site } = await ai.generateSite({ name, prompt, onProgress: progress });
-      await fillPlaceholders(site, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/` });
+      await fillImages(site, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, brief: { name, description: prompt } });
       await store.saveDraft(meta.id, site, { version: "Generated by AI" });
       await store.updateMeta(meta.id, { status: "ready", error: null, name: site.name });
       return { ok: true };
@@ -676,7 +693,7 @@ api.post("/sites/:id/regenerate", async (req, res) => {
       const before = await store.getDraft(meta.id);
       if (before) await store.addVersion(meta.id, before, "Before regenerating");
       const { site } = await ai.generateSite({ name: meta.name, prompt, media: await store.listMedia(meta.id), onProgress: progress });
-      await fillPlaceholders(site, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/` });
+      await fillImages(site, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, brief: { name: meta.name, description: prompt } });
       await store.saveDraft(meta.id, site, { version: "Generated by AI" });
       await store.updateMeta(meta.id, { status: "ready", error: null });
       return { ok: true };
@@ -853,6 +870,8 @@ api.post("/sites/:id/ai", async (req, res) => {
       onProgress: progress,
     });
     if (result.changed) {
+      // Pictures the AI added get stock photos (or placeholder artwork).
+      await fillImages(result.site, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/` });
       await store.addVersion(meta.id, current, `Before AI: ${instruction.slice(0, 120)}`);
       await store.saveDraft(meta.id, result.site);
     }
@@ -865,6 +884,26 @@ api.get("/jobs/:id", (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ error: "This job has expired. Reload the page." });
   res.json(publicJob(job));
+});
+
+// Stock photo search (image picker) and adding one to a site's images.
+api.get("/stock/search", async (req, res) => {
+  try {
+    res.json({ photos: await stock.search(String(req.query.q || ""), { orientation: String(req.query.orientation || ""), page: Math.max(1, Math.min(10, Number(req.query.page) || 1)) }) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.post("/sites/:id/stock", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  try {
+    const url = await stock.download(String(req.body?.url || ""), { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, name: `pexels-${Number(req.body?.id) || "photo"}` });
+    res.json({ url });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 api.get("/sites/:id/media", async (req, res) => {

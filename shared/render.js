@@ -841,11 +841,73 @@ export function renderCss(site) {
   return themeCss(site.theme) + "\n" + BASE_CSS + (site.customCss ? "\n/* custom */\n" + site.customCss.replace(/<\/style/gi, "<\\/style") : "");
 }
 
+// ---------------------------------------------------------------------------
+// Search engines and sharing: icon, share picture, business details, sitemap
+// ---------------------------------------------------------------------------
+
+function absolute(url, origin) {
+  if (!url) return "";
+  return /^https?:\/\//i.test(url) || !origin ? url : origin.replace(/\/$/, "") + (url.startsWith("/") ? url : `/${url}`);
+}
+
+// The picture shown when a page is shared (WhatsApp, Facebook…): the page's
+// first real photo, else the logo.
+export function shareImage(site, page) {
+  for (const s of page.sections) {
+    if (s.props.background === "image" && s.props.image && !isPlaceholder(s.props.image)) return s.props.image;
+    for (const c of s.columns) for (const b of c.blocks) {
+      const src = b.type === "image" ? b.props.src : b.type === "gallery" ? b.props.images[0]?.src : b.style?.bgImage;
+      if (src && !isPlaceholder(src)) return src;
+    }
+  }
+  return site.header.logoImage || "";
+}
+
+// A letter in the brand colour, used when there's no logo or icon.
+function letterIcon(site) {
+  const letter = esc((site.name || "?").trim().charAt(0).toUpperCase() || "?");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${site.theme.colors.primary}"/><text x="32" y="44" font-size="36" font-family="Arial,sans-serif" font-weight="700" text-anchor="middle" fill="${contrastText(site.theme.colors.primary)}">${letter}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function businessJsonLd(site, origin, canonical) {
+  const b = site.business || {};
+  const data = { "@context": "https://schema.org", "@type": "LocalBusiness", name: site.name };
+  if (canonical) data.url = canonical;
+  if (site.header.logoImage) data.logo = absolute(safeUrl(site.header.logoImage), origin);
+  const img = shareImage(site, site.pages[0]);
+  if (img) data.image = absolute(safeUrl(img), origin);
+  if (b.phone) data.telephone = b.phone;
+  if (b.email) data.email = b.email;
+  if (b.address) data.address = { "@type": "PostalAddress", streetAddress: b.address };
+  if (b.type) data.description = b.type;
+  const links = String(b.socials || "").split(/\s+/).filter((l) => /^(https?:\/\/)?[\w-]+(\.[\w-]+)+\//i.test(l)).map((l) => (l.startsWith("http") ? l : `https://${l}`));
+  if (links.length) data.sameAs = links;
+  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`;
+}
+
+function headExtras(site, page, opts) {
+  const origin = opts.canonical ? new URL(opts.canonical).origin : opts.origin || "";
+  const icon = site.favicon || site.header.logoImage;
+  const out = [`<link rel="icon" href="${esc(icon ? safeUrl(icon) : letterIcon(site))}">`];
+  const img = shareImage(site, page);
+  if (img) out.push(`<meta property="og:image" content="${esc(absolute(safeUrl(img), origin))}"><meta name="twitter:card" content="summary_large_image">`);
+  out.push(`<meta property="og:type" content="website"><meta property="og:site_name" content="${esc(site.name)}">`);
+  if (page.slug === "index") out.push(businessJsonLd(site, origin, opts.canonical));
+  return out.join("");
+}
+
+export function sitemapXml(site, origin) {
+  const o = origin.replace(/\/$/, "");
+  const urls = site.pages.map((p) => `<url><loc>${esc(o + pageUrl(p, "/"))}</loc></url>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`;
+}
+
 export function renderPage(site, page, opts = {}) {
   const title = page.seo.title || (page.slug === "index" ? site.name : `${page.title} | ${site.name}`);
   const desc = page.seo.description;
   const canonical = opts.canonical ? `<link rel="canonical" href="${esc(opts.canonical)}">` : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ""}<meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ""}${canonical}<meta name="theme-color" content="${esc(site.theme.colors.primary)}"><link rel="icon" href="data:,">${fontLinks(site, page)}<style>${renderCss(site)}</style></head><body>${renderBody(site, page, opts)}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ""}<meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ""}${canonical}<meta name="theme-color" content="${esc(site.theme.colors.primary)}">${headExtras(site, page, opts)}${fontLinks(site, page)}<style>${renderCss(site)}</style></head><body>${renderBody(site, page, opts)}</body></html>`;
 }
 
 export { BLOCKS, LAYOUT_COLUMNS };

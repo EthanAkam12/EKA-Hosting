@@ -3,14 +3,14 @@
 //   index.html, <page>/index.html   the pages (CSS inlined, no JavaScript)
 //   media/...                       images the pages use
 //   contact.php                     emails contact-form messages to the owner
-//   404.html, .htaccess, robots.txt
+//   404.html, .htaccess, robots.txt, sitemap.xml (when the domain is known)
 //
 // Used by "Download site as files" and by "Publish to hosting" (FTP).
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { renderPage } from "../shared/render.js";
+import { renderPage, sitemapXml } from "../shared/render.js";
 
 export async function buildStaticSite({ site, siteId, mediaDir, formEmail = "", domain = "" }) {
   const files = [];
@@ -49,7 +49,8 @@ export async function buildStaticSite({ site, siteId, mediaDir, formEmail = "", 
   }
 
   add("404.html", notFoundPage(site));
-  add("robots.txt", "User-agent: *\nAllow: /\n");
+  if (domain) add("sitemap.xml", sitemapXml(site, `https://${domain}`));
+  add("robots.txt", `User-agent: *\nAllow: /\n${domain ? `Sitemap: https://${domain}/sitemap.xml\n` : ""}`);
   add(".htaccess", HTACCESS);
   if (hasForm) add("contact.php", contactPhp(site, formEmail));
 

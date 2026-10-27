@@ -50,7 +50,7 @@ test("sanitizer strips scripts, handlers and javascript: links", () => {
 test("published pages have no JavaScript and link pages under the base path", () => {
   const site = sampleSite();
   const html = renderPage(site, site.pages[0], { base: "/s/test/" });
-  assert.ok(!html.includes("<script"));
+  assert.doesNotMatch(html, /<script(?! type="application\/ld\+json")/); // business details for Google are data, not code
   assert.match(html, /href="\/s\/test\/about\/"/);
   assert.ok(!html.includes("data-eka-id"), "no editor attributes on live pages");
   // The image column is empty, so the live page collapses to one column.

@@ -333,6 +333,8 @@ async function newPageDesign() {
     const result = await runJob(d.options.length ? `Designing another ${title} page…` : `Designing the ${title} page…`, () => wapi("/wizard/page", { method: "POST", body: {
       brief: state.brief, concept: currentConcept().site, title,
       previous: d.options.map((o) => o.layout),
+      // So stock photos already used on other pages aren't repeated.
+      otherPages: Object.entries(state.pw.d).filter(([t]) => t !== title).map(([, x]) => x.options[x.current]?.page).filter(Boolean),
       wishes: me.ai.enabled ? (state.notes[title] || "") : "",
     } }));
     d.options.push({ page: result.page, layout: result.layout });

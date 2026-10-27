@@ -38,7 +38,7 @@ test("element styles render as per-page CSS, desktop before mobile, with no scri
   assert.match(html, /<svg class="bi-phone"/);
   assert.match(html, /class="eka-s[^"]*an an-load/); // first section plays on load
   assert.match(html, /class="eka-s[^"]*an an-scroll/); // later ones as they scroll in
-  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<script(?! type="application\/ld\+json")/); // business details for Google are data, not code
 });
 
 test("page descriptions and per-page changes reach the AI and the templates", async () => {
@@ -101,7 +101,7 @@ test("background images: real <img> layer, tint, effects, phone image", () => {
   // second section: default black tint from the old "darken" value, lazy image
   assert.match(html, /<div class="eka-tint" aria-hidden="true" style="background:#000000;opacity:0\.45"><\/div>/);
   assert.match(html, /background-image:url\(&quot;\/_m\/s1\/card-o\.webp&quot;\)[^"]*background-attachment:fixed/);
-  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<script(?! type="application\/ld\+json")/); // business details for Google are data, not code
 });
 
 test("gallery: columns per device, rows limit, shape and a no-JS full-size viewer", () => {
@@ -115,7 +115,7 @@ test("gallery: columns per device, rows limit, shape and a no-JS full-size viewe
   assert.match(html, /<figcaption>Photo 0<\/figcaption>/);
   assert.match(html, /<a href="#g[\w-]+-1" aria-label="View larger: Photo 1">/);
   assert.match(html, /class="eka-lb" id="g[\w-]+-7"[\s\S]*?class="eka-lb-prev"/);
-  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<script(?! type="application\/ld\+json")/); // business details for Google are data, not code
   // Old sites (columns as 2/3/4 from a dropdown) keep working.
   assert.equal(normalizeSite({ pages: [{ sections: [{ columns: [{ blocks: [{ type: "gallery", props: { columns: 2 } }] }] }] }] }).pages[0].sections[0].columns[0].blocks[0].props.columns, 2);
 });
@@ -161,5 +161,5 @@ test("CSS effects: text effects, scrolling strip, count-up numbers, tilt, moving
   assert.match(html, /class="eka-mq mq-right mq-md mq-pause mq-fade" style="--mq-d:20s"/);
   assert.equal((html.match(/class="mq-item"/g) || []).length, 16, "short lists are repeated to fill the loop (8 per half)");
   assert.match(html, /::before\{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient\(135deg,#112233,#c9a227,#112233\)/);
-  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<script(?! type="application\/ld\+json")/); // business details for Google are data, not code
 });

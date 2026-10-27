@@ -635,7 +635,19 @@ export function normalizeSite(site) {
     },
     pages,
     customCss: str(s.customCss),
+    favicon: str(s.favicon),
+    // Shown to Google as business details (and used by the phone contact button).
+    business: normalizeBusiness(s.business),
   };
+}
+
+function normalizeBusiness(b) {
+  const x = isObj(b) ? b : {};
+  const out = {};
+  // keywords: a short stock-photo search for the business ("antique shop interior").
+  for (const k of ["type", "keywords", "phone", "whatsapp", "email", "address", "hours", "socials"]) out[k] = str(x[k]).slice(0, 600);
+  out.contactButton = ["none", "call", "whatsapp", "both"].includes(x.contactButton) ? x.contactButton : "none";
+  return out;
 }
 
 // ---------------------------------------------------------------------------

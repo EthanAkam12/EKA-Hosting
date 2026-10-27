@@ -6,6 +6,7 @@ import { createCanvas } from "./canvas.js";
 import { createInspector } from "./inspector.js";
 import { createPanels } from "./panels.js";
 import { openMediaPicker } from "./media.js";
+import { showChecklist, siteIssues } from "./checklist.js";
 import { followDeploy } from "./deploy-ui.js";
 import { findNode } from "/admin/shared/schema.js";
 
@@ -16,8 +17,11 @@ const frameWrap = $("frame-wrap");
 const state = createState({ siteId });
 
 // Image picking: either for a field (callback) or for an image block on the canvas.
+// The stock photo search starts with the business's photo keywords (or the image's description).
+const stockOptions = (query) => ({ stock: state.get().stockPhotos, query: query || state.get().site.business.keywords || state.get().site.business.type || "" });
+
 function pickImage(cb) {
-  openMediaPicker(siteId, cb);
+  openMediaPicker(siteId, cb, stockOptions());
 }
 
 function pickImageForBlock(blockId) {
@@ -28,7 +32,7 @@ function pickImageForBlock(blockId) {
     if (!n) return;
     if (n.node.type === "gallery") n.node.props.images.push({ src: url, alt: "" });
     else n.node.props.src = url;
-  }));
+  }), stockOptions(f.node.props.alt));
 }
 
 const canvas = createCanvas({
@@ -102,6 +106,8 @@ $("preview-btn").addEventListener("click", async (e) => {
 
 $("publish-btn").addEventListener("click", async () => {
   const btn = $("publish-btn");
+  // Anything visitors would notice (placeholders, template text, broken links…) is shown first.
+  if (siteIssues(state).some((i) => i.level === "fix") && !(await showChecklist(state, { beforePublish: true }))) return;
   btn.disabled = true;
   btn.textContent = "Publishing…";
   try {
@@ -274,6 +280,7 @@ async function boot() {
   s.aiEnabled = me.ai.enabled;
   s.baseDomain = me.baseDomain;
   s.demo = me.demo;
+  s.stockPhotos = me.stockPhotos;
   if (me.demo) {
     demoBanner(me);
     const pub = $("publish-btn");
