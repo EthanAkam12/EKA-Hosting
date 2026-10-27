@@ -36,7 +36,7 @@ section>.eka-ph-tag{top:12px;left:12px}
 .an.eka-an-play{animation:var(--an) var(--an-d,.8s) cubic-bezier(.2,.7,.2,1) var(--an-delay,0s) both!important}
 `;
 
-export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia, onAskAi, onKey }) {
+export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia, onAskAi, onKey, onContextMenu }) {
   let doc = null;
   let win = null;
   let ready = null;
@@ -97,6 +97,17 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
       }
     });
 
+    // Right-click: select the item and show the editor's menu at the pointer.
+    doc.addEventListener("contextmenu", (e) => {
+      if (inline) return;
+      let el = e.target.closest("[data-eka-kind]");
+      if (el?.dataset.ekaKind === "column") el = el.closest('[data-eka-kind="section"]');
+      if (!el) return;
+      e.preventDefault();
+      state.select(el.dataset.ekaId);
+      const r = iframe.getBoundingClientRect();
+      onContextMenu?.(el.dataset.ekaId, r.left + e.clientX * scale, r.top + e.clientY * scale);
+    });
     doc.addEventListener("submit", (e) => e.preventDefault(), true);
     doc.addEventListener("keydown", (e) => {
       if (inline) {
@@ -298,7 +309,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
       }
       const [node] = f.parent.splice(f.index, 1);
       f.parent.splice(to, 0, node);
-    });
+    }, { label: "Moved" });
     scrollTo(id);
   }
 
@@ -310,7 +321,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
       const copy = reId(f.node);
       newId = copy.id;
       f.parent.splice(f.index + 1, 0, copy);
-    });
+    }, { label: "Duplicated" });
     if (newId) { state.select(newId); scrollTo(newId); }
   }
 
@@ -318,7 +329,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
     state.mutate((site) => {
       const f = findNode(site, id);
       if (f && (f.kind === "block" || f.kind === "section")) f.parent.splice(f.index, 1);
-    });
+    }, { label: "Deleted" });
     state.select(null);
   }
 
@@ -520,7 +531,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
         page.sections.splice(target.index, 0, section);
         selectId = node.id;
       }
-    });
+    }, { label: payload.kind === "new-block" ? `Added ${BLOCKS[payload.type]?.label.toLowerCase() || "block"}` : payload.kind === "new-section" ? "Added section" : "Moved" });
     if (selectId) { state.select(selectId); scrollTo(selectId); }
   }
 
@@ -545,7 +556,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
         const sectionIdx = f ? page.sections.indexOf(f.kind === "section" ? f.node : f.section) : -1;
         page.sections.splice(sectionIdx >= 0 ? sectionIdx + 1 : page.sections.length, 0, ...sections);
       }
-    });
+    }, { label: payload.kind === "new-block" ? `Added ${BLOCKS[payload.type]?.label.toLowerCase() || "block"}` : "Added section" });
     if (selectId) { state.select(selectId); scrollTo(selectId); }
   }
 

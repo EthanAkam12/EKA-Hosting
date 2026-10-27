@@ -7,6 +7,7 @@ import { createInspector } from "./inspector.js";
 import { createPanels } from "./panels.js";
 import { openMediaPicker } from "./media.js";
 import { showChecklist, siteIssues } from "./checklist.js";
+import { clipboard } from "./clipboard.js";
 import { followDeploy } from "./deploy-ui.js";
 import { findNode } from "/admin/shared/schema.js";
 
@@ -43,7 +44,40 @@ const canvas = createCanvas({
   onRequestMedia: pickImageForBlock,
   onAskAi: (id) => panels.askAi(id),
   onKey: handleKey,
+  onContextMenu: (id, x, y) => openContextMenu(id, x, y),
 });
+
+// ---- right-click menu ----------------------------------------------------
+
+let ctxMenu = null;
+function closeContextMenu() { ctxMenu?.remove(); ctxMenu = null; }
+function openContextMenu(id, x, y) {
+  closeContextMenu();
+  const f = ["header", "footer"].includes(id) ? null : findNode(state.get().site, id);
+  const movable = f && (f.kind === "block" || f.kind === "section");
+  const clip = clipboard.peek();
+  const item = (label, keys, fn, enabled = true) => h("button", { class: "ctx-item", disabled: !enabled, onclick: () => { closeContextMenu(); fn(); } }, h("span", {}, label), keys ? h("kbd", {}, keys) : null);
+  ctxMenu = h("div", { class: "ctx-menu", role: "menu" },
+    movable ? item("✦ Ask AI to change this", "", () => panels.askAi(id)) : null,
+    movable ? item("Duplicate", "Ctrl+D", () => canvas.duplicate(id)) : null,
+    movable ? item("Copy", "Ctrl+C", () => clipboard.copy(state, id)) : null,
+    item(clip ? `Paste ${clip.kind === "section" ? "section" : "block"} after this` : "Paste", "Ctrl+V", () => clipboard.paste(state).then((nid) => nid && canvas.scrollTo(nid)), !!clip && !["header", "footer"].includes(id)),
+    h("hr"),
+    item("Copy style", "", () => clipboard.copyStyle(state, id)),
+    item("Paste style", "", () => clipboard.pasteStyle(state, id), !!clipboard.peekStyle()),
+    movable ? h("hr") : null,
+    movable ? item("Move up", "Alt+↑", () => canvas.moveBy(id, -1)) : null,
+    movable ? item("Move down", "Alt+↓", () => canvas.moveBy(id, 1)) : null,
+    movable ? item("Delete", "Del", () => canvas.remove(id)) : null,
+  );
+  document.body.append(ctxMenu);
+  // Keep it on screen.
+  const r = ctxMenu.getBoundingClientRect();
+  ctxMenu.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  ctxMenu.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+}
+document.addEventListener("mousedown", (e) => { if (ctxMenu && !ctxMenu.contains(e.target)) closeContextMenu(); });
+window.addEventListener("blur", closeContextMenu);
 
 const inspector = createInspector({
   state,
@@ -92,6 +126,18 @@ function renderSaveState() {
 
 $("page-select").addEventListener("change", (e) => state.setPage(e.target.value));
 $("undo").addEventListener("click", () => state.undo());
+// Recent changes: jump back several steps at once.
+$("undo-list").addEventListener("click", (e) => {
+  e.stopPropagation();
+  closeContextMenu();
+  const steps = state.history().slice(0, 30);
+  const r = e.currentTarget.getBoundingClientRect();
+  ctxMenu = h("div", { class: "ctx-menu undo-menu", role: "menu", style: { left: `${r.left}px`, top: `${r.bottom + 6}px` } },
+    h("div", { class: "small muted", style: { padding: "4px 10px 6px" } }, steps.length ? "Click a change to undo it and everything after it" : "No changes yet"),
+    steps.map((st, i) => h("button", { class: "ctx-item", onclick: () => { closeContextMenu(); state.undoSteps(i + 1); toast(`Undid ${i + 1} change${i ? "s" : ""}.`); } },
+      h("span", {}, st.label), h("kbd", {}, timeAgo(new Date(st.at).toISOString())))));
+  document.body.append(ctxMenu);
+});
 $("redo").addEventListener("click", () => state.redo());
 document.querySelectorAll("[data-device]").forEach((b) => b.addEventListener("click", () => state.setDevice(b.dataset.device)));
 
@@ -161,7 +207,7 @@ async function openHistory() {
       h("button", { class: "btn btn-sm", onclick: async () => {
         if (!(await confirmDialog(`Restore "${v.label}"? Your current version is saved in History first.`, { okText: "Restore" }))) return;
         const { site } = await api(`/sites/${siteId}/versions/${v.id}/restore`, { method: "POST", body: {} });
-        state.replaceSite(site);
+        state.replaceSite(site, "Restored a saved version");
         m.close();
         toast("Version restored.");
       } }, "Restore"),
@@ -183,10 +229,12 @@ function handleKey(e) {
   if (mod && key === "z" && !e.shiftKey) { e.preventDefault(); state.undo(); }
   else if (mod && (key === "y" || (key === "z" && e.shiftKey))) { e.preventDefault(); state.redo(); }
   else if (mod && key === "d" && sel) { e.preventDefault(); canvas.duplicate(sel); }
+  else if (mod && key === "c" && sel && !["header", "footer"].includes(sel)) { e.preventDefault(); clipboard.copy(state, sel); }
+  else if (mod && key === "v" && clipboard.peek()) { e.preventDefault(); clipboard.paste(state).then((nid) => nid && canvas.scrollTo(nid)); }
   else if ((key === "delete" || key === "backspace") && sel && !["header", "footer"].includes(sel)) {
     const f = findNode(state.get().site, sel);
     if (f && (f.kind === "block" || f.kind === "section")) { e.preventDefault(); canvas.remove(sel); }
-  } else if (key === "escape") state.select(null);
+  } else if (key === "escape") { closeContextMenu(); state.select(null); }
   else if (e.altKey && (key === "arrowup" || key === "arrowdown") && sel) { e.preventDefault(); canvas.moveBy(sel, key === "arrowup" ? -1 : 1); }
 }
 document.addEventListener("keydown", handleKey);
@@ -223,7 +271,7 @@ state.on((what, source) => {
     case "site":
       canvas.render();
       if (source !== "inspector") inspector.render();
-      if (source !== "panel" && ["pages", "theme", "settings"].includes(active)) panels.render();
+      if (source !== "panel" && ["pages", "layers", "theme", "settings"].includes(active)) panels.render();
       renderBar();
       break;
     case "site-silent":
@@ -233,11 +281,12 @@ state.on((what, source) => {
     case "selection":
       canvas.updateSelection();
       inspector.render();
+      if (active === "layers") panels.render();
       break;
     case "page":
       canvas.render({ keepScroll: false });
       inspector.render();
-      if (active === "pages" || active === "ai") panels.render();
+      if (active === "pages" || active === "ai" || active === "layers") panels.render();
       renderBar();
       break;
     case "device":

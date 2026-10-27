@@ -1013,6 +1013,23 @@ api.post("/sites/:id/media", express.raw({ type: () => true, limit: "45mb" }), a
   }
 });
 
+// Pasting from another website: copy the images it uses into this site.
+api.post("/sites/:id/media/import", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const map = {};
+  for (const url of (Array.isArray(req.body?.urls) ? req.body.urls : []).slice(0, 100)) {
+    const m = String(url).match(/^\/_m\/([a-f0-9]+)\/([\w.-]+)$/);
+    const from = m && store.getMeta(m[1]);
+    if (!from || from.id === meta.id || !canSee(req.user, from) || m[2].startsWith(".")) continue;
+    for (const name of new Set([m[2], m[2].replace(/-o\.webp$/, "-o-sm.webp")])) {
+      await fs.copyFile(path.join(store.mediaDir(from.id), name), path.join(store.mediaDir(meta.id), name)).catch(() => {});
+    }
+    map[url] = `/_m/${meta.id}/${m[2]}`;
+  }
+  res.json({ map });
+});
+
 api.delete("/sites/:id/media/:file", async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;

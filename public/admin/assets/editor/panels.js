@@ -40,7 +40,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
 
   function render() {
     root.replaceChildren();
-    ({ add: renderAdd, ai: renderAi, pages: renderPages, theme: renderTheme, settings: renderSettings })[active]();
+    ({ add: renderAdd, ai: renderAi, pages: renderPages, layers: renderLayers, theme: renderTheme, settings: renderSettings })[active]();
   }
 
   // -------------------------------------------------------------- Add -----
@@ -153,7 +153,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
         const result = await waitForJob(jobId, (job) => {
           if (aiProgress && job.status === "running") aiProgress.textContent = job.progress.chars ? `Writing changes… ${Math.round(job.elapsedMs / 1000)}s` : `Thinking… ${Math.round(job.elapsedMs / 1000)}s`;
         });
-        if (result.changed) state.replaceSite(result.site);
+        if (result.changed) state.replaceSite(result.site, `AI: ${instruction.slice(0, 60)}`);
         aiLog.push({ role: "bot", text: result.summary });
         return result.changed;
       } catch (err) {
@@ -240,6 +240,62 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
         root.querySelector(".btn-primary")?.click();
       }
     }
+  }
+
+  // ----------------------------------------------------------- Layers -----
+
+  // A short name for a section or block, from what's in it.
+  function layerName(node, kind) {
+    const strip = (t) => String(t || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (kind === "section") {
+      const heading = node.columns.flatMap((c) => c.blocks).find((b) => b.type === "heading");
+      return heading ? strip(heading.props.text) : `${node.props.layout === "1" ? "One" : node.columns.length} column${node.columns.length > 1 ? "s" : ""}`;
+    }
+    const p = node.props;
+    if (node.type === "buttons") return p.items.map((i) => i.text).filter(Boolean).join(", ");
+    if (node.type === "image") return p.alt || p.caption || "";
+    if (node.type === "marquee") return p.items.map((i) => i.text).filter(Boolean).join(" · ");
+    return strip(p.text || p.title || p.html || p.quote || p.name || p.address || "");
+  }
+
+  function renderLayers() {
+    const s = state.get();
+    const page = state.page();
+    const sel = s.selectedId;
+    root.append(h("p", { class: "small muted", style: { marginTop: 0 } }, "Everything on this page, top to bottom. Click to select; right-click on the page for more."));
+    const toggleHidden = (id) => state.mutate((site) => {
+      const f = findNode(site, id);
+      if (!f) return;
+      const hidden = f.node.style?.hide?.d && f.node.style?.hide?.t && f.node.style?.hide?.m;
+      f.node.style = { ...(f.node.style || {}), hide: hidden ? {} : { d: true, t: true, m: true } };
+    }, { label: "Hid or showed an item" });
+    const row = (node, kind, depth) => {
+      const hidden = node.style?.hide && Object.keys(node.style.hide).length;
+      const name = layerName(node, kind);
+      const label = kind === "section" ? "Section" : BLOCKS[node.type]?.label || node.type;
+      return h("div", { class: `layer${sel === node.id ? " on" : ""}${hidden ? " hidden-layer" : ""}`, style: { paddingLeft: `${8 + depth * 16}px` }, role: "button", tabindex: "0",
+        onclick: () => { state.select(node.id); canvas.scrollTo(node.id); },
+        onkeydown: (e) => { if (e.key === "Enter") { state.select(node.id); canvas.scrollTo(node.id); } } },
+        h("span", { class: "layer-ic" }, kind === "section" ? "▭" : BLOCKS[node.type]?.icon || "•"),
+        h("span", { class: "grow layer-name" }, h("strong", {}, label), name ? ` ${name.slice(0, 40)}` : ""),
+        hidden ? h("span", { class: "small muted", title: "Hidden on some screens" }, "hidden") : null,
+        h("button", { class: "icon-btn", title: hidden ? "Show everywhere" : "Hide everywhere", onclick: (e) => { e.stopPropagation(); toggleHidden(node.id); } }, hidden ? "◌" : "◉"),
+        h("button", { class: "icon-btn", title: "Move up", onclick: (e) => { e.stopPropagation(); canvas.moveBy(node.id, -1); } }, "↑"),
+        h("button", { class: "icon-btn", title: "Move down", onclick: (e) => { e.stopPropagation(); canvas.moveBy(node.id, 1); } }, "↓"),
+      );
+    };
+    const list = h("div", { class: "layers" },
+      h("div", { class: `layer${sel === "header" ? " on" : ""}`, role: "button", tabindex: "0", onclick: () => state.select("header") }, h("span", { class: "layer-ic" }, "▔"), h("span", { class: "grow layer-name" }, h("strong", {}, "Header"))));
+    for (const section of page.sections) {
+      list.append(row(section, "section", 0));
+      section.columns.forEach((col, ci) => {
+        if (section.columns.length > 1) list.append(h("div", { class: "layer col-layer", style: { paddingLeft: "24px" }, onclick: () => state.select(col.id) }, h("span", { class: "small muted" }, `Column ${ci + 1}${col.blocks.length ? "" : " (empty)"}`)));
+        for (const block of col.blocks) list.append(row(block, "block", section.columns.length > 1 ? 2 : 1));
+      });
+    }
+    list.append(h("div", { class: `layer${sel === "footer" ? " on" : ""}`, role: "button", tabindex: "0", onclick: () => state.select("footer") }, h("span", { class: "layer-ic" }, "▁"), h("span", { class: "grow layer-name" }, h("strong", {}, "Footer"))));
+    root.append(list);
+    root.querySelector(".layer.on")?.scrollIntoView({ block: "nearest" });
   }
 
   // ------------------------------------------------------------ Style -----

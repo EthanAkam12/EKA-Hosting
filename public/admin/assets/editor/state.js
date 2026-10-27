@@ -1,9 +1,22 @@
 // Editor state: the site document, selection, undo/redo and autosave.
 
-import { normalizeSite, findNode } from "/admin/shared/schema.js";
+import { normalizeSite, findNode, BLOCKS } from "/admin/shared/schema.js";
 import { api } from "../ui.js";
 
 const MAX_UNDO = 100;
+
+// A short description of an undo step, from the change's key (see mutate).
+function labelFor(key, site) {
+  if (!key) return "Change";
+  const [area, id, field] = key.split(":");
+  const what = (nodeId) => {
+    const f = nodeId && findNode(site, nodeId);
+    return f ? (f.kind === "block" ? BLOCKS[f.node.type]?.label || "Block" : "Section") : "";
+  };
+  const names = { prop: () => `Edited ${what(id).toLowerCase() || "block"}`, style: () => `Styled ${what(id).toLowerCase() || "item"}`, sec: () => "Section settings", theme: () => "Site style", header: () => "Header", footer: () => "Footer", page: () => "Page settings", biz: () => "Business details", site: () => "Site settings", menu: () => "Menu links", inline: () => `Typed in ${what(id).toLowerCase() || "text"}` };
+  const base = names[area]?.() || "Change";
+  return field && area === "style" ? `${base} (${field})` : base;
+}
 
 export function createState({ siteId }) {
   const listeners = new Set();
@@ -18,6 +31,7 @@ export function createState({ siteId }) {
     dirty: false,
     lastError: null,
   };
+  // Undo steps: { snap (JSON of the site before), label, at }.
   let past = [];
   let future = [];
   let coalesce = { key: null, at: 0 };
@@ -55,11 +69,11 @@ export function createState({ siteId }) {
 
     // Apply a change. `key` lets rapid edits to the same field (typing)
     // collapse into one undo step.
-    mutate(fn, { key = null, silent = false, source = null } = {}) {
+    mutate(fn, { key = null, silent = false, source = null, label = null } = {}) {
       const now = Date.now();
       const snapshot = JSON.stringify(state.site);
       if (!(key && coalesce.key === key && now - coalesce.at < 1200)) {
-        past.push(snapshot);
+        past.push({ snap: snapshot, label: label || labelFor(key, state.site), at: now });
         if (past.length > MAX_UNDO) past.shift();
         future = [];
       }
@@ -74,8 +88,8 @@ export function createState({ siteId }) {
     },
 
     // Replace the whole document (AI edits, restores) as a single undo step.
-    replaceSite(site) {
-      past.push(JSON.stringify(state.site));
+    replaceSite(site, label = "AI change") {
+      past.push({ snap: JSON.stringify(state.site), label, at: Date.now() });
       future = [];
       coalesce = { key: null, at: 0 };
       state.site = normalizeSite(site);
@@ -86,19 +100,27 @@ export function createState({ siteId }) {
 
     canUndo: () => past.length > 0,
     canRedo: () => future.length > 0,
-    undo() {
+    // Recent steps, newest first: [{ label, at }].
+    history: () => past.map(({ label, at }) => ({ label, at })).reverse(),
+    // Undo the newest `n` steps at once.
+    undoSteps(n) {
+      for (let i = 0; i < n && past.length; i++) api_.undo({ quiet: i < n - 1 });
+    },
+    undo({ quiet = false } = {}) {
       if (!past.length) return;
-      future.push(JSON.stringify(state.site));
-      state.site = normalizeSite(JSON.parse(past.pop()));
+      const step = past.pop();
+      future.push({ snap: JSON.stringify(state.site), label: step.label, at: step.at });
+      state.site = normalizeSite(JSON.parse(step.snap));
       coalesce = { key: null, at: 0 };
       if (!state.site.pages.some((p) => p.id === state.pageId)) state.pageId = state.site.pages[0].id;
       api_.scheduleSave();
-      emit("site");
+      if (!quiet) emit("site");
     },
     redo() {
       if (!future.length) return;
-      past.push(JSON.stringify(state.site));
-      state.site = normalizeSite(JSON.parse(future.pop()));
+      const step = future.pop();
+      past.push({ snap: JSON.stringify(state.site), label: step.label, at: step.at });
+      state.site = normalizeSite(JSON.parse(step.snap));
       coalesce = { key: null, at: 0 };
       api_.scheduleSave();
       emit("site");
