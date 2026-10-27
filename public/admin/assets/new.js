@@ -21,7 +21,7 @@ let me = { ai: { enabled: false } };
 let state = load() || {
   version: 3,
   step: 1,
-  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", logoUrl: "", colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
+  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", logoUrl: "", photos: [], colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
   concepts: [], // [{ site, layout, requests: [], history: [] }]
   current: 0,
   notes: {}, // change requests per page: { "Whole site": "", "Home": "", "About": "" }
@@ -31,6 +31,7 @@ state.notes ||= {};
 state.wizardId ||= Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => x.toString(16).padStart(2, "0")).join("");
 const wapi = (path, opts = {}) => api(path, { ...opts, headers: { ...opts.headers, "X-EKA-Wizard": state.wizardId } });
 state.brief.pageInfo ||= {};
+state.brief.photos ||= [];
 let busy = null; // text while waiting on the AI
 const openBoxes = new Set(["Home"]); // which page change boxes are expanded
 let device = "desktop";
@@ -86,6 +87,28 @@ function renderBrief() {
   const removeLogo = h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => { b.logoUrl = ""; save(); paintLogo(); } }, "Remove");
   paintLogo();
 
+  // The business's own photos: used in the design before any stock photos.
+  const photoList = h("div", { class: "photo-list" });
+  const photoErr = h("div", { class: "field-hint" });
+  const paintPhotos = () => photoList.replaceChildren(...b.photos.map((p, i) => h("div", { class: "photo-item" },
+    h("img", { src: p.url, alt: "" }),
+    h("input", { class: "input", value: p.note || "", maxlength: "140", placeholder: "What it shows (optional)", "aria-label": "What the photo shows", oninput: (e) => { p.note = e.target.value; save(); } }),
+    h("button", { class: "btn btn-sm btn-ghost", type: "button", title: "Remove photo", "aria-label": "Remove photo", onclick: () => { b.photos.splice(i, 1); save(); paintPhotos(); } }, "×"))));
+  const photoInput = h("input", { type: "file", multiple: true, accept: "image/png,image/jpeg,image/webp,image/gif", hidden: true, onchange: async (e) => {
+    const files = [...e.target.files].slice(0, 12 - b.photos.length);
+    e.target.value = "";
+    if (!files.length) return toast("Up to 12 photos.", { error: true });
+    photoErr.textContent = `Uploading ${files.length} photo${files.length > 1 ? "s" : ""}…`;
+    for (const file of files) {
+      try {
+        const { url } = await api("/wizard/media", { method: "POST", raw: true, body: file, headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) } });
+        b.photos.push({ url, note: "" }); save(); paintPhotos();
+      } catch (ex) { toast(`${file.name}: ${ex.message}`, { error: true }); }
+    }
+    photoErr.textContent = "";
+  } });
+  paintPhotos();
+
   // Colours
   const useColors = h("input", { type: "checkbox", checked: !!b.colors });
   const primary = h("input", { type: "color", value: b.colors?.primary || "#2563eb" });
@@ -139,6 +162,13 @@ function renderBrief() {
         h("div", { class: "logo-box" }, logoPrev, h("div", {},
           h("button", { class: "btn btn-sm", type: "button", onclick: () => fileInput.click() }, b.logoUrl ? "Change logo" : "Upload logo"), " ", removeLogo, fileInput,
           h("div", { class: "field-hint" }, me.ai.enabled ? "The AI will pick colours that go with it." : "Shown in the site's header.")))),
+      h("div", { class: "field" }, h("label", {}, "Photos of the business (optional)"),
+        photoList,
+        h("div", {}, h("button", { class: "btn btn-sm", type: "button", onclick: () => photoInput.click() }, "Add photos"), photoInput),
+        photoErr,
+        h("div", { class: "field-hint" }, me.ai.enabled
+          ? "The shop, the team, their work… The AI looks at them and uses them first, e.g. as the main background with a tint so text stays readable. Say what each shows to help it choose."
+          : "Used first in the design's picture spots, before any stock photos.")),
     ),
 
     h("div", { class: "card" },

@@ -29,6 +29,11 @@
   .chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
   .chip.fixed { opacity: .7; cursor: default; }
   .logo-box { display: flex; align-items: center; gap: 14px; }
+  .photo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .photo-list:not(:empty) { margin-bottom: 10px; }
+  .photo-item { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+  .photo-item img { grid-column: 1 / -1; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--line, #e5e7eb); }
+  .photo-item .input { min-width: 0; min-height: 32px; padding: 4px 8px; font-size: 13px; }
   .logo-prev { width: 120px; height: 72px; border: 1px dashed var(--line-strong); border-radius: 8px; display: grid; place-items: center; background: #fafbfc center/contain no-repeat; color: var(--muted); font-size: 12px; }
   .colors { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   .colors label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }

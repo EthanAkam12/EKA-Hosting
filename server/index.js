@@ -22,7 +22,7 @@ import { saveUpload, deleteUpload } from "./media.js";
 import { buildStaticSite } from "./export.js";
 import { buildCubecartSkin } from "./cubecart-skin.js";
 import { fillPlaceholders } from "./placeholders.js";
-import { createStock, fillStockPhotos, keywordsFromBrief } from "./stock.js";
+import { createStock, fillStockPhotos, fillOwnerPhotos, keywordsFromBrief } from "./stock.js";
 import { deploy, testConnection } from "./deploy.js";
 import yazl from "yazl";
 import { renderPage, pageUrl, sitemapXml } from "../shared/render.js";
@@ -214,6 +214,8 @@ const stock = createStock();
 // Empty picture spots get matching stock photos where possible, and
 // placeholder artwork otherwise.
 async function fillImages(site, { dir, urlPrefix, brief, avoid }) {
+  // The owner's photos first, then stock photos, then placeholder artwork.
+  fillOwnerPhotos(site, brief?.photos, { avoid });
   await fillStockPhotos(site, { stock, dir, urlPrefix, avoid, keywords: keywordsFromBrief(brief || { name: site.name }) });
   await fillPlaceholders(site, { dir, urlPrefix });
   return site;
@@ -551,6 +553,10 @@ function cleanBrief(input = {}) {
     colors,
     style: STYLE_CHOICES.includes(input.style) ? input.style : STYLE_CHOICES[0],
     pages: Array.isArray(input.pages) ? input.pages.map((p) => str(p, 40)).filter(Boolean).slice(0, 12) : [],
+    // The owner's own photos (uploaded in the wizard), each with an optional note.
+    photos: (Array.isArray(input.photos) ? input.photos : [])
+      .filter((p) => p && /^\/_tmp\/[\w.-]+$/.test(p.url || ""))
+      .map((p) => ({ url: p.url, note: str(p.note, 140) })).slice(0, 12),
     // A short description per page, by page name ("Home", "About"…).
     pageInfo: Object.fromEntries(Object.entries(input.pageInfo && typeof input.pageInfo === "object" ? input.pageInfo : {})
       .map(([k, v]) => [str(k, 40), str(v, 1500)]).filter(([k, v]) => k && v).slice(0, 13)),
@@ -581,25 +587,22 @@ function notesBySlug(pageNotes, site) {
 }
 
 // The logo is shown to the AI so it can pick colours that match it.
+// The logo and the owner's photos are shown to the AI (small copies, which
+// are plenty for judging colours and content and cost far fewer tokens), so it
+// can match colours and decide where each photo goes.
 async function briefImages(brief) {
-  if (!ai.enabled || !brief.logoUrl) return [];
-  const file = path.join(TMP_MEDIA, path.basename(brief.logoUrl));
-  const ext = path.extname(file).slice(1).toLowerCase();
-  const mediaType = { webp: "image/webp", png: "image/png", jpg: "image/jpeg", gif: "image/gif" }[ext];
-  if (!mediaType) return [];
-  try {
-    let data = await fs.readFile(file);
-    let type = mediaType;
-    // A small copy is plenty for matching colours, and costs far fewer tokens.
+  if (!ai.enabled) return [];
+  const urls = [brief.logoUrl, ...(brief.photos || []).map((p) => p.url)].filter(Boolean);
+  const out = [];
+  for (const url of urls) {
     try {
+      const data = await fs.readFile(path.join(TMP_MEDIA, path.basename(url)));
       const sharp = (await import("sharp")).default;
-      data = await sharp(data).resize({ width: 400, height: 400, fit: "inside", withoutEnlargement: true }).png().toBuffer();
-      type = "image/png";
-    } catch { /* send the original */ }
-    return [{ mediaType: type, data: data.toString("base64") }];
-  } catch {
-    return [];
+      const small = await sharp(data).resize({ width: 400, height: 400, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+      out.push({ mediaType: "image/png", data: small.toString("base64") });
+    } catch { /* skip an image that can't be read */ }
   }
+  return out;
 }
 
 // Moves wizard uploads into the new site's media folder and fixes their URLs.

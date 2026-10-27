@@ -61,6 +61,11 @@ STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; l
 Effects are pure CSS and cheap, but use them sparingly: one text effect on the hero heading reads as polish; on every heading it's noise.
 HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.
 Prefer the section/block props and theme settings first; use STYLE for specific tweaks the owner asks for (spacing, borders, animations, hiding on mobile…).
+PHOTO BACKGROUNDS deserve finishing touches, so set these in STYLE whenever a section uses background "image" (or a block uses a background photo):
+- "bgPhoto": a concrete description of the photo, e.g. "sunlit antique shop interior with clocks" (it's used to find a matching stock photo when no image URL is given; for a block, setting bgPhoto asks for a background photo);
+- a tint so the text is easy to read: "tint" (often the theme's dark colour) with "tintOpacity" 35-70, or "tint" + "tint2" for a gradient (e.g. dark to transparent-looking brand colour, "tintDir": "up" or "diagonal");
+- "bgPos" to keep the subject in view when the photo is cropped;
+- at most one effect, used with taste: "bgEffect": "zoom" (slow zoom) suits a hero; "parallax" suits one mid-page band; don't put effects on every section.
 
 LINKS: link to another page with "/slug" (e.g. "/about", home is "/"), to a section with "#anchor" or "/slug#anchor",
 phone with "tel:+44...", email with "mailto:...". Give the contact section the anchor "contact".`;
@@ -158,7 +163,10 @@ export function formatBrief(brief = {}) {
   if (Array.isArray(brief.pages) && brief.pages.length) add("Pages wanted", brief.pages.join(", "));
   const info = Object.entries(brief.pageInfo || {}).filter(([, v]) => v && String(v).trim());
   if (info.length) lines.push(`What the owner wants on each page (follow closely):\n${info.map(([page, text]) => `- ${page}: ${String(text).trim()}`).join("\n")}`);
-  if (brief.logoUrl) add("Logo", `${brief.logoUrl} (already uploaded; put it in header.logoImage${brief.logoAttached ? "; the image is attached so you can match its colours" : ""})`);
+  if (brief.logoUrl) add("Logo", `${brief.logoUrl} (already uploaded; put it in header.logoImage${brief.imagesAttached ? "; it's the first attached image, so you can match its colours" : ""})`);
+  if (brief.photos?.length) {
+    lines.push(`The owner's own photos (use the URLs exactly; place each where it works best, e.g. a strong wide shot as the hero background, people or the shop front in the about section, products in a gallery${brief.imagesAttached ? `; they're attached${brief.logoUrl ? " after the logo" : ""}, in this order, so you can see them` : ""}):\n${brief.photos.map((p, i) => `${i + 1}. ${p.url}${p.note ? ` (${p.note})` : ""}`).join("\n")}`);
+  }
   return lines.join("\n");
 }
 

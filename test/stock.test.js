@@ -4,8 +4,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
-import { createEmptySite, createSection, createBlock, normalizeSite } from "../shared/schema.js";
-import { createStock, fillStockPhotos, keywordsFromBrief } from "../server/stock.js";
+import { createEmptySite, createSection, createBlock, normalizeSite, normalizeStyle } from "../shared/schema.js";
+import { createStock, fillStockPhotos, fillOwnerPhotos, keywordsFromBrief } from "../server/stock.js";
+import { formatBrief } from "../server/ai/prompts.js";
+import { createDemoProvider } from "../server/ai/demo.js";
 import { fillPlaceholders, isPlaceholder } from "../server/placeholders.js";
 
 // A stand-in for the Pexels API: 8 photos per search, images are small JPEGs.
@@ -88,4 +90,39 @@ test("Pixabay works the same way (its tags become the photo descriptions)", asyn
   assert.deepEqual(stockFromEnv({ PIXABAY_API_KEY: "a" }), { provider: "pixabay", apiKey: "a" });
   assert.equal(stockFromEnv({ PIXABAY_API_KEY: "a", PEXELS_API_KEY: "b" }).provider, "pexels");
   await fs.rm(dir, { recursive: true });
+});
+
+test("the owner's photos fill picture spots first, then stock covers the rest", async () => {
+  const { fetchImpl, searches } = await fakePexels();
+  const stock = createStock({ apiKey: "key", fetchImpl });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "eka-stock-"));
+  const site = createEmptySite("Harbour Antiques");
+  site.business = { keywords: "antique shop interior" };
+  const card = createBlock("text", { html: "<p>Hi</p>" });
+  card.style = { bgPhoto: "sunlit harbour with fishing boats", tint: "#000000", tintOpacity: 50 };
+  site.pages[0].sections = [
+    createSection({ background: "image" }),
+    createSection({ layout: "1-1" }, [[createBlock("image", { alt: "shop front" })], [card]]),
+  ];
+  const photos = [{ url: "/_tmp/front.webp", note: "The shop front at dusk" }, { url: "/_tmp/used.webp", note: "" }];
+  site.pages[0].sections[1].columns[0].blocks.push(createBlock("image", { src: "/_tmp/used.webp" }));
+  assert.equal(fillOwnerPhotos(site, photos), 1, "a photo the design already uses isn't placed again");
+  assert.equal(site.pages[0].sections[0].props.image, "/_tmp/front.webp", "the first spot (the hero background) gets the owner's photo");
+  assert.equal(await fillStockPhotos(site, { stock, dir, urlPrefix: "/_tmp/" }), 2);
+  assert.ok(searches.includes("sunlit harbour with fishing boats"), "a block's bgPhoto description is the search");
+  assert.match(card.style.bgImage, /^\/_tmp\/pexels-/);
+  assert.equal(card.style.tint, "#000000", "the tint the design asked for is kept");
+  await fs.rm(dir, { recursive: true });
+});
+
+test("background photo descriptions, owner photos in the brief, and template tints", async () => {
+  assert.equal(normalizeStyle({ bgPhoto: "  bakery counter  " }).bgPhoto, "bakery counter");
+  assert.equal(normalizeStyle({ bgPhoto: "" }), undefined);
+  const text = formatBrief({ name: "X", logoUrl: "/_tmp/logo.webp", photos: [{ url: "/_tmp/a.webp", note: "the team" }], imagesAttached: true });
+  assert.match(text, /1\. \/_tmp\/a\.webp \(the team\)/);
+  assert.match(text, /attached after the logo/);
+  const { site } = await createDemoProvider().generateConcept({ brief: { name: "Bakery", description: "Bakery in York" } });
+  const hero = site.pages[0].sections.find((x) => x.props.background === "image");
+  assert.ok(hero.style.tint && hero.style.tintOpacity > 0, "template photo backgrounds get a tint");
+  assert.equal(hero.style.bgEffect, "zoom");
 });

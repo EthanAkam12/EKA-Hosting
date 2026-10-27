@@ -247,6 +247,19 @@ const PAGE_BODIES = {
   ],
 };
 
+// Photo backgrounds get the finishing touches a designer would add: a tint in
+// the brand's dark colour (a gradient on the hero) and a slow zoom on the hero.
+function finishPhotoBackgrounds(sections, colors, { hero = false } = {}) {
+  sections.forEach((section, i) => {
+    if (section.props.background !== "image" || section.style) return;
+    const isHero = hero && i === 0;
+    section.style = isHero
+      ? { tint: colors.dark, tint2: colors.primary, tintDir: "diagonal", tintOpacity: 62, bgEffect: "zoom" }
+      : { tint: colors.dark, tintOpacity: 55 };
+  });
+  return sections;
+}
+
 export function demoPage(brief, name, title, variant) {
   const slug = slugify(title);
   const bodies = PAGE_BODIES[slug] || PAGE_BODIES.other;
@@ -271,6 +284,7 @@ export function createDemoProvider() {
       const homeInfo = String(brief.pageInfo?.Home || "").trim();
       const heroText = homeInfo && home.sections[0]?.columns.flatMap((c) => c.blocks).find((x) => x.type === "text");
       if (heroText) heroText.props.html = `<p>${esc(homeInfo)}</p>`;
+      finishPhotoBackgrounds(home.sections, site.theme.colors, { hero: true });
       site.pages = [home];
       return { site };
     },
@@ -294,7 +308,9 @@ export function createDemoProvider() {
     },
 
     async generatePage({ brief, concept, title, variant = 0 }) {
-      return { page: demoPage(brief, concept.name, title, variant) };
+      const page = demoPage(brief, concept.name, title, variant);
+      finishPhotoBackgrounds(page.sections, concept.theme.colors);
+      return { page };
     },
 
     // Old "describe it" flow: same as the first concept, built in one go.

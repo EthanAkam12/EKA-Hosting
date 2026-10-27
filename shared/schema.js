@@ -490,6 +490,8 @@ export function normalizeStyle(style) {
     const v = str(style[k]).trim();
     if (/^(\/|https?:\/\/)/.test(v)) out[k] = v;
   }
+  // A description of the background photo wanted ("sunlit antique shop interior"), used to find a stock photo.
+  if (typeof style.bgPhoto === "string" && style.bgPhoto.trim()) out.bgPhoto = style.bgPhoto.trim().slice(0, 120);
   one("bgPos", BG_POSITIONS);
   one("bgSize", ["contain"]);
   if (style.bgFixed === true) out.bgFixed = true;

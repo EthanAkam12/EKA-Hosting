@@ -100,30 +100,29 @@ export function keywordsFromBrief(brief = {}) {
 }
 
 /**
- * Fills empty picture spots (image blocks, empty galleries, image section
- * backgrounds) with stock photos that suit them: an image's own alt text if
- * it describes a photo, otherwise the business's photo keywords. Each photo
- * is used once per site. Spots that can't be filled are left empty, for
- * fillPlaceholders() to cover. Returns how many photos were added.
+ * Every empty picture spot in a site, in page order (so a hero comes first):
+ * image blocks, empty galleries, image section backgrounds, and blocks whose
+ * style asks for a background photo (style.bgPhoto). Each spot knows what to
+ * search for: its own description if it has one, otherwise `base`.
  */
-export async function fillStockPhotos(site, { stock, dir, urlPrefix, keywords, avoid = "" }) {
-  if (!stock?.enabled) return 0;
-  const base = String(site.business?.keywords || keywords || site.business?.type || site.name).slice(0, 100);
-  // Photos already on the site (or on its other pages, passed as `avoid`) aren't used again.
-  const used = new Set([...`${JSON.stringify(site)} ${avoid}`.matchAll(new RegExp(`${stock.provider}-(\\d+)-`, "g"))].map((m) => Number(m[1])));
+export function pictureSlots(site, base) {
   const slots = [];
+  const describes = (t) => (t && t.trim().split(/\s+/).length >= 2 ? t.trim() : "");
   for (const page of site.pages) {
     for (const section of page.sections) {
       if (section.props.background === "image" && !section.props.image) {
-        slots.push({ query: base, orientation: "landscape", set: (url) => { section.props.image = url; } });
+        slots.push({ query: describes(section.style?.bgPhoto) || base, orientation: "landscape", set: (url) => { section.props.image = url; } });
       }
       for (const column of section.columns) {
         for (const block of column.blocks) {
+          if (block.style?.bgPhoto && !block.style.bgImage) {
+            slots.push({ query: describes(block.style.bgPhoto) || base, orientation: "landscape", set: (url) => { block.style = { ...block.style, bgImage: url }; } });
+          }
           if (block.type === "image" && !block.props.src) {
             const alt = block.props.alt?.trim();
             const ratio = block.props.ratio;
             slots.push({
-              query: alt && alt.split(/\s+/).length >= 2 ? alt : base,
+              query: describes(alt) || base,
               orientation: ratio === "3:4" ? "portrait" : ratio === "1:1" ? "square" : "landscape",
               set: (url, photo) => { block.props.src = url; if (!alt) block.props.alt = photo.alt; },
             });
@@ -136,6 +135,39 @@ export async function fillStockPhotos(site, { stock, dir, urlPrefix, keywords, a
       }
     }
   }
+  return slots;
+}
+
+/**
+ * The owner's own photos (from the wizard) go into empty picture spots first,
+ * in order, skipping any the design already uses. Returns how many were placed.
+ */
+export function fillOwnerPhotos(site, photos = [], { avoid = "" } = {}) {
+  const already = `${JSON.stringify(site)} ${avoid}`;
+  const unused = photos.filter((p) => p?.url && !already.includes(p.url));
+  if (!unused.length) return 0;
+  let placed = 0;
+  for (const slot of pictureSlots(site, "")) {
+    const photo = unused.shift();
+    if (!photo) break;
+    slot.set(photo.url, { alt: photo.note || "" });
+    placed++;
+  }
+  return placed;
+}
+
+/**
+ * Fills empty picture spots with stock photos that suit them: a spot's own
+ * description if it has one, otherwise the business's photo keywords. Each
+ * photo is used once per site. Spots that can't be filled are left empty, for
+ * fillPlaceholders() to cover. Returns how many photos were added.
+ */
+export async function fillStockPhotos(site, { stock, dir, urlPrefix, keywords, avoid = "" }) {
+  if (!stock?.enabled) return 0;
+  const base = String(site.business?.keywords || keywords || site.business?.type || site.name).slice(0, 100);
+  // Photos already on the site (or on its other pages, passed as `avoid`) aren't used again.
+  const used = new Set([...`${JSON.stringify(site)} ${avoid}`.matchAll(new RegExp(`${stock.provider}-(\\d+)-`, "g"))].map((m) => Number(m[1])));
+  const slots = pictureSlots(site, base);
   let added = 0;
   // Four downloads at a time.
   const queue = slots.slice();

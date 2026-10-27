@@ -72,7 +72,7 @@ export function createAi({ provider = pickProvider() } = {}) {
         const text = await provider.complete({
           kind: previous.length ? "concept-another" : "concept",
           system: CONCEPT_SYSTEM,
-          prompt: conceptPrompt({ brief: { ...brief, logoAttached: images.length > 0 }, previous }),
+          prompt: conceptPrompt({ brief: { ...brief, imagesAttached: images.length > 0 }, previous }),
           images,
           model: generateModel,
           effort: conceptEffort,
