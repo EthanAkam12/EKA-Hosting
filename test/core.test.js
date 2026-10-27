@@ -18,7 +18,7 @@ test("normalizeSite drops unknown blocks and fixes bad values", () => {
   const site = normalizeSite({
     name: "X",
     theme: { colors: { primary: "red" }, fonts: { heading: "comic-sans" }, radius: 999 },
-    pages: [{ title: "Home", sections: [{ props: { layout: "1-1", padding: "huge" }, columns: [{ blocks: [{ type: "heading", props: { text: "Hi", level: 9 } }, { type: "marquee" }] }] }] }],
+    pages: [{ title: "Home", sections: [{ props: { layout: "1-1", padding: "huge" }, columns: [{ blocks: [{ type: "heading", props: { text: "Hi", level: 9 } }, { type: "blink-tag" }] }] }] }],
   });
   const sec = site.pages[0].sections[0];
   assert.equal(site.theme.colors.primary, "#2563eb");

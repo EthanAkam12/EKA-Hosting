@@ -68,9 +68,14 @@ function placeholderImage(label = "Add an image") {
 // ---------------------------------------------------------------------------
 
 const renderers = {
-  heading(p, ctx) {
+  heading(p, ctx, block) {
     const lvl = [1, 2, 3, 4].includes(Number(p.level)) ? Number(p.level) : 2;
-    return `<h${lvl} class="eka-h t-${p.align}"${ctx.editor ? ' data-eka-edit="text"' : ""}>${esc(p.text)}</h${lvl}>`;
+    const fx = block?.style?.textEffect;
+    let inner = esc(p.text);
+    // Word-by-word effects animate each word; the underline needs an inline span to draw under.
+    if (fx === "words-blur" || fx === "words-up") inner = String(p.text).split(/\s+/).filter(Boolean).map((w, i) => `<span class="w" style="--i:${i}">${esc(w)}</span>`).join(" ");
+    if (fx === "underline") inner = `<span class="tx-u">${inner}</span>`;
+    return `<h${lvl} class="eka-h t-${p.align}"${ctx.editor ? ' data-eka-edit="text"' : ""}>${inner}</h${lvl}>`;
   },
 
   text(p, ctx) {
@@ -134,8 +139,27 @@ const renderers = {
     return `<figure class="eka-quote">${stars}<blockquote>${esc(p.quote)}</blockquote><figcaption>${photo}<span><strong>${esc(p.name)}</strong>${p.role ? `<small>${esc(p.role)}</small>` : ""}</span></figcaption></figure>`;
   },
 
-  stats(p) {
-    return `<div class="eka-stats">${p.items.map((s) => `<div><strong>${esc(s.value)}</strong><span>${esc(s.label)}</span></div>`).join("")}</div>`;
+  stats(p, ctx) {
+    const value = (v) => {
+      // "500", "10+", "£2000", "98%": count the number up, keep what's around it.
+      const m = p.countUp && String(v).match(/^(\D*?)(\d{1,7})(\D*)$/);
+      if (!m) return esc(v);
+      return `<span class="eka-count${ctx.editor ? "" : " cnt-on"}" style="--to:${Number(m[2])}" role="text" aria-label="${esc(v)}">${esc(m[1])}<span class="eka-count-n" aria-hidden="true"></span>${esc(m[3])}</span>`;
+    };
+    return `<div class="eka-stats">${p.items.map((s) => `<div><strong>${value(s.value)}</strong><span>${esc(s.label)}</span></div>`).join("")}</div>`;
+  },
+
+  marquee(p, ctx) {
+    let items = p.items.filter((i) => i.text || i.image);
+    if (!items.length) return ctx.editor ? `<div class="eka-hint">Add items in the panel</div>` : "";
+    // Each half of the loop must be wider than the screen: repeat short lists.
+    while (items.length < 8) items = items.concat(items);
+    const sep = p.separator ? `<span class="mq-sep" aria-hidden="true">${esc(p.separator)}</span>` : "";
+    const one = (i) => `<span class="mq-item">${i.image ? `<img src="${esc(safeUrl(i.image))}" alt="${esc(i.text)}" loading="lazy" decoding="async">` : ""}${i.text && !i.image ? esc(i.text) : i.text ? `<span>${esc(i.text)}</span>` : ""}</span>`;
+    const set = items.map(one).join(sep) + sep;
+    const speed = Math.max(6, Math.min(120, Number(p.speed) || 30));
+    const cls = `eka-mq mq-${p.direction === "right" ? "right" : "left"} mq-${p.size}${p.pauseOnHover ? " mq-pause" : ""}${p.fadeEdges ? " mq-fade" : ""}`;
+    return `<div class="${cls}" style="--mq-d:${speed}s"><div class="eka-mq-track"><div class="eka-mq-set">${set}</div><div class="eka-mq-set" aria-hidden="true">${set}</div></div></div>`;
   },
 
   faq(p) {
@@ -255,6 +279,7 @@ export function hoverVars(effect) {
   if (effect === "pulse") v.a = "eka-pulse 1s ease-in-out infinite";
   if (effect === "wobble") v.a = "eka-wobble .6s ease";
   if (effect === "shine") v.sh = "eka-shine .8s ease";
+  if (effect === "tilt") { v.t = "perspective(900px) rotateX(5deg) rotateY(-6deg) translateY(-4px)"; v.s = "0 20px 40px -16px rgba(0,0,0,.45)"; }
   return `--bh-t:${v.t};--bh-s:${v.s};--bh-f:${v.f};--bh-a:${v.a};--bh-sh:${v.sh}`;
 }
 
@@ -286,6 +311,7 @@ function styleNode(node, ctx, { kind, first }) {
     add(hoverVars(st.hover));
     if (node.type !== "buttons") cls.push("hv");
   }
+  if (st.textEffect) cls.push(`tx-${st.textEffect}`, first ? "tx-load" : "tx-scroll");
   if (st.btnSize) add(btnSizeVars(st.btnSize));
 
   if (st.maxWidth) {
@@ -302,7 +328,12 @@ function styleNode(node, ctx, { kind, first }) {
     }
   }
   if (st.bg) {
-    if (st.bg2 && !(kind === "section" && node.props.background === "image")) add(`background:linear-gradient(135deg,${st.bg},${st.bg2})`);
+    const imageSection = kind === "section" && node.props.background === "image";
+    if (st.bg2 && st.bgAnimate && !imageSection) {
+      // A slowly moving gradient, on its own layer so it can't clash with entrance animations.
+      add("position:relative;isolation:isolate");
+      rules.push(`${sel}::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient(135deg,${st.bg},${st.bg2},${st.bg});background-size:300% 300%;animation:eka-bg-pan 14s ease-in-out infinite}`);
+    } else if (st.bg2 && !imageSection) add(`background:linear-gradient(135deg,${st.bg},${st.bg2})`);
     else add(`background-color:${st.bg}`);
   }
   if (st.color) add(`color:${st.color}`);
@@ -732,7 +763,42 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 @keyframes eka-zoom-out{from{opacity:0;transform:scale(1.15)}}
 @keyframes eka-flip{from{opacity:0;transform:perspective(900px) rotateX(45deg);transform-origin:50% 100%}}
 @media (prefers-reduced-motion:no-preference){.an{animation:var(--an) var(--an-d,.8s) cubic-bezier(.2,.7,.2,1) var(--an-delay,0s) both}@supports (animation-timeline:view()){.an-scroll{animation-duration:auto;animation-delay:0s;animation-timeline:view();animation-range:entry var(--an-rs,0%) entry var(--an-re,70%)}}}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}`;
+@keyframes eka-bg-pan{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.tx-shine :is(h1,h2,h3,h4,p),.tx-gradient :is(h1,h2,h3,h4,p){-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.tx-shine :is(h1,h2,h3,h4,p){background-image:linear-gradient(110deg,var(--tx-c,currentColor) 40%,var(--tx-hi,#fff) 50%,var(--tx-c,currentColor) 60%);background-size:250% 100%;animation:eka-text-shine 3.5s linear infinite}
+.tx-shine{--tx-c:var(--c-text)}.bg-dark .tx-shine,.bg-primary .tx-shine,.bg-image .tx-shine{--tx-c:#fff;--tx-hi:var(--c-accent)}
+.tx-gradient :is(h1,h2,h3,h4,p){background-image:linear-gradient(90deg,var(--c-primary),var(--c-accent),var(--c-primary));background-size:200% 100%;animation:eka-text-grad 6s linear infinite}
+@keyframes eka-text-shine{from{background-position:150% 0}to{background-position:-50% 0}}
+@keyframes eka-text-grad{to{background-position:200% 0}}
+.tx-u{background:linear-gradient(color-mix(in srgb,var(--c-accent) 55%,transparent),color-mix(in srgb,var(--c-accent) 55%,transparent)) no-repeat 0 88%/100% .32em;-webkit-box-decoration-break:clone;box-decoration-break:clone;padding:0 .08em}
+.w{display:inline-block}
+@keyframes eka-word-blur{from{opacity:0;filter:blur(10px);transform:translateY(.25em)}}
+@keyframes eka-word-up{from{opacity:0;transform:translateY(.7em)}}
+@keyframes eka-underline{from{background-size:0% .32em}}
+@property --n{syntax:"<integer>";initial-value:0;inherits:false}
+.eka-count-n{--n:var(--to,0);counter-reset:n var(--n)}.eka-count-n::before{content:counter(n)}
+@keyframes eka-count{from{--n:0}}
+@media (prefers-reduced-motion:no-preference){
+.tx-words-blur .w{animation:eka-word-blur .8s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*80ms)}
+.tx-words-up .w{animation:eka-word-up .7s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*70ms)}
+.tx-underline .tx-u{animation:eka-underline 1s .3s cubic-bezier(.6,0,.2,1) both}
+.cnt-on .eka-count-n{animation:eka-count 2s cubic-bezier(.15,.6,.2,1) both}
+@supports (animation-timeline:view()){
+.tx-scroll .w{animation-duration:auto;animation-delay:0s;animation-timeline:view();animation-range:entry calc(var(--i)*4%) entry calc(55% + var(--i)*4%)}
+.tx-scroll .tx-u{animation-duration:auto;animation-delay:0s;animation-timeline:view();animation-range:entry 30% cover 45%}
+.cnt-on .eka-count-n{animation-duration:auto;animation-timeline:view();animation-range:entry 20% cover 45%}}}
+.eka-mq{overflow:hidden;--mq-gap:2.2rem}
+.mq-fade{-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.eka-mq-track{display:flex;width:max-content;animation:eka-mq var(--mq-d,30s) linear infinite}
+.mq-right .eka-mq-track{animation-direction:reverse}
+.mq-pause:hover .eka-mq-track{animation-play-state:paused}
+.eka-mq-set{display:flex;align-items:center;gap:var(--mq-gap);padding-right:var(--mq-gap);flex:none}
+.mq-item{display:inline-flex;align-items:center;gap:.6em;white-space:nowrap;font-weight:600}
+.mq-item img{height:2.2em;width:auto;max-width:none;object-fit:contain}
+.mq-sep{opacity:.45}
+.mq-sm{font-size:.95rem}.mq-md{font-size:1.25rem}.mq-lg{font-size:clamp(1.5rem,3vw,2.2rem);--mq-gap:3rem}.mq-xl{font-size:clamp(2.2rem,6vw,4.5rem);--mq-gap:4rem;font-family:var(--f-head)}
+@keyframes eka-mq{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}.eka-mq-track{flex-wrap:wrap;width:auto}.eka-mq-set[aria-hidden]{display:none}.eka-mq-set{flex-wrap:wrap;justify-content:center;row-gap:.6em}}`;
 
 // Google Fonts URL for the site's fonts plus any picked for single elements
 // on this page (so a font used once doesn't load on every page).

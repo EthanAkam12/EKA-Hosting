@@ -138,3 +138,28 @@ test("video backgrounds: MP4 loop with the image as poster, YouTube embed, phone
   const editor = renderPage(n, n.pages[0], { editor: true });
   assert.doesNotMatch(editor, /player\.vimeo\.com/); // no player reloads while editing
 });
+
+test("CSS effects: text effects, scrolling strip, count-up numbers, tilt, moving gradient", () => {
+  const site = createEmptySite("x");
+  const h = createBlock("heading", { text: "Treasures with a story", level: 1 });
+  h.style = { textEffect: "words-blur" };
+  const u = createBlock("heading", { text: "Why us" });
+  u.style = { textEffect: "underline", hover: "tilt" };
+  const stats = createBlock("stats", { countUp: true, items: [{ value: "1200+", label: "Sold" }, { value: "24/7", label: "Open" }] });
+  const strip = createBlock("marquee", { items: [{ text: "Free delivery", image: "" }], speed: 20, direction: "right" });
+  const second = createSection({}, [[u, stats, strip]]);
+  second.style = { bg: "#112233", bg2: "#c9a227", bgAnimate: true };
+  site.pages[0].sections = [createSection({}, [[h]]), second];
+  const n = normalizeSite(site);
+  const html = renderPage(n, n.pages[0]);
+  assert.match(html, /class="eka-b eka-b-heading tx-words-blur tx-load"/);
+  assert.match(html, /<span class="w" style="--i:0">Treasures<\/span> <span class="w" style="--i:1">with<\/span>/);
+  assert.match(html, /tx-underline tx-scroll[^>]*><h2[^>]*><span class="tx-u">Why us<\/span>/);
+  assert.match(html, /perspective\(900px\)/);
+  assert.match(html, /<span class="eka-count cnt-on" style="--to:1200" role="text" aria-label="1200\+"><span class="eka-count-n" aria-hidden="true"><\/span>\+<\/span>/);
+  assert.match(html, /<strong>24\/7<\/strong>/, "non-numbers are left alone");
+  assert.match(html, /class="eka-mq mq-right mq-md mq-pause mq-fade" style="--mq-d:20s"/);
+  assert.equal((html.match(/class="mq-item"/g) || []).length, 16, "short lists are repeated to fill the loop (8 per half)");
+  assert.match(html, /::before\{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient\(135deg,#112233,#c9a227,#112233\)/);
+  assert.doesNotMatch(html, /<script/);
+});

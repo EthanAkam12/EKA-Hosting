@@ -1,6 +1,6 @@
 // Right-hand property panel for whatever is selected.
 
-import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
+import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
 import { h, api } from "../ui.js";
 import { fieldControl } from "./fields.js";
 
@@ -114,6 +114,12 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
         styleField(node, "letterSpacing", { label: "Letter spacing", type: "slider", min: -3, max: 20 });
       }
       styleField(node, "color", { label: "Text colour", type: "coloropt" });
+      if (node.type === "heading" || node.type === "text") {
+        // Word-by-word and underline effects need a heading; shine and gradient work on any text.
+        const fx = node.type === "heading" ? TEXT_EFFECTS : ["shine", "gradient"];
+        styleField(node, "textEffect", { label: "Text effect", type: "select", options: ["default", ...fx], labels: ["None", ...fx.map((k) => TEXT_EFFECT_LABELS[TEXT_EFFECTS.indexOf(k)])] });
+        if (node.style?.textEffect) root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, ["shine", "gradient"].includes(node.style.textEffect) ? "Plays all the time on the live site and in Preview." : "Plays as it comes into view on the live site and in Preview (not while editing)."));
+      }
     }
     if (node.type === "buttons") {
       group("Buttons");
@@ -125,6 +131,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (isSection) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Overrides the Background choice in Layout."));
     styleField(node, "bg", { label: "Colour", type: "coloropt" });
     if (node.style?.bg) styleField(node, "bg2", { label: "Fade into (gradient)", type: "coloropt" });
+    if (node.style?.bg && node.style?.bg2) styleField(node, "bgAnimate", { label: "Slowly move the gradient", type: "checkbox" });
     backgroundImage(node, isSection);
     group("Border & corners");
     styleField(node, "borderWidth", { label: "Border width", type: "slider", min: 0, max: 20, placeholder: 0 });

@@ -65,8 +65,10 @@ export const DEFAULT_THEME = {
   layout: { width: 1140, spacing: 100, motion: "none" },
 };
 
-export const HOVER_EFFECTS = ["none", "lift", "grow", "shrink", "glow", "brighten", "pulse", "wobble", "shine"];
-export const HOVER_LABELS = ["None", "Lift up", "Grow", "Shrink", "Glow", "Brighten", "Pulse", "Wobble", "Shine sweep"];
+export const HOVER_EFFECTS = ["none", "lift", "grow", "shrink", "glow", "brighten", "pulse", "wobble", "shine", "tilt"];
+export const HOVER_LABELS = ["None", "Lift up", "Grow", "Shrink", "Glow", "Brighten", "Pulse", "Wobble", "Shine sweep", "Tilt (3D)"];
+export const TEXT_EFFECTS = ["words-blur", "words-up", "shine", "gradient", "underline"];
+export const TEXT_EFFECT_LABELS = ["Words blur in one by one", "Words slide up one by one", "Shine sweeps across", "Moving colour gradient", "Highlighter underline draws in"];
 export const ENTRANCE_EFFECTS = ["none", "fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "zoom-out", "flip"];
 export const ENTRANCE_LABELS = ["None", "Fade in", "Fade up", "Fade down", "Slide in from left", "Slide in from right", "Zoom in", "Zoom out", "Flip up"];
 export const SHADOWS = ["none", "sm", "md", "lg", "xl"];
@@ -181,12 +183,13 @@ export const BLOCKS = {
   },
   stats: {
     label: "Stats", icon: "#", group: "Content",
-    defaults: () => ({ items: [{ value: "10+", label: "Years experience" }, { value: "500", label: "Happy clients" }, { value: "24/7", label: "Support" }] }),
+    defaults: () => ({ items: [{ value: "10+", label: "Years experience" }, { value: "500", label: "Happy clients" }, { value: "24/7", label: "Support" }], countUp: false }),
     fields: [
       { key: "items", label: "Stats", type: "list", itemLabel: "label", itemDefaults: () => ({ value: "100", label: "Label" }), itemFields: [
         { key: "value", label: "Number", type: "text" },
         { key: "label", label: "Label", type: "text" },
       ] },
+      { key: "countUp", label: "Numbers count up when they come into view", type: "checkbox" },
     ],
   },
   faq: {
@@ -197,6 +200,25 @@ export const BLOCKS = {
         { key: "q", label: "Question", type: "text" },
         { key: "a", label: "Answer", type: "textarea" },
       ] },
+    ],
+  },
+  marquee: {
+    label: "Scrolling strip", icon: "⇆", group: "Content",
+    defaults: () => ({
+      items: [{ text: "Free local delivery", image: "" }, { text: "Hand-picked quality", image: "" }, { text: "Friendly, expert advice", image: "" }, { text: "5-star reviews", image: "" }],
+      speed: 30, direction: "left", size: "md", separator: "•", pauseOnHover: true, fadeEdges: true,
+    }),
+    fields: [
+      { key: "items", label: "Items (text, logo or both)", type: "list", itemLabel: "text", itemDefaults: () => ({ text: "New item", image: "" }), itemFields: [
+        { key: "text", label: "Text", type: "text" },
+        { key: "image", label: "Logo or picture (optional)", type: "image" },
+      ] },
+      { key: "speed", label: "Seconds for one loop (lower = faster)", type: "slider", min: 6, max: 120, placeholder: 30, unit: "s" },
+      { key: "direction", label: "Direction", type: "select", options: ["left", "right"], labels: ["Right to left", "Left to right"] },
+      { key: "size", label: "Size", type: "select", options: ["sm", "md", "lg", "xl"], labels: ["Small", "Medium", "Large", "Huge"] },
+      { key: "separator", label: "Between items", type: "text" },
+      { key: "pauseOnHover", label: "Pause when the mouse is over it", type: "checkbox" },
+      { key: "fadeEdges", label: "Fade out at the edges", type: "checkbox" },
     ],
   },
   gallery: {
@@ -477,6 +499,8 @@ export function normalizeStyle(style) {
   one("tintDir", ["up", "right", "left", "diagonal", "radial"]);
   one("bgEffect", BG_EFFECTS);
   num("tintOpacity", 0, 100); num("bgBlur", 0, 30); num("bgGray", 0, 100); num("bgBright", 20, 200); num("minHeight", 0, 1400);
+  one("textEffect", TEXT_EFFECTS);
+  if (style.bgAnimate === true) out.bgAnimate = true;
   if (FONT_CHOICES[style.fontFamily]) out.fontFamily = style.fontFamily;
   num("lineHeight", 80, 300); // % of the font size
   num("letterSpacing", -5, 30);

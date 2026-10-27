@@ -55,7 +55,9 @@ STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; l
   background image: "bgImage": URL (blocks only; sections use props.background "image" + props.image), "bgImageMobile": URL, "bgPos": "center"|"top"|"bottom"|"left"|"right"|"top left"|…, "bgSize": "contain",
   "bgFixed": true, "bgRepeat": true, "tint": hex, "tint2": hex (gradient tint), "tintDir": "up"|"right"|"left"|"diagonal"|"radial", "tintOpacity": 0-100 (sections default to props.overlay),
   "bgEffect": "fade"|"zoom"|"zoom-out"|"pan"|"parallax", "bgBlur": px, "bgGray": %, "bgBright": %,
-  "bgVideo": YouTube/Vimeo/.mp4 URL (only if the owner gives one), "bgVideoPhones": true }
+  "bgVideo": YouTube/Vimeo/.mp4 URL (only if the owner gives one), "bgVideoPhones": true,
+  "textEffect": "words-blur"|"words-up"|"underline" (headings only)|"shine"|"gradient", "bgAnimate": true (moves a bg→bg2 gradient) }
+Effects are pure CSS and cheap, but use them sparingly: one text effect on the hero heading reads as polish; on every heading it's noise.
 HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.
 Prefer the section/block props and theme settings first; use STYLE for specific tweaks the owner asks for (spacing, borders, animations, hiding on mobile…).
 

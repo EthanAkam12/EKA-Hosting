@@ -32,6 +32,7 @@ section.eka-sel,header.eka-sel,footer.eka-sel{outline:2px solid #0f766e!importan
 section>.eka-ph-tag{top:12px;left:12px}
 .an{animation:none!important}
 .fx-fade .eka-bgi-in,.fx-zoom-out .eka-bgi-in{animation:none!important}
+.tx-load .w,.tx-scroll .w,.tx-u{animation:none!important}
 .an.eka-an-play{animation:var(--an) var(--an-d,.8s) cubic-bezier(.2,.7,.2,1) var(--an-delay,0s) both!important}
 `;
 
