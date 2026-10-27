@@ -76,7 +76,7 @@ From then on **Publish** uploads the site straight to the host. Only changed fil
 
 ## Working with customers
 
-- **Stock photos** (`PEXELS_API_KEY`, free from pexels.com/api): new designs get photos that suit the business instead of placeholder artwork, and the image picker searches Pexels.
+- **Stock photos** (`PEXELS_API_KEY`, free: pexels.com → "Image & Video API" at the bottom of the page): new designs get photos that suit the business instead of placeholder artwork, and the image picker searches Pexels.
 - **Site check**: before publishing, the builder lists anything visitors would notice (placeholders, template text, broken links, hard-to-read text, a form with nowhere to send messages) with a Show button for each.
 - **Customer review links**: send the customer a link to the draft; they click anything to comment and press Approve. Comments appear in the editor's Site tab.
 - **For Google and sharing**: every page gets an icon and share picture, the home page carries the business details (LocalBusiness), and live sites serve a sitemap.

@@ -1,5 +1,5 @@
 // Stock photos from Pexels (free for commercial use; a free API key from
-// pexels.com/api goes in PEXELS_API_KEY). Used in two places:
+// pexels.com → "Image & Video API" at the bottom of the page) goes in PEXELS_API_KEY). Used in two places:
 //   - the image picker's "Stock photos" search, and
 //   - new designs: empty picture spots are filled with photos that match the
 //     business, instead of placeholder artwork.
