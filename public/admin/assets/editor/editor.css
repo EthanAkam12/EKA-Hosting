@@ -154,3 +154,8 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 .check-item.tip .check-icon { background: #64748b; font-style: italic; }
 .check-ok { font-weight: 600; color: #15803d; }
 .btn-ok { color: #15803d; }
+
+.review-comment { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.review-comment p { margin: 4px 0 8px; font-size: 13.5px; white-space: pre-wrap; }
+.review-comment.done { opacity: .55; }
+.notice.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; font-weight: 600; margin: 8px 0; }

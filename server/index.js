@@ -156,7 +156,7 @@ function findPage(site, rest) {
   return site.pages.find((p) => p.slug === slug) || null;
 }
 
-async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = false, origin = `${req.protocol}://${req.get("host")}`, live = false }) {
+async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = false, origin = `${req.protocol}://${req.get("host")}`, live = false, review = false }) {
   const site = draft ? await store.getDraft(meta.id) : await store.getPublished(meta.id);
   if (sandbox) {
     // Previews on the builder's own domain share its origin, so block any
@@ -174,6 +174,12 @@ async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = 
   const formAction = `/_forms/${meta.id}`;
   // On the site's own address, tell search engines the page's one true URL.
   const canonical = live ? origin + pageUrl(page, "/") : undefined;
+  if (review) {
+    // The customer review page: the draft, marked up so comments can be pinned.
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Robots-Tag", "noindex");
+    return res.type("html").send(renderPage(site, page, { base, formAction, origin, review: true }));
+  }
   if (draft) {
     res.setHeader("Cache-Control", "no-store");
     // Draft previews get a bar on top so it's obvious how to get back. Plain
@@ -308,6 +314,17 @@ app.get(["/s/:slug", "/s/:slug/*"], (req, res, next) => {
 
 app.get("/", (req, res) => res.redirect("/admin"));
 app.get("/admin/login", (req, res) => res.sendFile(path.join(ROOT, "public/admin/login.html")));
+// Customer review links: the draft site plus comments and an Approve button, no login.
+app.get("/review/:token", (req, res) => {
+  if (!store.findByReviewToken(req.params.token)) return res.status(404).type("html").send(simplePage("Link not found", "This review link has been turned off or doesn't exist."));
+  res.setHeader("X-Robots-Tag", "noindex");
+  res.sendFile(path.join(ROOT, "public/review.html"));
+});
+app.get(["/review/:token/frame", "/review/:token/frame/*"], (req, res, next) => {
+  const meta = store.findByReviewToken(req.params.token);
+  if (!meta) return res.sendStatus(404);
+  serveSite(req, res, meta, { base: `/review/${req.params.token}/frame/`, rest: req.params[0], draft: true, sandbox: true, review: true }).catch(next);
+});
 app.get("/help", (req, res) => res.sendFile(path.join(ROOT, "public/help.html")));
 app.get("/support", (req, res) => res.sendFile(path.join(ROOT, "public/support.html")));
 app.get("/api/public-info", (req, res) => res.json({ demo: DEMO, supportEmail: SUPPORT_EMAIL, version: VERSION }));
@@ -346,6 +363,56 @@ api.post("/demo/start", (req, res) => {
   auth.startDemo(req, res, DEMO_HOURS * 3600);
   res.json({ ok: true });
 });
+// ---- customer review (public, by link) ----------------------------------------
+
+const reviewHits = new Map();
+function reviewTooFast(req) {
+  const key = `${req.ip}|${req.params.token}`;
+  const now = Date.now();
+  const rec = reviewHits.get(key) || { n: 0, since: now };
+  if (now - rec.since > 3600_000) { rec.n = 0; rec.since = now; }
+  rec.n++;
+  reviewHits.set(key, rec);
+  return rec.n > 60;
+}
+const publicComment = (c) => ({ id: c.id, at: c.at, page: c.page, nodeId: c.nodeId, text: c.text, name: c.name });
+
+api.get("/review/:token", async (req, res) => {
+  const meta = store.findByReviewToken(req.params.token);
+  if (!meta) return res.status(404).json({ error: "This review link has been turned off." });
+  const site = await store.getDraft(meta.id);
+  const comments = (await store.getComments(meta.id)).filter((c) => !c.resolved).map(publicComment);
+  res.json({ name: site?.name || meta.name, pages: (site?.pages || []).map((p) => ({ slug: p.slug, title: p.title })), comments, approval: meta.approval || null });
+});
+
+api.post("/review/:token/comments", async (req, res) => {
+  const meta = store.findByReviewToken(req.params.token);
+  if (!meta) return res.status(404).json({ error: "This review link has been turned off." });
+  if (reviewTooFast(req)) return res.status(429).json({ error: "That's a lot of comments! Please wait a while and try again." });
+  const text = String(req.body?.text || "").trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ error: "Write a comment first." });
+  const comment = {
+    id: crypto.randomBytes(6).toString("hex"),
+    at: new Date().toISOString(),
+    page: String(req.body?.page || "index").slice(0, 80),
+    nodeId: /^[\w-]{1,40}$/.test(req.body?.nodeId || "") ? req.body.nodeId : null,
+    text,
+    name: String(req.body?.name || "").trim().slice(0, 80) || "Customer",
+    resolved: false,
+  };
+  await store.updateComments(meta.id, (list) => [...list, comment].slice(-500));
+  res.json({ comment: publicComment(comment) });
+});
+
+api.post("/review/:token/approve", async (req, res) => {
+  const meta = store.findByReviewToken(req.params.token);
+  if (!meta) return res.status(404).json({ error: "This review link has been turned off." });
+  if (reviewTooFast(req)) return res.status(429).json({ error: "Please wait a moment and try again." });
+  const approval = { at: new Date().toISOString(), name: String(req.body?.name || "").trim().slice(0, 80) || "Customer" };
+  await store.updateMeta(meta.id, { approval });
+  res.json({ approval });
+});
+
 api.use(auth.requireApi);
 // Tag every AI call with who made it and, below, which website it's for.
 const wizardId = (req) => (/^[a-f0-9]{16}$/.test(req.get("X-EKA-Wizard") || "") ? req.get("X-EKA-Wizard") : undefined);
@@ -825,6 +892,28 @@ api.post("/sites/:id/unpublish", async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;
   res.json({ meta: withUrl(await store.unpublish(meta.id)) });
+});
+
+// Turn the customer review link on (a new link each time) or off.
+api.post("/sites/:id/review", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (demoBlocked(req, res, "Sharing for review")) return;
+  const review = req.body?.off ? null : { token: crypto.randomBytes(12).toString("base64url"), createdAt: new Date().toISOString() };
+  res.json({ meta: withUrl(await store.updateMeta(meta.id, { review, ...(review ? { approval: null } : {}) })) });
+});
+
+api.get("/sites/:id/comments", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  res.json({ comments: await store.getComments(meta.id) });
+});
+
+api.patch("/sites/:id/comments/:cid", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const comments = await store.updateComments(meta.id, (list) => list.map((c) => (c.id === req.params.cid ? { ...c, resolved: !!req.body?.resolved } : c)));
+  res.json({ comments });
 });
 
 api.get("/sites/:id/versions", async (req, res) => {

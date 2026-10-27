@@ -290,6 +290,12 @@ async function boot() {
   await canvas.boot();
   layoutFrame();
   state.load(meta, site);
+  if (meta.review && !me.demo) {
+    api(`/sites/${siteId}/comments`).then(({ comments }) => {
+      const open = comments.filter((c) => !c.resolved).length;
+      if (open) toast(`The customer left ${open} comment${open > 1 ? "s" : ""}. See them in the Site tab.`);
+    }).catch(() => {});
+  }
 }
 
 boot().catch((err) => toast(err.message, { error: true }));

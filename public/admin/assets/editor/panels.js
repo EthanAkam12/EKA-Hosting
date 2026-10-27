@@ -300,6 +300,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(h("button", { class: `btn btn-block${fixes ? "" : " btn-ok"}`, style: { marginBottom: "16px" }, onclick: () => showChecklist(state) },
       fixes ? `⚠ Site check: ${fixes} thing${fixes > 1 ? "s" : ""} to fix` : issues.length ? `✓ Site check: ${issues.length} tip${issues.length > 1 ? "s" : ""}` : "✓ Site check: all good"));
     root.append(fieldControl({ key: "name", label: "Site name", type: "text" }, s.site.name, (v) => state.mutate((site) => { site.name = v; }, { key: "site:name", source: "panel" }), {}));
+    renderReview(s, meta);
 
     // Business details: shown to Google (and used by the phone contact button).
     const biz = s.site.business;
@@ -450,6 +451,63 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
       "It takes the colours, fonts, rounding and logo, plus a homepage banner from your first page. ",
       "Upload the ZIP into CubeCart's skins folder, extract it, and pick it in the CubeCart admin (instructions are inside)."));
     root.append(h("a", { class: "btn btn-sm", href: `/api/sites/${s.siteId}/cubecart-skin.zip`, download: "" }, "Download as CubeCart skin"));
+  }
+
+  // Customer review: a link to the draft where the customer comments and approves.
+  function renderReview(s, meta) {
+    root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Customer review"));
+    if (s.demo) {
+      root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "In the full version you can send the customer a link to comment on the draft and approve it. Switched off in the demo."));
+      return;
+    }
+    if (!meta.review) {
+      root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Send the customer a link to the draft. They can click anything to comment on it, and press Approve when they're happy. No login needed."));
+      root.append(h("button", { class: "btn btn-sm", onclick: async () => {
+        try { const { meta: m } = await api(`/sites/${s.siteId}/review`, { method: "POST", body: {} }); onMetaChange(m); render(); } catch (e) { toast(e.message, { error: true }); }
+      } }, "Create a review link"));
+      return;
+    }
+    const link = new URL(`/review/${meta.review.token}`, location.href).href;
+    const input = h("input", { class: "input", value: link, readonly: true, onfocus: (e) => e.target.select() });
+    root.append(h("div", { class: "row" }, input, h("button", { class: "btn btn-sm", onclick: async () => {
+      try { await navigator.clipboard.writeText(link); toast("Link copied. Send it to the customer."); } catch { input.select(); }
+    } }, "Copy")));
+    root.append(h("p", { class: "field-hint" }, "They see your latest saved draft, not the live site. ",
+      h("a", { href: "#", onclick: async (e) => {
+        e.preventDefault();
+        if (!(await confirmDialog("Turn off this link? The customer won't be able to open it any more. Their comments are kept.", { okText: "Turn off" }))) return;
+        const { meta: m } = await api(`/sites/${s.siteId}/review`, { method: "POST", body: { off: true } });
+        onMetaChange(m); render();
+      } }, "Turn off the link")));
+    if (meta.approval) root.append(h("div", { class: "notice ok" }, `✓ Approved by ${meta.approval.name} on ${new Date(meta.approval.at).toLocaleDateString()}`));
+    const box = h("div", { class: "review-comments" }, h("p", { class: "small muted" }, "Loading comments…"));
+    root.append(box);
+    loadComments(s, box);
+  }
+
+  async function loadComments(s, box, showResolved = false) {
+    let comments;
+    try { ({ comments } = await api(`/sites/${s.siteId}/comments`)); } catch { box.replaceChildren(); return; }
+    const open = comments.filter((c) => !c.resolved);
+    const shown = showResolved ? comments : open;
+    const pageTitle = (slug) => s.site.pages.find((p) => p.slug === slug)?.title || slug;
+    box.replaceChildren(
+      h("div", { class: "small", style: { fontWeight: 600, margin: "10px 0 6px" } }, open.length ? `${open.length} comment${open.length > 1 ? "s" : ""} to look at` : "No open comments"),
+      ...shown.slice().reverse().map((c) => h("div", { class: `review-comment${c.resolved ? " done" : ""}` },
+        h("div", { class: "small muted" }, `${c.name} · ${pageTitle(c.page)} · ${timeAgo(c.at)}`),
+        h("p", {}, c.text),
+        h("div", { class: "row" },
+          c.nodeId ? h("button", { class: "btn btn-sm", onclick: () => {
+            const page = s.site.pages.find((p) => p.slug === c.page);
+            if (page && page.id !== state.get().pageId) state.setPage(page.id);
+            setTimeout(() => (findNode(state.get().site, c.nodeId) ? state.select(c.nodeId) : toast("That part of the page has since been removed.")), 50);
+          } }, "Show") : null,
+          h("button", { class: "btn btn-sm", onclick: async () => {
+            await api(`/sites/${s.siteId}/comments/${c.id}`, { method: "PATCH", body: { resolved: !c.resolved } });
+            loadComments(s, box, showResolved);
+          } }, c.resolved ? "Reopen" : "✓ Done")))),
+      comments.length > open.length ? h("a", { href: "#", class: "small", onclick: (e) => { e.preventDefault(); loadComments(s, box, !showResolved); } }, showResolved ? "Hide finished comments" : `Show finished comments (${comments.length - open.length})`) : null,
+    );
   }
 
   async function showSubmissions(siteId) {

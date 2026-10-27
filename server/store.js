@@ -92,6 +92,26 @@ export class Store {
     return null;
   }
 
+  findByReviewToken(token) {
+    for (const m of this.metaById.values()) if (m.review?.token && m.review.token === token) return m;
+    return null;
+  }
+
+  // ---- customer review comments -------------------------------------------
+
+  async getComments(id) {
+    return this.readJson(this.file(id, "comments.json"), []);
+  }
+
+  // `change(list)` returns the new list; runs under the site's lock.
+  async updateComments(id, change) {
+    return this.withLock(id, async () => {
+      const next = change(await this.getComments(id));
+      await this.writeJson(this.file(id, "comments.json"), next);
+      return next;
+    });
+  }
+
   findByDomain(host) {
     const h = host.toLowerCase().replace(/^www\./, "");
     for (const m of this.metaById.values()) if ((m.domains || []).some((d) => d === h)) return m;

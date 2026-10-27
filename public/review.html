@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Website review</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --brand: #4f46e5; --text: #1c2230; --muted: #5b6475; --line: #e3e6ec; --bg: #f3f4f7; --pin: #f59e0b; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; }
+  button, input, textarea, select { font: inherit; }
+  .bar { flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--line); }
+  .bar h1 { font-size: 16px; margin: 0; }
+  .bar .sub { color: var(--muted); font-size: 13px; }
+  .grow { flex: 1; min-width: 0; }
+  .btn { border: 1px solid #cfd4dc; background: #fff; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; color: var(--text); }
+  .btn:hover { border-color: var(--brand); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.on { background: #fef3c7; border-color: var(--pin); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  select { border: 1px solid #cfd4dc; border-radius: 8px; padding: 7px 10px; background: #fff; }
+  .main { flex: 1; display: flex; min-height: 0; }
+  .stage { flex: 1; position: relative; min-width: 0; }
+  .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+  .pins { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .pin { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50% 50% 50% 4px; background: var(--pin); color: #fff; font: 700 12px system-ui; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.3); pointer-events: auto; cursor: pointer; border: 2px solid #fff; }
+  .hint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: #111827; color: #fff; padding: 7px 14px; border-radius: 99px; font-size: 13px; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+  aside { width: 340px; flex: none; background: #fff; border-left: 1px solid var(--line); overflow-y: auto; padding: 16px; }
+  aside h2 { font-size: 15px; margin: 0 0 6px; }
+  .intro { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+  .comment { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .comment.hl { border-color: var(--pin); box-shadow: 0 0 0 3px #fef3c7; }
+  .comment .who { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--pin); color: #fff; font: 700 11px system-ui; }
+  .comment p { margin: 4px 0 0; white-space: pre-wrap; }
+  .form { border: 2px solid var(--pin); border-radius: 10px; padding: 12px; margin-bottom: 14px; background: #fffbeb; }
+  .form label { display: block; font-weight: 600; font-size: 13px; margin: 8px 0 4px; }
+  .form textarea, .form input { width: 100%; border: 1px solid #cfd4dc; border-radius: 8px; padding: 8px 10px; background: #fff; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .approved { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; font-weight: 600; }
+  .empty { color: var(--muted); font-size: 13.5px; }
+  .err { color: #b91c1c; font-size: 13px; }
+  @media (max-width: 760px) {
+    .main { flex-direction: column; }
+    .stage { flex: none; height: 62vh; }
+    aside { width: auto; border-left: 0; border-top: 1px solid var(--line); flex: 1; }
+    .bar h1 { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="grow"><h1 id="name">Loading…</h1><div class="sub">Draft for your review: not live yet</div></div>
+  <select id="page" aria-label="Page"></select>
+  <button class="btn" id="mode" type="button">💬 Comment</button>
+  <button class="btn primary" id="approve" type="button">✓ Approve</button>
+</header>
+<div class="main">
+  <div class="stage" id="stage">
+    <iframe id="frame" title="Website preview"></iframe>
+    <div class="pins" id="pins"></div>
+    <div class="hint" id="hint" hidden>Click the part of the page you want to comment on</div>
+  </div>
+  <aside>
+    <div id="approval"></div>
+    <h2>Comments</h2>
+    <p class="intro">Have a look around. To ask for a change, press <strong>💬 Comment</strong> and click the part of the page you mean. When you're happy, press <strong>Approve</strong>.</p>
+    <div id="form-slot"></div>
+    <div id="list"></div>
+    <button class="btn" id="general" type="button" style="margin-top:6px">Add a general comment</button>
+  </aside>
+</div>
+
+<script>
+  const token = location.pathname.split("/")[2];
+  const $ = (id) => document.getElementById(id);
+  const api = async (path, body) => {
+    const res = await fetch(`/api/review/${token}${path}`, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Something went wrong.");
+    return data;
+  };
+  const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.flat().filter((k) => k != null)); return e; };
+  const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  let data = { comments: [], pages: [] };
+  let slug = "index";
+  let commenting = false;
+  let selected = null; // the element being commented on
+
+  const frame = $("frame");
+  const frameUrl = (s) => `/review/${token}/frame/${s === "index" ? "" : `${s}/`}`;
+  const doc = () => frame.contentDocument;
+
+  async function load() {
+    try {
+      data = await api("");
+      $("name").textContent = data.name;
+      document.title = `Review: ${data.name}`;
+      $("page").replaceChildren(...data.pages.map((p) => el("option", { value: p.slug, textContent: p.title, selected: p.slug === slug })));
+      renderApproval();
+      renderList();
+      if (!frame.src) frame.src = frameUrl(slug);
+    } catch (e) {
+      document.body.replaceChildren(el("p", { style: "padding:40px;text-align:center", textContent: e.message }));
+    }
+  }
+
+  function renderApproval() {
+    const a = data.approval;
+    $("approval").replaceChildren(a ? el("div", { className: "approved", textContent: `✓ Approved by ${a.name} on ${new Date(a.at).toLocaleDateString()}` }) : "");
+    $("approve").disabled = !!a;
+    $("approve").textContent = a ? "✓ Approved" : "✓ Approve";
+  }
+
+  // Comments for this page (numbered, with pins) and general ones.
+  function pageComments() { return data.comments.filter((c) => c.page === slug || !c.nodeId); }
+  function renderList() {
+    const list = pageComments();
+    let n = 0;
+    $("list").replaceChildren(...(list.length ? list.map((c) => {
+      const num = c.nodeId && c.page === slug ? ++n : null;
+      c._n = num;
+      return el("div", { className: "comment", id: `c-${c.id}` },
+        el("div", { className: "who" }, num ? el("span", { className: "num", textContent: num }) : null, `${c.name} · ${new Date(c.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}${c.nodeId ? "" : " · general"}`),
+        el("p", { textContent: c.text }));
+    }) : [el("p", { className: "empty", textContent: "No comments on this page yet." })]));
+    drawPins();
+  }
+
+  function target(id) { return doc()?.querySelector(`[data-eka-id="${CSS.escape(id)}"]`); }
+
+  function drawPins() {
+    const pins = $("pins");
+    pins.replaceChildren();
+    const d = doc();
+    if (!d) return;
+    for (const c of pageComments()) {
+      const t = c.nodeId && c.page === slug && target(c.nodeId);
+      if (!t) continue;
+      const r = t.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > frame.clientHeight) continue;
+      pins.append(el("div", { className: "pin", textContent: c._n, title: c.text, style: `left:${Math.min(r.right - 14, frame.clientWidth - 16)}px;top:${Math.max(r.top + 14, 14)}px`, onclick: () => {
+        document.querySelectorAll(".comment.hl").forEach((x) => x.classList.remove("hl"));
+        const box = $(`c-${c.id}`);
+        box?.classList.add("hl");
+        box?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } }));
+    }
+  }
+
+  // ---- choosing what to comment on --------------------------------------------
+
+  function setMode(on) {
+    commenting = on;
+    $("mode").classList.toggle("on", on);
+    $("mode").textContent = on ? "✕ Cancel" : "💬 Comment";
+    $("hint").hidden = !on;
+    doc()?.documentElement.classList.toggle("rv-commenting", on);
+  }
+  $("mode").onclick = () => setMode(!commenting);
+
+  function pick(node) {
+    // Comment on the block clicked (or its section): never a bare column.
+    let t = node?.closest?.("[data-eka-id]");
+    if (t?.dataset.ekaKind === "column") t = t.closest('[data-eka-kind="section"]');
+    if (!t) return;
+    doc().querySelectorAll(".rv-sel").forEach((x) => x.classList.remove("rv-sel"));
+    t.classList.add("rv-sel");
+    selected = { nodeId: t.dataset.ekaId, label: t.dataset.ekaKind === "section" ? "this section" : "this part of the page" };
+    setMode(false);
+    showForm();
+  }
+
+  function showForm(general = false) {
+    if (general) selected = null;
+    const text = el("textarea", { rows: 4, placeholder: "What would you like changed?" });
+    const name = el("input", { value: store.get("eka-review-name"), placeholder: "Your name" });
+    const err = el("div", { className: "err" });
+    const post = el("button", { className: "btn primary", type: "button", textContent: "Post comment", onclick: async () => {
+      if (!text.value.trim()) return (err.textContent = "Write a comment first.");
+      post.disabled = true;
+      try {
+        store.set("eka-review-name", name.value.trim());
+        const { comment } = await api("/comments", { page: slug, nodeId: selected?.nodeId || null, text: text.value, name: name.value });
+        data.comments.push(comment);
+        closeForm();
+        renderList();
+      } catch (e) { err.textContent = e.message; post.disabled = false; }
+    } });
+    $("form-slot").replaceChildren(el("div", { className: "form" },
+      el("strong", { textContent: selected ? `Comment on ${selected.label}` : "General comment" }),
+      el("label", { textContent: "Comment" }), text,
+      el("label", { textContent: "Your name" }), name, err,
+      el("div", { className: "row" }, post, el("button", { className: "btn", type: "button", textContent: "Cancel", onclick: closeForm }))));
+    text.focus();
+  }
+  function closeForm() {
+    $("form-slot").replaceChildren();
+    doc()?.querySelectorAll(".rv-sel").forEach((x) => x.classList.remove("rv-sel"));
+    selected = null;
+  }
+  $("general").onclick = () => showForm(true);
+
+  // ---- approving ------------------------------------------------------------
+
+  $("approve").onclick = async () => {
+    const name = prompt("Happy with the website? Type your name to approve it.", store.get("eka-review-name"));
+    if (!name) return;
+    try {
+      store.set("eka-review-name", name.trim());
+      data.approval = (await api("/approve", { name })).approval;
+      renderApproval();
+    } catch (e) { alert(e.message); }
+  };
+
+  // ---- the preview frame ----------------------------------------------------------
+
+  $("page").onchange = (e) => { slug = e.target.value; closeForm(); frame.src = frameUrl(slug); };
+  frame.addEventListener("load", () => {
+    const d = doc();
+    if (!d) return;
+    // Follow links the customer clicks inside the preview.
+    const m = frame.contentWindow.location.pathname.match(/\/frame\/([\w-]+)\/?$/);
+    slug = m ? m[1] : "index";
+    $("page").value = slug;
+    const style = d.createElement("style");
+    style.textContent = `.rv-commenting [data-eka-id]:hover{outline:2px dashed #f59e0b;outline-offset:-2px;cursor:crosshair}.rv-commenting *{cursor:crosshair!important}.rv-sel{outline:3px solid #f59e0b!important;outline-offset:-3px}`;
+    d.head.append(style);
+    d.documentElement.classList.toggle("rv-commenting", commenting);
+    d.addEventListener("click", (e) => {
+      if (!commenting) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pick(e.target);
+    }, true);
+    frame.contentWindow.addEventListener("scroll", drawPins, { passive: true });
+    renderList();
+  });
+  window.addEventListener("resize", drawPins);
+  load();
+  // Pick up comments added in another tab (e.g. on a phone and a laptop).
+  setInterval(() => api("").then((d) => { data.comments = d.comments; data.approval = d.approval; renderApproval(); if (!$("form-slot").firstChild) renderList(); }).catch(() => {}), 30000);
+</script>
+</body>
+</html>

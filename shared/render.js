@@ -449,8 +449,10 @@ function videoEmbed(url) {
   return null;
 }
 
+// The editor (and the customer review page, to pin comments) need to know
+// which section or block each element is.
 function editorAttrs(ctx, kind, id) {
-  return ctx.editor ? ` data-eka-kind="${kind}" data-eka-id="${esc(id)}"` : "";
+  return ctx.editor || ctx.ids ? ` data-eka-kind="${kind}" data-eka-id="${esc(id)}"` : "";
 }
 
 export function renderBlock(block, ctx) {
@@ -829,7 +831,7 @@ function fontLinks(site, page) {
  * @param opts { base = "/", editor = false, formAction, canonical }
  */
 export function renderBody(site, page, opts = {}) {
-  const ctx = { site, page, base: opts.base || "/", editor: !!opts.editor, formAction: opts.formAction, eagerImages: 2, css: [] };
+  const ctx = { site, page, base: opts.base || "/", editor: !!opts.editor, ids: !!opts.review, formAction: opts.formAction, eagerImages: 2, css: [] };
   const sections = page.sections.map((s, i) => { ctx.sectionIndex = i; return renderSection(s, ctx); }).join("");
   const header = renderHeader(site, ctx), footer = renderFooter(site, ctx);
   const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
