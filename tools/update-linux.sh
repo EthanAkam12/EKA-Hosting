@@ -35,7 +35,7 @@ echo "Updating from $(node -p "require('$APP/package.json').version") to $(node 
 
 # 2. Back up the websites and the current version.
 mkdir -p /var/backups/eka-builder
-tar -czf "/var/backups/eka-builder/data-$STAMP.tar.gz" -C "$(dirname "$DATA")" "$(basename "$DATA")"
+tar -czf "/var/backups/eka-builder/data-$STAMP.tar.gz" --exclude="$(basename "$DATA")/backups" -C "$(dirname "$DATA")" "$(basename "$DATA")"
 tar -czf "/var/backups/eka-builder/app-$STAMP.tar.gz" -C "$APP" --exclude=./node_modules .
 echo "Backed up to /var/backups/eka-builder/ (data-$STAMP and app-$STAMP)."
 

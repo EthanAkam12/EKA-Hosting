@@ -17,6 +17,9 @@ import { Store } from "./store.js";
 import { createAuth } from "./auth.js";
 import { Users, publicUser } from "./users.js";
 import { createLicence } from "./licence.js";
+import { createBackups } from "./backup.js";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { createAi, applyBrief } from "./ai/index.js";
 import { usageContext, initUsageLog, usageSummary, loadMonthTotals, accountCostThisMonth, accountUsage } from "./ai/usage.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
@@ -231,6 +234,21 @@ function simplePage(title, body) {
 // Images uploaded in the new-site wizard before the site exists (admin only).
 initUsageLog(DATA_DIR);
 await loadMonthTotals();
+
+// Daily backups of the data folder (and restoring them).
+const backups = createBackups({
+  dataDir: DATA_DIR,
+  backupDir: process.env.BACKUP_DIR ? path.resolve(process.env.BACKUP_DIR) : undefined,
+  keep: Number(process.env.BACKUP_KEEP) || 7,
+  onRestored: async () => {
+    await store.init();
+    await users.init();
+    await loadMonthTotals();
+    pageCache.clear();
+  },
+});
+setTimeout(() => backups.daily(), 60_000).unref();
+setInterval(() => backups.daily(), 3600_000).unref();
 const stock = createStock();
 
 // Empty picture spots get matching stock photos where possible, and
@@ -762,6 +780,42 @@ api.post("/licence", async (req, res) => {
   if (adminOnly(req, res)) return;
   if (req.body?.key !== undefined) res.json({ licence: await licence.setKey(req.body.key) });
   else res.json({ licence: await licence.check() });
+});
+
+// ---- backups (administrator) ----------------------------------------------------
+
+api.get("/backups", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  res.json({ backups: await backups.list() });
+});
+api.post("/backups", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  try { res.json({ name: await backups.create(), backups: await backups.list() }); } catch (err) { res.status(500).json({ error: `The backup failed: ${err.message}` }); }
+});
+api.get("/backups/:name/download", (req, res) => {
+  if (adminOnly(req, res)) return;
+  try { res.download(backups.file(req.params.name), req.params.name); } catch (err) { res.status(404).json({ error: err.message }); }
+});
+api.post("/backups/:name/restore", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  try {
+    await backups.restore({ name: req.params.name });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+// Restore from a backup file uploaded from your computer (e.g. moving servers).
+api.post("/backups/upload", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  const tmp = path.join(DATA_DIR, `upload-${crypto.randomBytes(6).toString("hex")}.zip.tmp`);
+  try {
+    await pipeline(req, createWriteStream(tmp, { mode: 0o600 }));
+    await backups.restore({ zipPath: tmp });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  } finally {
+    await fs.rm(tmp, { force: true });
+  }
 });
 
 // The host API key, shown to the administrator only when asked.

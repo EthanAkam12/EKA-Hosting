@@ -15,7 +15,7 @@ async function load() {
 }
 
 function render() {
-  app.replaceChildren(
+  app.replaceChildren(...[
     h("div", { class: "head" },
       h("div", {}, h("h1", {}, "Customers"), h("p", { class: "muted", style: { margin: "4px 0 0" } }, "Each customer logs in with their email and sees only their own websites. Their plan sets how many websites they can have and how much AI they can use each month.")),
       h("button", { class: "btn btn-primary", onclick: addCustomer }, "+ Add customer")),
@@ -24,7 +24,8 @@ function render() {
     plansPanel(),
     billingPanel(),
     hostApiPanel(),
-  );
+    backupsPanel(),
+  ].filter(Boolean));
 }
 
 // ---- customers ------------------------------------------------------------------
@@ -221,6 +222,54 @@ function licencePanel() {
       h("button", { class: "btn", onclick: async () => { ({ licence: lic } = await api("/licence", { method: "POST", body: {} })); toast("Checked."); render(); } }, "Check now")));
 }
 
+// ---- backups ------------------------------------------------------------------------
+
+function backupsPanel() {
+  const list = h("div", { class: "small muted" }, "Loading…");
+  const size = (n) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1e3)} KB`);
+  const paint = (items) => {
+    list.classList.toggle("muted", !items.length);
+    list.replaceChildren(items.length ? h("div", { class: "scroll" }, h("table", { class: "list" },
+      h("tr", {}, h("th", {}, "When"), h("th", {}, "Size"), h("th", {}, ""), h("th", {}, "")),
+      items.map((b) => h("tr", {},
+        h("td", {}, new Date(b.at).toLocaleString(), b.label === "before-restore" ? h("span", { class: "small muted" }, " · made before a restore") : null),
+        h("td", {}, size(b.size)),
+        h("td", {}, h("a", { class: "btn btn-sm", href: `/api/backups/${encodeURIComponent(b.name)}/download` }, "Download")),
+        h("td", {}, h("div", { class: "acts" }, h("button", { class: "btn btn-sm", onclick: () => restore(b) }, "Restore…"))))))) : "No backups yet. The first one is made a minute after the builder starts.");
+  };
+  async function restore(b) {
+    if (!(await confirmDialog(`Restore the backup from ${new Date(b.at).toLocaleString()}? Every website, image, message, customer and plan goes back to how it was then. What's here now is backed up first, so you can undo this.`, { okText: "Restore", danger: true }))) return;
+    try {
+      await api(`/backups/${encodeURIComponent(b.name)}/restore`, { method: "POST", body: {} });
+      toast("Restored.");
+      setTimeout(() => location.reload(), 800);
+    } catch (e) { toast(e.message, { error: true }); }
+  }
+  const upload = h("input", { type: "file", accept: ".zip,application/zip", hidden: true, onchange: async (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f || !(await confirmDialog(`Restore everything from "${f.name}"? Everything here is replaced (and backed up first).`, { okText: "Restore", danger: true }))) return;
+    toast("Uploading and restoring…");
+    try {
+      await api("/backups/upload", { method: "POST", raw: true, body: f, headers: { "Content-Type": "application/octet-stream" } });
+      toast("Restored.");
+      setTimeout(() => location.reload(), 800);
+    } catch (err) { toast(err.message, { error: true }); }
+  } });
+  api("/backups").then(({ backups }) => paint(backups)).catch((e) => { list.textContent = e.message; });
+  return h("div", { class: "panel" },
+    h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "wrap" } },
+      h("div", {}, h("h2", {}, "Backups"), h("p", { class: "small muted", style: { margin: 0 } }, "Everything (websites, images, messages, customers, plans) is backed up automatically every day; the last 7 are kept. Download one now and then to keep a copy somewhere else.")),
+      h("div", { class: "row" },
+        h("button", { class: "btn", onclick: async (e) => {
+          e.target.disabled = true;
+          try { const r = await api("/backups", { method: "POST", body: {} }); paint(r.backups); toast("Backed up."); } catch (err) { toast(err.message, { error: true }); }
+          e.target.disabled = false;
+        } }, "Back up now"),
+        h("button", { class: "btn", onclick: () => upload.click() }, "Restore from a file…"), upload)),
+    h("div", { style: { marginTop: "10px" } }, list));
+}
+
 // ---- control panels and billing systems -------------------------------------------------
 
 function hostApiPanel() {
@@ -230,12 +279,12 @@ function hostApiPanel() {
     h("p", { class: "small muted", style: { marginTop: 0 } }, "Customers can open the builder from cPanel or DirectAdmin with one click (no second password), and WHMCS can create, suspend and remove customers as they buy, stop paying or cancel. Each needs the address and key below. Full steps are in Help → Customers; the plugins are in the builder's tools folder."),
     h("div", { class: "field" }, h("label", {}, "Host API address"), h("div", { class: "pw" }, data.hostApi.url)),
     h("div", { class: "field" }, h("label", {}, "Host API key (keep it secret: it can log in as any customer)"), keyBox,
-      h("button", { class: "btn btn-sm", onclick: async (e) => {
+      h("div", {}, h("button", { class: "btn btn-sm", onclick: async (e) => {
         const { key } = await api("/host-api-key");
         keyBox.textContent = key;
         keyBox.style.display = "block";
         e.target.remove();
-      } }, "Show key"),
+      } }, "Show key")),
       data.hostApi.keyFromSettings ? null : h("div", { class: "field-hint" }, "Made automatically and saved in the data folder (.host-api-key). To choose your own, set HOST_API_KEY in settings.txt.")),
   );
 }

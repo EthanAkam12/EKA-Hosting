@@ -52,6 +52,7 @@ Run the tests with `npm test`.
 | `DATA_DIR` | Where sites, images and messages are stored. Default `./data`. **Back this folder up.** |
 | `NODE_ENV=production` | Marks login cookies as HTTPS-only. |
 | `TRUST_PROXY` | Set to `1` when running behind a reverse proxy such as Caddy or Nginx, so rate limits see real visitor IPs. |
+| `BACKUP_DIR` / `BACKUP_KEEP` | Where daily backups go (default `<data>/backups`) and how many to keep (default 7). |
 | `LICENCE_KEY` | The licence key from the seller (or enter it on the Customers page). |
 | `BUILDER_URL` / `HOST_API_KEY` | The public address used in sign-in links, and the key for cPanel/DirectAdmin/WHMCS (see `tools/README.md`). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Email for form messages and password resets. Without them, the server's `sendmail` is used if it has one. |

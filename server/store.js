@@ -26,6 +26,7 @@ export class Store {
   }
 
   async init() {
+    this.metaById.clear();
     await fs.mkdir(this.root, { recursive: true });
     for (const id of await fs.readdir(this.root)) {
       try {
