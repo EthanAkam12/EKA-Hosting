@@ -119,7 +119,10 @@ export function checkSite(site, { formEmail = "", ownHosting = false } = {}) {
   }
 
   if (site.header.ctaText) checkLink(site.header.ctaHref, site.pages[0], "header", `The header's "${site.header.ctaText}" button`);
-  if (hasForm && ownHosting && !formEmail) add("fix", "form", "There's a contact form but no email to send messages to (Site tab → Contact forms).", null);
+  if (hasForm && ownHosting && !formEmail) add("fix", "form", "There's a form but no email to send messages to (Site tab → Forms).", null);
+  const privacy = site.pages.some((p) => p.slug === "privacy" && !p.post);
+  if (site.legal?.trackingCode?.trim() && site.legal.cookieNotice === "off") add("fix", "cookies", "There's tracking code but the cookie notice is switched off, so it will never run (Site tab → Language, privacy & cookies).", null);
+  if ((hasForm || site.legal?.trackingCode?.trim()) && !privacy) add("tip", "privacy", "The site collects visitors' details but has no privacy policy page (Site tab → Language, privacy & cookies → Create a privacy policy page).", null);
   if (!site.header.logoImage) add("tip", "logo", "No logo image: the business name is shown as text instead.", null);
   if (!site.business?.phone && !site.business?.email && !site.business?.address) add("tip", "business", "No business details for Google (Site tab → Business details).", null);
   return issues;

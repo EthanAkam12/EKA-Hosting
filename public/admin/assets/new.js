@@ -4,6 +4,7 @@
 
 import { h, api, waitForJob, toast, demoBanner } from "./ui.js";
 import { renderPage } from "/admin/shared/render.js";
+import { LANGUAGES } from "/admin/shared/i18n.js";
 
 const STYLES = ["Let the AI decide", "Modern", "Classic", "Bold", "Minimal", "Warm & friendly", "Luxury", "Playful"];
 const PAGE_CHOICES = ["About", "Services", "Gallery", "Pricing", "FAQ", "Contact"];
@@ -32,7 +33,7 @@ let me = { ai: { enabled: false } };
 let state = load() || {
   version: 3,
   step: 1,
-  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", siteType: "business", extras: {}, logoUrl: "", photos: [], colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
+  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", siteType: "business", extras: {}, lang: "en-GB", logoUrl: "", photos: [], colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
   concepts: [], // [{ site, layout, requests: [], history: [] }]
   current: 0,
   notes: {}, // change requests per page: { "Whole site": "", "Home": "", "About": "" }
@@ -45,6 +46,7 @@ state.brief.pageInfo ||= {};
 state.brief.photos ||= [];
 state.brief.siteType ||= "business";
 state.brief.extras ||= {};
+state.brief.lang ||= "en-GB";
 let busy = null; // text while waiting on the AI
 const openBoxes = new Set(["Home"]); // which page change boxes are expanded
 let device = "desktop";
@@ -234,6 +236,9 @@ function renderBrief() {
       h("div", { class: "field" }, h("label", { class: "check" }, useColors, "Use our brand colours"), colorRow,
         h("div", { class: "field-hint" }, "Leave unticked to let the design choose.")),
       h("div", { class: "field" }, h("label", {}, "Style"), styleChips),
+      field("Website language", h("select", { class: "select", style: { maxWidth: "260px" }, onchange: (e) => { b.lang = e.target.value; save(); } },
+        Object.entries(LANGUAGES).map(([code, l]) => h("option", { value: code, selected: b.lang === code }, l.name))),
+        me.ai.enabled ? "The AI writes the whole site in this language." : "Templates are in English; with AI, the site is written in this language."),
       h("div", { class: "field" }, h("label", {}, "Pages"), pageChips, h("div", { class: "field-hint" }, "Type a page name and press Enter to add your own.")),
     ),
 

@@ -2,6 +2,10 @@
 // from shared/schema.js so the AI always knows exactly what the editor supports.
 
 import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, ENTRANCE_EFFECTS, slugify } from "../../shared/schema.js";
+import { LANGUAGES } from "../../shared/i18n.js";
+
+// "Write every word … in French." when the site isn't in English.
+const languageRule = (lang) => (lang && !/^en/.test(lang) && LANGUAGES[lang] ? `LANGUAGE: write every word of the website (headings, text, buttons, form labels and choices, SEO titles and descriptions, alt text) in ${LANGUAGES[lang].ai}, natural and idiomatic. Only "bgPhoto", "coverPhoto" and business.keywords stay in English (they're photo searches).` : "");
 
 function describeField(f) {
   switch (f.type) {
@@ -127,7 +131,7 @@ export function editPrompt({ site, instruction, selected, page, media = [] }) {
   const sel = selected
     ? `\nSELECTED ELEMENT (the owner had this selected — apply the change to it unless the request clearly means something else):\nkind: ${selected.kind}\n${JSON.stringify(selected.node)}\n`
     : "";
-  return `CURRENT SITE JSON:
+  return `${languageRule(site.lang) ? `${languageRule(site.lang)}\n\n` : ""}CURRENT SITE JSON:
 ${JSON.stringify(site)}
 
 The owner is currently viewing the page with slug "${page?.slug || "index"}".${sel}
@@ -150,6 +154,8 @@ export function formatBrief(brief = {}) {
   const lines = [];
   const add = (label, value) => { if (value && String(value).trim()) lines.push(`${label}: ${String(value).trim()}`); };
   add("Business name", brief.name);
+  if (languageRule(brief.lang)) lines.push(languageRule(brief.lang));
+  else if (brief.lang === "en-US") add("Spelling", "American English");
   const type = { shop: "Online shop", blog: "Blog", business: "Business website" }[brief.siteType];
   if (type && brief.siteType !== "business") add("Type of website", type);
   add("Description", brief.description);
@@ -276,7 +282,7 @@ export function postPrompt({ site, topic }) {
   const existing = site.pages.filter((p) => p.post).map((p) => `- ${p.title}`).join("\n");
   return [
     { text: `THE WEBSITE: ${site.name}. ${site.business?.type || ""}\nHome page (for tone and facts):\n${JSON.stringify(home?.sections || []).slice(0, 12000)}`, cache: true },
-    { text: `${existing ? `Posts already on the blog (don't repeat them):\n${existing}\n\n` : ""}WRITE A POST ABOUT: ${topic}` },
+    { text: `${languageRule(site.lang) ? `${languageRule(site.lang)}\n` : ""}${existing ? `Posts already on the blog (don't repeat them):\n${existing}\n\n` : ""}WRITE A POST ABOUT: ${topic}` },
   ];
 }
 

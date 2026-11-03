@@ -10,6 +10,7 @@
 
 import { BLOCKS, FONT_CHOICES, LAYOUT_COLUMNS, listPosts } from "./schema.js";
 import { escapeHtml as esc, safeUrl, sanitizeRichText } from "./sanitize.js";
+import { words, formatDate as formatDateIn } from "./i18n.js";
 
 // ---------------------------------------------------------------------------
 // Links & media
@@ -28,11 +29,8 @@ export function pageAtPath(site, path) {
   return site.pages.find((p) => !p.post && p.slug === slug) || null;
 }
 
-// "21 March 2026"
-export function formatDate(iso) {
-  const d = new Date(`${iso}T12:00:00Z`);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-}
+// "21 March 2026", in the site's language.
+export const formatDate = (iso, lang) => formatDateIn(iso, lang);
 
 // "/about" or "/about#team" → the right URL for wherever the site is served
 // from (custom domain, subdomain or the /s/<slug>/ preview path).
@@ -215,14 +213,22 @@ const renderers = {
       const doc = `<style>*{margin:0}a{display:block;height:100vh;position:relative;background:#000}img{width:100%;height:100%;object-fit:cover;opacity:.85}span{position:absolute;inset:0;margin:auto;width:72px;height:50px;border-radius:12px;background:#f00;color:#fff;font:28px/50px sans-serif;text-align:center}</style><a href="${play}"><img src="${thumb}" alt=""><span>▶</span></a>`;
       return `<div class="eka-video"><iframe title="${esc(p.title)}" loading="lazy" srcdoc="${esc(doc)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`;
     }
-    return `<div class="eka-video"><iframe title="${esc(p.title)}" loading="lazy" src="${esc(embed.src)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
+    // Other players load on click too, so nothing is set before the visitor chooses to watch.
+    const go = `${embed.src}${embed.src.includes("?") ? "&" : "?"}autoplay=1`;
+    const doc = `<style>*{margin:0}a{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;height:100vh;background:#111;color:#fff;font:600 15px system-ui,sans-serif;text-decoration:none}span{width:72px;height:50px;border-radius:12px;background:#1ab7ea;font:28px/50px sans-serif;text-align:center}</style><a href="${esc(go)}"><span>▶</span>${esc(p.title && p.title !== "Video" ? p.title : words(ctx.site.lang).playVideo)}</a>`;
+    return `<div class="eka-video"><iframe title="${esc(p.title)}" loading="lazy" srcdoc="${esc(doc)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
   },
 
-  map(p) {
+  map(p, ctx) {
     if (!p.address) return "";
     const h = Math.max(160, Math.min(800, Number(p.height) || 320));
     const src = `https://maps.google.com/maps?q=${encodeURIComponent(p.address)}&output=embed`;
-    return `<div class="eka-map" style="height:${h}px"><iframe title="Map of ${esc(p.address)}" loading="lazy" src="${esc(src)}" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`;
+    if (p.onClick === false) return `<div class="eka-map" style="height:${h}px"><iframe title="Map of ${esc(p.address)}" loading="lazy" src="${esc(src)}" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`;
+    // Nothing from Google loads (and no cookies are set) until the visitor
+    // clicks; then the frame goes to the map. No JavaScript needed.
+    const w = words(ctx.site.lang), c = ctx.site.theme.colors;
+    const doc = `<style>*{margin:0;box-sizing:border-box}a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:100vh;padding:16px;text-align:center;text-decoration:none;font:15px/1.4 system-ui,sans-serif;color:${c.text};background:${c.surface} repeating-linear-gradient(45deg,transparent 0 22px,rgba(0,0,0,.035) 22px 23px),repeating-linear-gradient(-45deg,transparent 0 22px,rgba(0,0,0,.035) 22px 23px)}b{font-size:30px;line-height:1}span{display:inline-block;margin-top:4px;padding:9px 18px;border-radius:999px;background:${c.primary};color:${contrastText(c.primary)};font-weight:600}small{opacity:.65}</style><a href="${esc(src)}"><b>📍</b><strong>${esc(p.address)}</strong><span>${esc(w.showMap)}</span><small>${esc(w.mapNote)}</small></a>`;
+    return `<div class="eka-map" style="height:${h}px"><iframe title="Map of ${esc(p.address)}" loading="lazy" srcdoc="${esc(doc)}" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`;
   },
 
   form(p, ctx, block) {
@@ -237,7 +243,7 @@ const renderers = {
         if (f.type === "textarea") return `${label}<textarea id="${id}" name="${name}" rows="5"${req}></textarea>`;
         if (f.type === "select") {
           const options = String(f.options || "").split(",").map((o) => o.trim()).filter(Boolean);
-          return `${label}<select id="${id}" name="${name}"${req}><option value="">Choose…</option>${options.map((o) => `<option>${esc(o)}</option>`).join("")}</select>`;
+          return `${label}<select id="${id}" name="${name}"${req}><option value="">${esc(words(ctx.site.lang).choose)}</option>${options.map((o) => `<option>${esc(o)}</option>`).join("")}</select>`;
         }
         const type = ["text", "email", "tel", "date", "time", "number"].includes(f.type) ? f.type : "text";
         const auto = { email: ' autocomplete="email"', tel: ' autocomplete="tel"' }[type] || (/name/i.test(f.label) && type === "text" ? ' autocomplete="name"' : "");
@@ -257,20 +263,20 @@ const renderers = {
     return `<div class="eka-products t-${p.align}" style="--pc:${cols};--pcm:${mcols}">${items.map((x) => {
       const pic = x.image ? img(x.image, x.name, ctx, { sizes: `(max-width: 760px) ${Math.round(100 / mcols)}vw, ${Math.round(100 / cols)}vw` }) : ctx.editor ? placeholderImage("Product photo") : "";
       const button = x.soldOut
-        ? `<span class="eka-btn btn-outline is-off" aria-disabled="true">Sold out</span>`
+        ? `<span class="eka-btn btn-outline is-off" aria-disabled="true">${esc(words(ctx.site.lang).soldOut)}</span>`
         : x.buttonText ? `<a class="eka-btn btn-primary" ${attrHref(x.href || contact, ctx)}>${esc(x.buttonText)}</a>` : "";
-      return `<div class="eka-product${x.soldOut ? " sold" : ""}">${pic ? `<div class="eka-product-img${ratio}">${pic}${x.soldOut ? '<span class="eka-badge">Sold out</span>' : ""}</div>` : ""}<div class="eka-product-body"><h3>${esc(x.name)}</h3>${x.price ? `<p class="eka-product-price">${esc(x.price)}</p>` : ""}${x.text ? `<p>${esc(x.text)}</p>` : ""}${button}</div></div>`;
+      return `<div class="eka-product${x.soldOut ? " sold" : ""}">${pic ? `<div class="eka-product-img${ratio}">${pic}${x.soldOut ? `<span class="eka-badge">${esc(words(ctx.site.lang).soldOut)}</span>` : ""}</div>` : ""}<div class="eka-product-body"><h3>${esc(x.name)}</h3>${x.price ? `<p class="eka-product-price">${esc(x.price)}</p>` : ""}${x.text ? `<p>${esc(x.text)}</p>` : ""}${button}</div></div>`;
     }).join("")}</div>`;
   },
 
   posts(p, ctx) {
     const posts = listPosts(ctx.site, { drafts: ctx.editor }).slice(0, Math.max(1, Math.min(48, Number(p.count) || 6)));
-    if (!posts.length) return ctx.editor ? `<div class="eka-hint">No blog posts yet. Write one in the Pages tab → Blog posts.</div>` : `<p class="eka-posts-none">No posts yet. Check back soon!</p>`;
+    if (!posts.length) return ctx.editor ? `<div class="eka-hint">No blog posts yet. Write one in the Pages tab → Blog posts.</div>` : `<p class="eka-posts-none">${esc(words(ctx.site.lang).noPosts)}</p>`;
     const cols = Math.max(1, Math.min(4, Number(p.columns) || 3));
     return `<div class="eka-posts" style="--pc:${cols}">${posts.map((post) => {
       const href = esc(pageUrl(post, ctx.base));
       const pic = p.showImage ? (post.post.cover ? img(post.post.cover, post.title, ctx, { sizes: `(max-width: 760px) 100vw, ${Math.round(100 / cols)}vw` }) : ctx.editor ? placeholderImage("Cover photo") : "") : "";
-      const meta = [p.showDate ? `<time datetime="${post.post.date}">${formatDate(post.post.date)}</time>` : "", ctx.editor && post.post.draft ? '<span class="eka-badge">Draft</span>' : ""].filter(Boolean).join(" ");
+      const meta = [p.showDate ? `<time datetime="${post.post.date}">${formatDate(post.post.date, ctx.site.lang)}</time>` : "", ctx.editor && post.post.draft ? '<span class="eka-badge">Draft</span>' : ""].filter(Boolean).join(" ");
       return `<article class="eka-post-card">${pic ? `<a class="eka-post-img" href="${href}" tabindex="-1" aria-hidden="true">${pic}</a>` : ""}<div class="eka-post-body">${meta ? `<p class="eka-post-meta">${meta}</p>` : ""}<h3><a href="${href}">${esc(post.title)}</a></h3>${p.showExcerpt && post.post.excerpt ? `<p>${esc(post.post.excerpt)}</p>` : ""}${p.buttonText ? `<a class="eka-card-link" href="${href}">${esc(p.buttonText)} →</a>` : ""}</div></article>`;
     }).join("")}</div>`;
   },
@@ -287,9 +293,10 @@ const renderers = {
   html(p, ctx) {
     // Custom code is trusted (only the site owner can write it). In the editor
     // canvas scripts are neutralised so they can't interfere with editing.
-    return ctx.editor
-      ? `<div class="eka-html">${String(p.code).replace(/<script\b[\s\S]*?<\/script\s*>/gi, '<div class="eka-hint">[script runs on the live site]</div>')}</div>`
-      : `<div class="eka-html">${p.code}</div>`;
+    if (ctx.editor) return `<div class="eka-html">${String(p.code).replace(/<script\b[\s\S]*?<\/script\s*>/gi, '<div class="eka-hint">[script runs on the live site]</div>')}${p.consent ? '<div class="eka-hint">Runs after the visitor accepts cookies</div>' : ""}</div>`;
+    // Code that needs consent waits in a <template> until the visitor accepts cookies.
+    if (p.consent) { ctx.needsConsent = true; return `<div class="eka-html"><template data-eka-consent>${p.code}</template></div>`; }
+    return `<div class="eka-html">${p.code}</div>`;
   },
 };
 
@@ -549,7 +556,7 @@ export function renderSection(section, ctx) {
 
 function navLinks(site) {
   if (site.header.links) return site.header.links;
-  return site.pages.filter((p) => !p.post).map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
+  return site.pages.filter((p) => !p.post && !p.hidden).map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
 }
 
 function renderHeader(site, ctx) {
@@ -572,7 +579,7 @@ function renderHeader(site, ctx) {
   const cta = h.ctaText ? `<a class="eka-btn btn-${h.ctaStyle || "primary"}" ${attrHref(h.ctaHref, ctx)}>${esc(h.ctaText)}</a>` : "";
   if (h.menu && ctx.css) ctx.css.push(...menuCss(h));
   const burger = links.length || cta
-    ? `<input type="checkbox" id="eka-nav-t" class="eka-nav-t"><label for="eka-nav-t" class="eka-burger" aria-label="Open menu"><span></span></label>`
+    ? `<input type="checkbox" id="eka-nav-t" class="eka-nav-t"><label for="eka-nav-t" class="eka-burger" aria-label="${esc(words(site.lang).openMenu)}"><span></span></label>`
     : "";
   const extra = ctx.css ? styleNode({ id: "header", type: "header", style: h.style }, ctx, { kind: "header" }) : [];
   return `<header class="eka-header${h.sticky ? " sticky" : ""}${extra.length ? " " + extra.join(" ") : ""}"${ctx.editor ? ' data-eka-kind="header" data-eka-id="header"' : ""}><div class="eka-wrap eka-header-in"><a class="eka-logo"${logoVars} ${attrHref("/", ctx)}>${logo}</a>${burger}<nav class="eka-nav" aria-label="Main">${nav}${cta}</nav></div></header>`;
@@ -619,7 +626,7 @@ function contactButtons(site, ctx) {
   const wa = String(b.whatsapp || b.phone || "").replace(/\D/g, "");
   const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
   const out = [];
-  if ((want === "call" || want === "both") && phone) out.push(`<a class="eka-fab fab-call" href="tel:${esc(phone)}">${icon(BUTTON_ICONS.phone)}<span>Call</span></a>`);
+  if ((want === "call" || want === "both") && phone) out.push(`<a class="eka-fab fab-call" href="tel:${esc(phone)}">${icon(BUTTON_ICONS.phone)}<span>${esc(words(site.lang).call)}</span></a>`);
   if ((want === "whatsapp" || want === "both") && wa) out.push(`<a class="eka-fab fab-wa" href="https://wa.me/${esc(wa)}" target="_blank" rel="noopener">${icon('<path d="M20.5 3.5A11 11 0 0 0 3.2 17.3L2 22l4.8-1.2A11 11 0 1 0 20.5 3.5zM12 20a8.6 8.6 0 0 1-4.4-1.2l-.3-.2-2.8.7.7-2.7-.2-.3A8.7 8.7 0 1 1 12 20zm4.8-6.5c-.3-.1-1.6-.8-1.8-.9s-.4-.1-.6.1-.7.9-.8 1-.3.2-.6.1a7.1 7.1 0 0 1-3.5-3c-.3-.5.3-.4.7-1.3.1-.2 0-.3 0-.5l-.8-2c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.5-.4z" fill="currentColor" stroke="none"/>')}<span>WhatsApp</span></a>`);
   if (!out.length) return ctx.editor ? `<div class="eka-fabs eka-fabs-show"><span class="eka-hint">Add a phone number in Site → Business details for the contact button</span></div>` : "";
   // The editor shows them at every size so they can be seen while designing.
@@ -824,6 +831,8 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-btn.is-off{opacity:.55;pointer-events:none}
 .eka-post-meta{font-size:.85rem;color:var(--c-muted);margin-bottom:.4em!important;opacity:1!important}
 .eka-post-head{padding:calc(56px*var(--sp)) 0 calc(28px*var(--sp))}.eka-post-head .eka-wrap{max-width:780px}
+.eka-cookie{position:fixed;left:16px;right:16px;bottom:16px;z-index:90;max-width:720px;margin:0 auto;display:flex;gap:14px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:16px 18px;border-radius:calc(var(--r) + 4px);background:var(--c-bg);color:var(--c-text);box-shadow:0 18px 50px -12px rgba(0,0,0,.35);border:1px solid color-mix(in srgb,var(--c-text) 12%,transparent)}
+.eka-cookie[hidden]{display:none}.eka-cookie p{margin:0;flex:1 1 300px;font-size:.95rem}.eka-cookie div{display:flex;gap:8px}.eka-cookie .eka-btn{--btn-h:40px;--btn-px:18px}
 .eka-lead{font-size:1.2rem;color:var(--c-muted);max-width:60ch}
 .eka-post-head h1{font-size:clamp(2rem,4.5vw,3rem);margin:.2em 0 .3em}.eka-post-head .eka-post-meta{font-size:.95rem}
 .eka-post-cover{max-width:1000px;margin:0 auto calc(20px*var(--sp));padding:0 20px}.eka-post-cover img{width:100%;border-radius:var(--r);aspect-ratio:16/9;object-fit:cover}
@@ -927,14 +936,30 @@ export function renderBody(site, page, opts = {}) {
   const header = renderHeader(site, ctx), footer = renderFooter(site, ctx);
   const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
   const empty = ctx.editor && !page.sections.length ? `<div class="eka-page-empty">This page is empty. Drag a section or block here, or ask the AI to build it.</div>` : "";
-  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}${contactButtons(site, ctx)}`;
+  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}${contactButtons(site, ctx)}${ctx.editor ? "" : cookieNotice(site, ctx)}`;
+}
+
+// The cookie notice, only when it's needed: the site has tracking code or
+// custom code marked "after the visitor accepts cookies" (or the owner wants
+// it always). That code waits in <template> tags until Accept; the choice is
+// remembered, and a footer link "#cookies" reopens the notice. This is the
+// only JavaScript on a published page, and only on such sites.
+function cookieNotice(site, ctx) {
+  const legal = site.legal || {};
+  const tracking = legal.trackingCode?.trim() ? `<template data-eka-consent>${legal.trackingCode}</template>` : "";
+  if (legal.cookieNotice === "off" || (legal.cookieNotice !== "always" && !tracking && !ctx.needsConsent)) return "";
+  const w = words(site.lang);
+  const privacy = site.pages.find((p) => p.slug === "privacy" && !p.post);
+  const link = privacy ? ` <a href="${esc(pageUrl(privacy, ctx.base))}">${esc(w.privacy)}</a>` : "";
+  const script = `(function(){var k="eka-consent",b=document.getElementById("eka-cookie"),v;try{v=localStorage.getItem(k)}catch(e){}function run(){document.querySelectorAll("template[data-eka-consent]").forEach(function(t){var f=t.content.cloneNode(true);f.querySelectorAll("script").forEach(function(o){var n=document.createElement("script");for(var i=0;i<o.attributes.length;i++)n.setAttribute(o.attributes[i].name,o.attributes[i].value);n.text=o.text;o.parentNode.replaceChild(n,o)});t.parentNode.replaceChild(f,t)})}function show(){if(location.hash==="#cookies")b.hidden=false}if(v==="yes")run();else if(v!=="no")b.hidden=false;show();addEventListener("hashchange",show);b.addEventListener("click",function(e){var c=e.target.getAttribute("data-eka-c");if(!c)return;try{localStorage.setItem(k,c)}catch(x){}b.hidden=true;if(c==="yes")run()})})();`;
+  return `${tracking}<div class="eka-cookie" id="eka-cookie" role="region" aria-label="Cookies" hidden><p>${esc(legal.cookieText || w.cookieText)}${link}</p><div><button type="button" class="eka-btn btn-outline" data-eka-c="no">${esc(w.reject)}</button><button type="button" class="eka-btn btn-primary" data-eka-c="yes">${esc(w.accept)}</button></div></div><script>${script}</script>`;
 }
 
 // Blog posts get a title, date and cover photo above their content, and a
 // link back to the blog below it.
 function postHead(site, page, ctx) {
   const p = page.post;
-  const meta = [`<time datetime="${p.date}">${formatDate(p.date)}</time>`, p.author ? esc(p.author) : "", ctx.editor && p.draft ? '<span class="eka-badge">Draft: not on the live site yet</span>' : ""].filter(Boolean).join(" · ");
+  const meta = [`<time datetime="${p.date}">${formatDate(p.date, site.lang)}</time>`, p.author ? esc(p.author) : "", ctx.editor && p.draft ? '<span class="eka-badge">Draft: not on the live site yet</span>' : ""].filter(Boolean).join(" · ");
   const cover = p.cover ? `<div class="eka-post-cover">${img(p.cover, page.title, ctx, { sizes: "(max-width: 1000px) 100vw, 1000px", eager: true })}</div>` : "";
   return `<header class="eka-post-head"><div class="eka-wrap"><p class="eka-post-meta">${meta}</p><h1>${esc(page.title)}</h1>${p.excerpt ? `<p class="eka-lead">${esc(p.excerpt)}</p>` : ""}</div></header>${cover}`;
 }
@@ -944,7 +969,8 @@ function postFoot(site, ctx) {
   const lists = site.pages.filter((p) => !p.post && p.sections.some((s) => s.columns.some((c) => c.blocks.some((b) => b.type === "posts"))));
   const blog = lists.find((p) => p.slug !== "index") || lists[0];
   const href = blog ? pageUrl(blog, ctx.base) : ctx.base;
-  return `<p class="eka-post-back"><a href="${esc(href)}">← ${blog ? `Back to ${esc(blog.title)}` : "Home"}</a></p>`;
+  const w = words(site.lang);
+  return `<p class="eka-post-back"><a href="${esc(href)}">← ${blog ? `${esc(w.backTo)} ${esc(blog.title)}` : esc(w.home)}</a></p>`;
 }
 
 export function renderCss(site) {
@@ -1020,7 +1046,7 @@ export function renderPage(site, page, opts = {}) {
   const title = page.seo.title || (page.slug === "index" ? site.name : `${page.title} | ${site.name}`);
   const desc = page.seo.description;
   const canonical = opts.canonical ? `<link rel="canonical" href="${esc(opts.canonical)}">` : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ""}<meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ""}${canonical}<meta name="theme-color" content="${esc(site.theme.colors.primary)}">${headExtras(site, page, opts)}${fontLinks(site, page)}<style>${renderCss(site)}</style></head><body>${renderBody(site, page, opts)}</body></html>`;
+  return `<!doctype html><html lang="${esc(site.lang || "en-GB")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ""}<meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ""}${canonical}<meta name="theme-color" content="${esc(site.theme.colors.primary)}">${headExtras(site, page, opts)}${fontLinks(site, page)}<style>${renderCss(site)}</style></head><body>${renderBody(site, page, opts)}</body></html>`;
 }
 
 export { BLOCKS, LAYOUT_COLUMNS };

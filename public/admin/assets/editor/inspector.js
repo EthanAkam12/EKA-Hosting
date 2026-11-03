@@ -335,6 +335,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     }
     pf({ key: "title", label: "Page name (shown in the menu)", type: "text" }, () => page.title, (p, v) => { p.title = v; });
     if (page.slug !== "index") pf({ key: "slug", label: "Web address", type: "text" }, () => page.slug, (p, v) => { p.slug = slugify(v); });
+    if (page.slug !== "index") pf({ key: "inMenu", label: "Show in the menu", type: "checkbox" }, () => !page.hidden, (p, v) => { if (v) delete p.hidden; else p.hidden = true; });
     pf({ key: "seoTitle", label: "Google title (optional)", type: "text" }, () => page.seo.title, (p, v) => { p.seo.title = v; });
     pf({ key: "seoDesc", label: "Google description", type: "textarea" }, () => page.seo.description, (p, v) => { p.seo.description = v; });
     root.append(h("p", { class: "field-hint" }, "The description shows under your link in search results. Aim for 120–155 characters."));

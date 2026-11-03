@@ -12,6 +12,8 @@
 // the editor or disk passes through it, so unknown block types and bad values
 // never reach the renderer.
 
+import { LANGUAGES } from "./i18n.js";
+
 export const SCHEMA_VERSION = 1;
 
 export function uid(prefix = "b") {
@@ -253,10 +255,11 @@ export const BLOCKS = {
   },
   map: {
     label: "Map", icon: "⌖", group: "Media",
-    defaults: () => ({ address: "London, UK", height: 320 }),
+    defaults: () => ({ address: "London, UK", height: 320, onClick: true }),
     fields: [
       { key: "address", label: "Address", type: "text" },
       { key: "height", label: "Height (px)", type: "number" },
+      { key: "onClick", label: "Load the map when a visitor clicks it (Google sets cookies, so this avoids needing a cookie notice)", type: "checkbox" },
     ],
   },
   form: {
@@ -335,8 +338,11 @@ export const BLOCKS = {
   },
   html: {
     label: "Custom code", icon: "</>", group: "Layout",
-    defaults: () => ({ code: "<div style=\"padding:1rem;border:1px dashed currentColor\">Custom HTML</div>" }),
-    fields: [{ key: "code", label: "HTML (rendered as-is)", type: "code" }],
+    defaults: () => ({ code: "<div style=\"padding:1rem;border:1px dashed currentColor\">Custom HTML</div>", consent: false }),
+    fields: [
+      { key: "code", label: "HTML (rendered as-is)", type: "code" },
+      { key: "consent", label: "Only run it after the visitor accepts cookies (for analytics, chat widgets, ads…)", type: "checkbox" },
+    ],
   },
 };
 
@@ -672,6 +678,8 @@ export function normalizePage(page, index = 0) {
     seo: { title: str(seo.title), description: str(seo.description) },
     sections: (Array.isArray(page.sections) ? page.sections : []).map(normalizeSection).filter(Boolean),
   };
+  // Pages can be left out of the menu (e.g. the privacy policy, linked from the footer).
+  if (index > 0 && page.hidden === true) out.hidden = true;
   // Blog posts are pages with post details. They live at /blog/<slug>/, stay
   // out of the menu and are listed by "Blog posts" blocks.
   if (index > 0 && isObj(page.post)) out.post = normalizePost(page.post);
@@ -750,6 +758,19 @@ export function normalizeSite(site) {
     favicon: str(s.favicon),
     // Shown to Google as business details (and used by the phone contact button).
     business: normalizeBusiness(s.business),
+    lang: LANGUAGES[s.lang] ? s.lang : "en-GB",
+    legal: normalizeLegal(s.legal),
+  };
+}
+
+// Privacy and cookies: tracking code (runs only after visitors accept
+// cookies) and when to show the cookie notice.
+function normalizeLegal(l) {
+  const x = isObj(l) ? l : {};
+  return {
+    trackingCode: str(x.trackingCode).slice(0, 20000),
+    cookieNotice: ["auto", "always", "off"].includes(x.cookieNotice) ? x.cookieNotice : "auto",
+    cookieText: str(x.cookieText).slice(0, 400),
   };
 }
 

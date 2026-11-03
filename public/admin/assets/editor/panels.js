@@ -7,6 +7,8 @@ import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
 import { followDeploy } from "./deploy-ui.js";
 import { showChecklist, siteIssues } from "./checklist.js";
 import { contrast } from "/admin/shared/checks.js";
+import { LANGUAGES } from "/admin/shared/i18n.js";
+import { ensurePrivacyPage } from "/admin/shared/legal.js";
 
 const PALETTES = [
   { name: "Ocean", colors: { primary: "#2563eb", accent: "#f59e0b", background: "#ffffff", surface: "#f1f5fb", text: "#111827", muted: "#6b7280", dark: "#0f172a" } },
@@ -181,7 +183,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     pages.forEach(([p, i], n) => {
       root.append(h("div", { class: `page-row${p.id === s.pageId ? " active" : ""}`, onclick: () => state.setPage(p.id) },
         h("span", { class: "name" }, p.title),
-        h("span", { class: "slug" }, p.slug === "index" ? "/" : `/${p.slug}`),
+        h("span", { class: "slug", title: p.hidden ? "Not in the menu" : "" }, `${p.slug === "index" ? "/" : `/${p.slug}`}${p.hidden ? " · hidden" : ""}`),
         n > 1 ? h("button", { class: "icon-btn", title: "Move up", onclick: (e) => { e.stopPropagation(); movePage(i, pages[n - 1][1]); } }, "↑") : null,
         n > 0 && n < pages.length - 1 ? h("button", { class: "icon-btn", title: "Move down", onclick: (e) => { e.stopPropagation(); movePage(i, pages[n + 1][1]); } }, "↓") : null,
         i > 0 ? h("button", { class: "icon-btn", title: "Duplicate page", onclick: (e) => { e.stopPropagation(); duplicatePage(p.id); } }, "⧉") : null,
@@ -453,6 +455,8 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     if (biz.contactButton !== "none") root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "A button that stays in the corner of the screen on phones. Uses the phone number above (and the WhatsApp number, or the phone number if that's empty)."));
     root.append(fieldControl({ key: "favicon", label: "Browser tab icon (optional; the logo is used if empty)", type: "image" }, s.site.favicon, (v) => state.mutate((site) => { site.favicon = v || ""; }, { key: "site:favicon" }), { pickImage }));
 
+    renderPrivacy(s);
+
     const slug = h("input", { class: "input", value: meta.slug });
     const domains = h("textarea", { class: "textarea", rows: "2", placeholder: "www.customer.com" }, (meta.domains || []).join("\n"));
     const saveMeta = h("button", { class: "btn btn-sm", onclick: async () => {
@@ -508,6 +512,33 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(h("div", { class: "group-title" }, "Custom CSS"));
     root.append(fieldControl({ key: "customCss", label: "", type: "code" }, s.site.customCss, (v) => state.mutate((site) => { site.customCss = v; }, { key: "site:css", source: "panel" }), {}));
     root.append(h("p", { class: "field-hint", style: { marginTop: "-8px" } }, "Applies to every page. Blocks use classes like .eka-btn, .eka-card, .eka-h."));
+  }
+
+  // Language, privacy policy, tracking code and the cookie notice.
+  function renderPrivacy(s) {
+    const legal = s.site.legal;
+    const lf = (key, field) => root.append(fieldControl({ key, ...field }, legal[key], (v, opts) => state.mutate((site) => { site.legal[key] = v ?? ""; }, { key: `legal:${key}`, source: opts?.rebuild ? null : "panel" }), {}));
+    root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Language, privacy & cookies"));
+    root.append(fieldControl({ key: "lang", label: "Website language", type: "select", options: Object.keys(LANGUAGES), labels: Object.values(LANGUAGES).map((l) => l.name) }, s.site.lang, (v) => state.mutate((site) => { site.lang = v; }, { label: "Changed the language" }), {}));
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Sets the language for search engines and the few words the builder adds (dates, \"Sold out\", the cookie notice). The AI writes new text in it; to translate what's there, ask the AI tab, e.g. \"translate the whole site into French\"."));
+
+    const privacy = s.site.pages.find((p) => p.slug === "privacy" && !p.post);
+    root.append(h("div", { class: "field" }, h("label", {}, "Privacy policy"),
+      h("div", { class: "row", style: { flexWrap: "wrap" } },
+        privacy ? h("button", { class: "btn btn-sm", onclick: () => state.setPage(privacy.id) }, "Open it") : null,
+        h("button", { class: "btn btn-sm", onclick: async () => {
+          if (privacy && !(await confirmDialog("Rewrite the privacy policy from the site's current details? Changes you made to its text are replaced (you can undo).", { okText: "Rewrite it" }))) return;
+          state.mutate((site) => { ensurePrivacyPage(site, { rewrite: true }); }, { label: privacy ? "Rewrote the privacy policy" : "Added a privacy policy" });
+          toast(privacy ? "Privacy policy rewritten." : "Privacy policy added and linked in the footer.");
+          render();
+        } }, privacy ? "Rewrite from the site's details" : "Create a privacy policy page")),
+      h("div", { class: "field-hint" }, "Written from what the site does: its forms, map, videos, payment links, fonts and tracking. A starting point, not legal advice: read it through", s.site.lang && !/^en/.test(s.site.lang) ? " (it's written in English: ask the AI tab to translate it)" : "", ".")));
+
+    lf("trackingCode", { label: "Tracking code (Google Analytics, Meta Pixel…)", type: "code" });
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-8px" } }, "Paste the code the service gives you. It's added to every page but only runs after a visitor clicks Accept on the cookie notice."));
+    lf("cookieNotice", { label: "Cookie notice", type: "select", options: ["auto", "always", "off"], labels: ["When needed (tracking code or code marked for consent)", "Always show it", "Never show it"] });
+    if (legal.cookieNotice !== "off") lf("cookieText", { label: "Notice wording (optional)", type: "text", placeholder: "We'd like to use cookies to understand how visitors use this website." });
+    root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Maps and videos load only when a visitor clicks them, so they don't need the notice. Visitors can change their mind with the \"Cookie settings\" link in the footer."));
   }
 
   // "Your hosting": FTP details for publishing to the customer's own web host.

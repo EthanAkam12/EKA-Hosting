@@ -234,6 +234,7 @@ export function applyBrief(site, brief = {}) {
   if (brief.colors?.primary) site.theme.colors.primary = brief.colors.primary;
   if (brief.colors?.accent) site.theme.colors.accent = brief.colors.accent;
   if (brief.logoUrl) site.header.logoImage = brief.logoUrl;
+  if (brief.lang) site.lang = brief.lang;
   // Contact details from the brief, for Google and the phone contact button.
   // (The AI's business type and photo keywords are kept.)
   site.business = { ...site.business };
