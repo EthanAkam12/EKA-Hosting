@@ -1559,7 +1559,7 @@ api.post("/sites/:id/ai/sections", async (req, res) => {
   if (!meta) return;
   if (!ai.enabled) return res.status(400).json({ error: "This needs AI. You can still change the text and style by hand." });
   const site = req.body?.site ? normalizeSite(req.body.site) : await store.getDraft(meta.id);
-  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).slice(0, 4);
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).slice(0, 10);
   const sections = ids.map((id) => findNode(site, id)).filter((f) => f?.kind === "section").map((f) => f.node);
   if (!sections.length) return res.status(400).json({ error: "Choose a section first." });
   const mode = req.body?.mode === "restyle" ? "restyle" : "fill";
@@ -1573,6 +1573,41 @@ api.post("/sites/:id/ai/sections", async (req, res) => {
     return { sections: holder.pages[0].sections };
   });
   res.json({ jobId: job.id });
+});
+
+// ---- AI suggestions and search engines --------------------------------------------
+
+function aiJob(req, res, kind, run) {
+  if (demoAiBlocked(req, res)) return;
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (!ai.enabled) return res.status(400).json({ error: "This needs AI. Add your Anthropic API key in settings.txt." });
+  const site = req.body?.site ? normalizeSite(req.body.site) : null;
+  const job = startJob(kind, meta.id, async (progress) => run({ meta, site: site || (await store.getDraft(meta.id)), progress }));
+  res.json({ jobId: job.id });
+}
+
+// "Ask the AI for more ideas": specific improvements, each one click to do.
+api.post("/sites/:id/ai/ideas", (req, res) => aiJob(req, res, "ideas", ({ meta, site, progress }) => ai.siteIdeas({ site, about: meta.prompt || "", onProgress: progress })));
+
+// Google titles and descriptions for every page.
+api.post("/sites/:id/ai/seo", (req, res) => aiJob(req, res, "seo", ({ site, progress }) => ai.writeSeo({ site, onProgress: progress })));
+
+// Local pages: "Plumber in Leeds", "Plumber in Wakefield"… (up to 6 at a time).
+api.post("/sites/:id/ai/local", (req, res) => {
+  const service = String(req.body?.service || "").trim().slice(0, 60);
+  const towns = [...new Set((Array.isArray(req.body?.towns) ? req.body.towns : []).map((t) => String(t).trim().slice(0, 40)).filter(Boolean))].slice(0, 6);
+  if (!service || !towns.length) return res.status(400).json({ error: "Say what you do and which towns." });
+  aiJob(req, res, "local", async ({ site, progress, meta }) => {
+    const pages = [];
+    for (const town of towns) {
+      const { page } = await ai.localPage({ site, service, town, others: towns.filter((t) => t !== town), onProgress: progress });
+      pages.push(page);
+    }
+    const holder = { ...site, pages };
+    await fillImages(holder, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, avoid: JSON.stringify(site) });
+    return { pages: holder.pages };
+  });
 });
 
 // "Write a post with AI": a draft blog post in the site's style, with a cover photo.

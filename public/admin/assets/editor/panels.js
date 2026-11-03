@@ -12,6 +12,7 @@ import { SECTION_LIBRARY, LIBRARY_CATEGORIES } from "/admin/shared/library.js";
 import { renderPage } from "/admin/shared/render.js";
 import { reworkSections } from "./section-ai.js";
 import { savedEntries, sharedEntries, importSavedMedia, deleteSaved } from "./my-sections.js";
+import { adviceCard } from "./advisor.js";
 import { ensurePrivacyPage } from "/admin/shared/legal.js";
 
 const PALETTES = [
@@ -182,6 +183,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
   function renderAi() {
     const s = state.get();
     if (!s.aiEnabled) {
+      root.append(adviceCard({ state, rerender: render, runInstruction: () => {} }));
       const card = notesCard(null);
       if (card) root.append(card);
       root.append(h("div", { class: "notice" }, "AI isn't set up yet, so written changes can't be done automatically. Add your Anthropic API key to settings.txt and restart the builder. You can still change everything by hand."));
@@ -197,6 +199,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     const sendBtn = h("button", { class: "btn btn-primary btn-block", onclick: send, disabled: aiBusy }, aiBusy ? h("span", { class: "spinner" }) : null, aiBusy ? "Working…" : "Apply change");
     const progress = (aiProgress = h("div", { class: "small muted", style: { marginTop: "8px", minHeight: "1.4em" } }));
 
+    root.append(adviceCard({ state, rerender: () => { if (active === "ai") render(); }, runInstruction: (text) => { aiScope = null; input.value = text; send(); } }));
     const card = notesCard((text, onDone) => { aiScope = null; input.value = text; send().then((ok) => { if (ok) onDone(); }); });
     if (card) root.append(card);
     root.append(log);

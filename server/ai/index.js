@@ -10,7 +10,7 @@ import { createAnthropicProvider } from "./anthropic.js";
 import { applyChanges } from "./changes.js";
 import { partialDesign } from "./partial.js";
 import { createDemoProvider } from "./demo.js";
-import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, POST_SYSTEM, STARTER_POSTS_SYSTEM, SECTION_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, postPrompt, starterPostsPrompt, sectionPrompt, describeLayout, describePage } from "./prompts.js";
+import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, POST_SYSTEM, STARTER_POSTS_SYSTEM, SECTION_SYSTEM, IDEAS_SYSTEM, SEO_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, postPrompt, starterPostsPrompt, sectionPrompt, ideasPrompt, seoPrompt, localPagePrompt, describeLayout, describePage } from "./prompts.js";
 
 function pickProvider() {
   const choice = (process.env.AI_PROVIDER || "").toLowerCase();
@@ -164,6 +164,30 @@ export function createAi({ provider = pickProvider() } = {}) {
       if (out.length !== sections.length) throw new Error("The AI's answer didn't fit. Please try again.");
       out.forEach((sec, i) => { sec.id = sections[i].id; });
       return { sections: out };
+    },
+
+    // A few specific ideas to improve the site, each with an instruction for editSite.
+    async siteIdeas({ site, about = "", onProgress }) {
+      const text = await provider.complete({ kind: "ideas", system: IDEAS_SYSTEM, prompt: ideasPrompt({ site, about }), model: editModel, onProgress });
+      const ideas = (parseJson(text).ideas || []).filter((i) => i && i.title && i.instruction).slice(0, 5)
+        .map((i) => ({ title: String(i.title).slice(0, 100), why: String(i.why || "").slice(0, 300), instruction: String(i.instruction).slice(0, 1000) }));
+      return { ideas };
+    },
+
+    // Google titles and descriptions for every page, in one go.
+    async writeSeo({ site, onProgress }) {
+      const text = await provider.complete({ kind: "seo", system: SEO_SYSTEM, prompt: seoPrompt({ site }), model: editModel, onProgress });
+      const pages = (parseJson(text).pages || []).filter((p) => p && p.slug).map((p) => ({ slug: String(p.slug), title: String(p.title || "").slice(0, 70), description: String(p.description || "").slice(0, 170) }));
+      return { pages };
+    },
+
+    // A "Service in Town" page in the site's style, for local searches.
+    async localPage({ site, service, town, others = [], onProgress }) {
+      const text = await provider.complete({ kind: "local", system: PAGE_SYSTEM, prompt: localPagePrompt({ site, service, town, others }), model: editModel, onProgress });
+      const data = parseJson(text);
+      const title = `${service} in ${town}`;
+      const page = normalizePage({ ...(data.page || data), title, slug: slugify(title), hidden: true }, 1);
+      return { page };
     },
 
     // The first few posts for a new blog (one AI call for all of them).

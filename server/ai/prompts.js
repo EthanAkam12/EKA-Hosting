@@ -318,3 +318,32 @@ export function sectionPrompt({ site, sections, mode, wishes = "", about = "" })
     { text: `${mode === "restyle" ? "RESTYLE" : "FILL"} these section(s)${wishes ? `. The owner says: ${wishes}` : ""}:\n${JSON.stringify(sections)}` },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Suggestions and search engines
+// ---------------------------------------------------------------------------
+
+export const IDEAS_SYSTEM = `You are an experienced small-business web designer and marketer reviewing a client's website.
+Respond with ONLY a JSON object: { "ideas": [ { "title": string (short, an action), "why": string (one sentence, specific to THIS site), "instruction": string (a precise change request for the site's AI editor, e.g. "Add a section after the services with three customer reviews marked as samples") } ] }
+Give 3 to 5 ideas that would most help this business get more enquiries or sales, specific to what's on the site now (missing information, weak headlines, unclear next steps, trust signals, offers, local relevance). Don't suggest things the site already does well, or anything needing information you don't have (no invented facts).`;
+
+export function ideasPrompt({ site, about = "" }) {
+  const pages = site.pages.filter((p) => !p.post && p.slug !== "privacy").map((p) => ({ title: p.title, slug: p.slug, sections: p.sections.map((sec) => sec.columns.flatMap((c) => c.blocks.map((b) => `${b.type}: ${String(b.props.text || b.props.title || b.props.html || b.props.name || "").replace(/<[^>]+>/g, " ").slice(0, 120)}`)).join(" | ")) }));
+  return `${languageRule(site.lang) ? `${languageRule(site.lang)}\n\n` : ""}THE BUSINESS: ${site.name}${about ? ` (${about})` : ""}\nDetails: ${JSON.stringify(site.business)}\nTHE SITE, page by page:\n${JSON.stringify(pages).slice(0, 14000)}`;
+}
+
+export const SEO_SYSTEM = `You write search-engine titles and descriptions for small-business websites.
+Respond with ONLY a JSON object: { "pages": [ { "slug": string, "title": string (50-60 characters: what the page is + business name, and the town if known), "description": string (120-155 characters: a specific, inviting summary with a reason to click) } ] }, one entry per page given. Never invent facts.`;
+
+export function seoPrompt({ site }) {
+  const pages = site.pages.filter((p) => !p.post).map((p) => ({ slug: p.slug, page: p.title, text: p.sections.flatMap((sec) => sec.columns.flatMap((c) => c.blocks.map((b) => String(b.props.text || b.props.html || b.props.title || "")))).join(" ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 900) }));
+  return `${languageRule(site.lang) ? `${languageRule(site.lang)}\n\n` : ""}BUSINESS: ${site.name}. ${site.business?.type || ""} ${site.business?.address || ""}\nPAGES:\n${JSON.stringify(pages)}`;
+}
+
+export function localPagePrompt({ site, service, town, others = [] }) {
+  const home = site.pages[0];
+  return [
+    { text: `APPROVED SITE (theme and home page):\n${JSON.stringify({ name: site.name, theme: site.theme, business: site.business, home: home.sections })}`.slice(0, 30000), cache: true },
+    { text: `${languageRule(site.lang) ? `${languageRule(site.lang)}\n` : ""}DESIGN A LOCAL PAGE: "${service} in ${town}" (slug "${slugify(`${service} in ${town}`)}"). It's for people searching for ${service.toLowerCase()} in ${town}: an H1 with the service and town, why choose this business for ${town} (travel/coverage, local knowledge, response times; only facts you have), the services, a few FAQs specific to ${town}, and a clear call to action to the contact or booking page. Make the text genuinely different from the other local pages${others.length ? ` (${others.join(", ")})` : ""}, not the same page with the town swapped. Set seo.title and seo.description.` },
+  ];
+}
