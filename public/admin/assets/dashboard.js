@@ -13,6 +13,7 @@ async function load() {
   showUsageButton();
   setupHeader();
   notice.replaceChildren(
+    licenceNotice(),
     me.account ? accountBar(me.account, sites) : me.ai.enabled || me.role !== "admin"
       ? ""
       : h("div", { class: "notice" }, h("strong", {}, "AI isn't set up yet. "), "New websites will start from a template, and AI edits are off. Set ANTHROPIC_API_KEY on the server to turn AI on."),
@@ -26,6 +27,20 @@ function statusBadge(site) {
   if (site.suspended) return h("span", { class: "badge badge-err", title: "The customer's account is suspended, so the site is offline" }, "Suspended");
   if (site.publishedAt) return h("span", { class: "badge badge-live" }, "● Live");
   return h("span", { class: "badge" }, "Draft");
+}
+
+// The licence: trial days, renewals and updates (administrator), or a pause notice (customers).
+function licenceNotice() {
+  const l = me.licence;
+  if (!l) return "";
+  const box = (cls, ...kids) => h("div", { class: `notice ${cls}`, style: { marginBottom: "10px" } }, ...kids);
+  if (me.role !== "admin") return l.allowed ? "" : box("notice-err", "Making new websites and AI are paused on this server. Your published websites are still online, and you can still edit them. Please contact your hosting provider.");
+  const link = h("a", { href: "/admin/customers" }, "Enter your licence key");
+  if (l.mode === "needed") return box("notice-err", h("strong", {}, `${l.reason}. `), "New websites, new customers and AI are paused; published websites stay online. ", link, ".");
+  const out = [];
+  if (l.mode === "trial") out.push(box("notice-info", `Free trial: ${l.daysLeft} day${l.daysLeft === 1 ? "" : "s"} left. `, link, " to keep going after that."));
+  if (l.update) out.push(box("notice-info", h("strong", {}, `Version ${l.latest.version} is available. `), l.latest.notes || "", " ", l.latest.url ? h("a", { href: l.latest.url, target: "_blank", rel: "noopener" }, "How to update") : ""));
+  return out.length ? h("div", {}, out) : "";
 }
 
 // ---- accounts ------------------------------------------------------------------

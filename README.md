@@ -52,6 +52,9 @@ Run the tests with `npm test`.
 | `DATA_DIR` | Where sites, images and messages are stored. Default `./data`. **Back this folder up.** |
 | `NODE_ENV=production` | Marks login cookies as HTTPS-only. |
 | `TRUST_PROXY` | Set to `1` when running behind a reverse proxy such as Caddy or Nginx, so rate limits see real visitor IPs. |
+| `LICENCE_KEY` | The licence key from the seller (or enter it on the Customers page). |
+| `BUILDER_URL` / `HOST_API_KEY` | The public address used in sign-in links, and the key for cPanel/DirectAdmin/WHMCS (see `tools/README.md`). |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Email for form messages and password resets. Without them, the server's `sendmail` is used if it has one. |
 
 ## Going live
 
@@ -63,6 +66,32 @@ Run the tests with `npm test`.
 The builder is at `https://admin.ekahosting.com/admin` (or the bare domain). A customer site called "bright-spark" is at `https://bright-spark.ekahosting.com`.
 
 **Customer domains:** in the editor go to **Site → Custom domains** and add e.g. `www.brightspark.co.uk`. Then have the customer point their domain at your server (an `A` record to its IP, or a `CNAME` to `<site-name>.ekahosting.com`). Caddy issues the certificate automatically on the first visit.
+
+## Installing on a Linux server (hosts)
+
+From the unpacked builder folder, on Ubuntu/Debian (or any Linux with Node.js 20+ and systemd):
+
+```bash
+sudo bash tools/install-linux.sh
+```
+
+This installs Node.js if needed, copies the builder to `/opt/eka-builder`, keeps websites in `/var/lib/eka-builder`, runs it as a service on port 3000 and prints the administrator password. Then edit `/opt/eka-builder/settings.txt` and `sudo systemctl restart eka-builder`. Put Caddy in front for HTTPS (see below).
+
+**Updating:** `sudo bash /opt/eka-builder/tools/update-linux.sh eka-builder-0.2.0.tar.gz` (or its web address). It backs up the websites and the current version to `/var/backups/eka-builder/` first, and puts the old version back if the new one doesn't start.
+
+## Selling EKA Builder (licences and updates)
+
+Each copy you sell asks your **licence server** whether its key is valid (twice a day; answers are signed, so they can't be faked). New installs get a 14-day trial. Without a valid licence, new websites, new customers and AI pause; **published websites always stay online**. If your licence server is unreachable, builders keep working for 14 days.
+
+**Set up once, on your own server:**
+
+1. `node licence-server/keys.mjs https://licence.yourdomain.com`. This makes your signing key (in `licence-server/data/`: back it up and never share it) and writes `server/licence-config.json`. **Commit that file**: it's how sold copies find your licence server.
+2. Run the licence server: `LICENCE_ADMIN_PASSWORD=choose-one PORT=4100 node licence-server/server.mjs` (as a service, like the builder), with Caddy in front: `licence.yourdomain.com { reverse_proxy 127.0.0.1:4100 }`.
+3. Open `https://licence.yourdomain.com/admin` (user `admin`). Make a licence key for each host: their name, how many servers, and an expiry date if it's a subscription. You see which servers use each key, their version, and how many websites and customers they have (counts only).
+
+**Each release:** raise `version` in `package.json`, commit, and run `bash tools/make-release.sh`. Send hosts `dist/eka-builder-<version>.tar.gz` and their key. To tell everyone about an update, fill in **Announce an update** on the licence admin page: their dashboards show "Version x is available" with your notes and link.
+
+Your own copy (without `server/licence-config.json` filled in) never asks for a key.
 
 ## Publishing to a customer's own hosting (any normal web host)
 

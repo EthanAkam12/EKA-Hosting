@@ -16,6 +16,7 @@ import compression from "compression";
 import { Store } from "./store.js";
 import { createAuth } from "./auth.js";
 import { Users, publicUser } from "./users.js";
+import { createLicence } from "./licence.js";
 import { createAi, applyBrief } from "./ai/index.js";
 import { usageContext, initUsageLog, usageSummary, loadMonthTotals, accountCostThisMonth, accountUsage } from "./ai/usage.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
@@ -117,6 +118,12 @@ await store.init();
 const users = new Users(DATA_DIR);
 await users.init();
 const auth = createAuth({ password: ADMIN_PASSWORD, secret: SESSION_SECRET, secure: SECURE_COOKIES, users });
+const licence = await createLicence({
+  dataDir: DATA_DIR,
+  version: VERSION,
+  // Sent with each licence check: counts only, never customers' details.
+  stats: () => ({ sites: store.list().filter((m) => !m.demo).length, customers: users.list().length }),
+});
 const ai = createAi();
 
 const app = express();
@@ -463,6 +470,7 @@ async function upsertHostCustomer(body) {
   const plan = planFor(body?.plan);
   if (body?.plan !== undefined && body?.plan !== "" && !plan) throw new Error(`No plan called "${body.plan}". Plans: ${users.plans().map((p) => p.id).join(", ")}.`);
   if (!user) {
+    if (!licence.status().allowed) throw new Error("New customers are paused: this builder's licence needs renewing.");
     if (!body?.email) throw new Error("Give the customer's email.");
     user = (await users.create({ email: body.email, name: body.name || "", plan, external: hostRef(body) })).user;
   } else {
@@ -578,6 +586,17 @@ function canSee(user, meta) {
   return user?.role === "admin" && !meta.demo;
 }
 const isAdmin = (req) => req.user?.role === "admin";
+
+// Without a valid licence, new websites, new customers and AI stop (published
+// websites stay online and can still be edited). Returns true (and answers) when blocked.
+function licenceBlocked(req, res) {
+  const st = licence.status();
+  if (st.allowed) return false;
+  res.status(402).json({ error: req?.user?.role === "admin"
+    ? `${st.reason}. Enter a licence key on the Customers page (Licence) to make new websites and use AI again. Published websites stay online.`
+    : "Making new websites and AI are paused on this server. Your published websites are still online. Please contact your hosting provider." });
+  return true;
+}
 const isCustomer = (req) => req.user?.role === "user";
 function adminOnly(req, res) {
   if (isAdmin(req)) return false;
@@ -615,6 +634,7 @@ function demoBlocked(req, res, what) {
 const demoAiUse = new Map();
 let demoAiDay = { date: "", count: 0 };
 function demoAiBlocked(req, res) {
+  if (ai.enabled && licenceBlocked(req, res)) return true;
   if (isCustomer(req) && ai.enabled) {
     const { plan, aiLeft } = accountStatus(req.user.id);
     if (!plan || plan.aiMonthly <= 0) {
@@ -697,6 +717,10 @@ api.get("/me", (req, res) => {
     supportEmail: SUPPORT_EMAIL,
     demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
     role: req.user.role,
+    licence: (() => {
+      const st = licence.status();
+      return isAdmin(req) ? { mode: st.mode, allowed: st.allowed, reason: st.reason, daysLeft: st.daysLeft, update: st.update, latest: st.latest } : { allowed: st.allowed };
+    })(),
     account: isCustomer(req) ? (() => {
       const st = accountStatus(req.user.id);
       return { email: req.user.email, name: req.user.name, plan: st.plan ? { name: st.plan.name, sites: st.plan.sites, ai: st.plan.aiMonthly > 0 } : null, sites: st.sites, aiPercent: st.plan?.aiMonthly ? Math.min(100, Math.round((st.aiUsed / st.plan.aiMonthly) * 100)) : null };
@@ -729,6 +753,17 @@ api.get("/customers", (req, res) => {
   res.json({ customers: users.list().map(customerRow), plans: users.plans(), mail: mailer.enabled, hostApi: { url: `${publicBase(req)}/api/host`, keyFromSettings: !!process.env.HOST_API_KEY } });
 });
 
+// The licence: status, entering a key, and checking now.
+api.get("/licence", (req, res) => {
+  if (adminOnly(req, res)) return;
+  res.json({ licence: licence.status() });
+});
+api.post("/licence", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  if (req.body?.key !== undefined) res.json({ licence: await licence.setKey(req.body.key) });
+  else res.json({ licence: await licence.check() });
+});
+
 // The host API key, shown to the administrator only when asked.
 api.get("/host-api-key", (req, res) => {
   if (adminOnly(req, res)) return;
@@ -737,6 +772,7 @@ api.get("/host-api-key", (req, res) => {
 
 api.post("/customers", async (req, res) => {
   if (adminOnly(req, res)) return;
+  if (licenceBlocked(req, res)) return;
   try {
     const { user, password } = await users.create({ email: req.body?.email, name: req.body?.name, plan: req.body?.plan, password: req.body?.password || undefined });
     res.json({ customer: customerRow(user), password });
@@ -980,6 +1016,7 @@ api.post("/wizard/refine", async (req, res) => {
 });
 
 function siteLimitReached(req, res) {
+  if (licenceBlocked(req, res)) return true;
   if (isDemo(req) && store.list().filter((m) => m.owner === req.user.id).length >= DEMO_SITES) {
     res.status(400).json({ error: `The demo allows ${DEMO_SITES} websites. Delete one to make another.` });
     return true;

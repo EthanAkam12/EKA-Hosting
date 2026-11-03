@@ -4,3 +4,4 @@ data/
 *.log
 settings.txt
 backups/
+dist/

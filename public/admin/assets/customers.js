@@ -8,8 +8,9 @@ let data = { customers: [], plans: [], mail: false };
 
 const money = (usd) => `$${Number(usd || 0).toFixed(2)}`;
 
+let lic = null;
 async function load() {
-  data = await api("/customers");
+  [data, { licence: lic }] = await Promise.all([api("/customers"), api("/licence")]);
   render();
 }
 
@@ -18,6 +19,7 @@ function render() {
     h("div", { class: "head" },
       h("div", {}, h("h1", {}, "Customers"), h("p", { class: "muted", style: { margin: "4px 0 0" } }, "Each customer logs in with their email and sees only their own websites. Their plan sets how many websites they can have and how much AI they can use each month.")),
       h("button", { class: "btn btn-primary", onclick: addCustomer }, "+ Add customer")),
+    lic.enabled ? licencePanel() : null,
     customersPanel(),
     plansPanel(),
     billingPanel(),
@@ -191,6 +193,32 @@ function billingPanel() {
     h("h2", {}, "Billing report"),
     h("p", { class: "small muted", style: { marginTop: 0 } }, "A spreadsheet (CSV) with one row per customer: plan, websites, and the AI they used that month, to bill them or check your margins."),
     h("div", { class: "row" }, month, h("button", { class: "btn", onclick: () => { location.href = `/api/billing.csv?month=${month.value}`; } }, "Download report")));
+}
+
+// ---- licence ------------------------------------------------------------------------
+
+function licencePanel() {
+  const key = h("input", { class: "input", placeholder: "EKA-XXXXX-XXXXX-XXXXX-XXXXX", style: { maxWidth: "340px" }, value: "" });
+  const state = {
+    off: null,
+    trial: ["notice-info", `Free trial: ${lic.daysLeft} day${lic.daysLeft === 1 ? "" : "s"} left. Enter your licence key to keep making websites after that.`],
+    active: ["notice-info", `Licensed${lic.name ? ` to ${lic.name}` : ""}${lic.expires ? ` until ${lic.expires}` : ""}. Key ${lic.key}.`],
+    grace: ["", `Licensed${lic.name ? ` to ${lic.name}` : ""}, but the licence server hasn't answered lately (${lic.lastError || "no answer"}). Everything keeps working for up to 14 days after the last good check.`],
+    needed: ["notice-err", `${lic.reason}. New websites, new customers and AI are paused until a valid licence key is entered. Published websites stay online and can still be edited.`],
+  }[lic.mode];
+  return h("div", { class: "panel" },
+    h("h2", {}, "Licence"),
+    state ? h("div", { class: `notice ${state[0]}`, style: { marginBottom: "12px" } }, state[1]) : null,
+    lic.update ? h("div", { class: "notice notice-info", style: { marginBottom: "12px" } }, h("strong", {}, `Version ${lic.latest.version} is available`), ` (you have ${lic.version}). `, lic.latest.notes || "", " ", lic.latest.url ? h("a", { href: lic.latest.url, target: "_blank", rel: "noopener" }, "How to update") : null) : null,
+    h("div", { class: "row", style: { flexWrap: "wrap" } }, key,
+      h("button", { class: "btn btn-primary", onclick: async () => {
+        try {
+          ({ licence: lic } = await api("/licence", { method: "POST", body: { key: key.value } }));
+          toast(lic.allowed && lic.mode !== "trial" ? "Licence accepted. Thank you!" : lic.reason || "Saved.", { error: !lic.allowed });
+          render();
+        } catch (e) { toast(e.message, { error: true }); }
+      } }, lic.key ? "Change key" : "Save key"),
+      h("button", { class: "btn", onclick: async () => { ({ licence: lic } = await api("/licence", { method: "POST", body: {} })); toast("Checked."); render(); } }, "Check now")));
 }
 
 // ---- control panels and billing systems -------------------------------------------------

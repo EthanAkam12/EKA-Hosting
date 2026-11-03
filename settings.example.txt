@@ -25,6 +25,10 @@ SMTP_PASS=
 # The address form emails come from, e.g. Website <forms@yourdomain.co.uk>
 MAIL_FROM=
 
+# Your licence key (from whoever sold you the builder). You can also enter it
+# on the Customers page. New installs have a 14-day trial.
+LICENCE_KEY=
+
 # Optional, for selling to customers: the builder's public address, used in
 # sign-in links from cPanel, DirectAdmin and WHMCS (e.g. https://builder.yourhost.com).
 BUILDER_URL=
