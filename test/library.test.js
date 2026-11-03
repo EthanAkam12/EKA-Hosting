@@ -72,3 +72,22 @@ test("shared sections: editing one copy changes every copy, on any page", async 
   const apart = normalizeSite(syncSharedSections(normalizeSite(synced), after));
   assert.notEqual(apart.pages[0].sections[0].columns[0].blocks[0].props.text, "Changed again");
 });
+
+test("ready-made designs: complete sites with their own look, the business's details filled in", async () => {
+  const { SITE_DESIGNS, siteFromDesign } = await import("../shared/site-designs.js");
+  assert.ok(SITE_DESIGNS.length >= 10);
+  const fonts = new Set();
+  for (const d of SITE_DESIGNS) {
+    const site = siteFromDesign(d.id, { name: "Rose & Co", address: "1 Quay St, Whitby" });
+    fonts.add(site.theme.fonts.heading + site.theme.colors.primary);
+    assert.equal(site.name, "Rose & Co");
+    assert.equal(site.pages[0].slug, "index");
+    for (const p of site.pages) assert.match(renderPage(site, p), /<\/html>$/, `${d.id}/${p.slug}`);
+    const maps = site.pages.flatMap((p) => p.sections.flatMap((x) => x.columns.flatMap((c) => c.blocks))).filter((x) => x.type === "map");
+    for (const m of maps) assert.equal(m.props.address, "1 Quay St, Whitby");
+    const ids = JSON.stringify(site).match(/"id":"[^"]+"/g);
+    assert.equal(new Set(ids).size, ids.length, `${d.id}: every id unique`);
+  }
+  assert.equal(fonts.size, SITE_DESIGNS.length, "each design looks different");
+  assert.throws(() => siteFromDesign("nope"), /Unknown design/);
+});

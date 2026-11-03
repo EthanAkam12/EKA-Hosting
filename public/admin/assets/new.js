@@ -2,9 +2,10 @@
 // 3) pick a homepage design (generate another, or ask for changes, page by
 // page), then confirm to build the full site.
 
-import { h, api, waitForJob, toast, demoBanner } from "./ui.js";
+import { h, api, waitForJob, toast, demoBanner, modal } from "./ui.js";
 import { renderPage } from "/admin/shared/render.js";
 import { LANGUAGES } from "/admin/shared/i18n.js";
+import { SITE_DESIGNS, siteFromDesign } from "/admin/shared/site-designs.js";
 
 const STYLES = ["Let the AI decide", "Modern", "Classic", "Bold", "Minimal", "Warm & friendly", "Luxury", "Playful"];
 const PAGE_CHOICES = ["About", "Services", "Gallery", "Pricing", "FAQ", "Contact"];
@@ -193,7 +194,9 @@ function renderBrief() {
       : "AI isn't set up, so designs come from built-in templates using these details. Add your API key in settings.txt for AI-written designs."),
 
     h("div", { class: "card" },
-      h("h3", {}, "What are you making?"),
+      h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "wrap", gap: "8px" } },
+        h("h3", { style: { margin: 0 } }, "What are you making?"),
+        h("button", { class: "btn btn-sm", type: "button", onclick: () => openDesigns(b) }, "Or start from a ready-made design →")),
       typeCards,
       h("div", { class: "field", style: { marginTop: "14px" } }, h("label", {}, "Add to it (optional)"), extraChips,
         h("div", { class: "field-hint" }, "You can add any of these later too: shop products, blog posts and forms are blocks in the editor.")),
@@ -522,6 +525,51 @@ function renderPageDesign() {
   const home = currentConcept().site;
   const site = opt ? { ...home, pages: [home.pages[0], opt.page] } : null;
   return h("div", { class: "design" }, side, previewStage(opt ? `${title} · design ${d.current + 1}` : "", site, site?.pages[1]));
+}
+
+// ---- ready-made designs ----------------------------------------------------------
+
+function openDesigns(b) {
+  const cards = SITE_DESIGNS.map((d) => {
+    const site = siteFromDesign(d.id, { name: b.name || d.name });
+    const html = renderPage(site, site.pages[0], { editor: true }).replace("</head>", "<style>body{overflow:hidden;pointer-events:none}.eka-ph-tag{display:none}</style></head>");
+    return h("button", { class: "lib-card", type: "button", onclick: () => choose(d) },
+      h("div", { class: "lib-thumb design-thumb" }, h("iframe", { srcdoc: html, loading: "lazy", tabindex: "-1", title: "", sandbox: "" })),
+      h("span", {}, d.name), h("small", { class: "muted", style: { fontWeight: 400 } }, `${d.desc} · ${d.pages.length} page${d.pages.length === 1 ? "" : "s"}`));
+  });
+  const grid = h("div", { class: "lib-grid", style: { maxHeight: "68vh" } }, cards);
+  const m = modal({ title: "Ready-made designs", wide: true, body: h("div", {}, h("p", { class: "muted small", style: { marginTop: 0 } }, "Complete websites, each with its own look. Pick one, then change anything. Shown with your business name."), grid) });
+  m.el.querySelector(".modal").classList.add("modal-lib");
+  const fit = () => grid.querySelectorAll(".lib-thumb").forEach((t) => t.style.setProperty("--s", t.clientWidth / 1200));
+  new ResizeObserver(fit).observe(grid);
+
+  function choose(d) {
+    m.close();
+    const name = h("input", { class: "input", value: b.name || "", placeholder: "e.g. Smith Antiques" });
+    const about = h("textarea", { class: "textarea", rows: "3", placeholder: "What they do, where, who for…" }, b.description || "");
+    const fill = h("input", { type: "checkbox", checked: me.ai.enabled });
+    const f = modal({
+      title: d.name,
+      body: h("div", {},
+        h("div", { class: "field" }, h("label", {}, "Business name"), name),
+        me.ai.enabled ? h("div", { class: "field" }, h("label", { class: "check" }, fill, "✦ Write every page for this business with AI (text and photos)"), about,
+          h("div", { class: "field-hint" }, "Without this, the design keeps its example text for you to change by hand.")) : h("p", { class: "field-hint" }, "The design keeps its example text for you to change by hand.")),
+      footer: [h("button", { class: "btn", onclick: () => f.close() }, "Cancel"), h("button", { class: "btn btn-primary", onclick: async (e) => {
+        if (!name.value.trim()) return name.focus();
+        if (fill.checked && !about.value.trim()) { about.focus(); return toast("Say what the business does, so the AI can write about it.", { error: true }); }
+        e.target.disabled = true;
+        e.target.textContent = "Creating…";
+        try {
+          const { site } = await wapi("/sites/from-design", { method: "POST", body: { design: d.id, fill: fill.checked, brief: { ...state.brief, name: name.value.trim(), description: about.value.trim() } } });
+          clearAndGo(`/admin/sites/${site.id}`);
+        } catch (err) {
+          toast(err.message, { error: true });
+          e.target.disabled = false;
+          e.target.textContent = "Use this design";
+        }
+      } }, "Use this design")],
+    });
+  }
 }
 
 function clearAndGo(url) {
