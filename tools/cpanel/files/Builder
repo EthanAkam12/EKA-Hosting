@@ -1,0 +1,75 @@
+#!/usr/local/cpanel/3rdparty/bin/perl
+# EKA Website Builder: runs as root when a cPanel user opens the builder.
+# cPanel tells it who the user really is, so the user can't pretend to be
+# someone else; it then asks the builder for a one-time sign-in link using
+# the host API key, which only root can read (/etc/eka-builder/config).
+
+package bin::admin::EKA::Builder;
+
+use strict;
+use warnings;
+use parent qw( Cpanel::AdminBin::Script::Call );
+use HTTP::Tiny ();
+use JSON::PP ();
+use Sys::Hostname ();
+use Cpanel::Config::LoadCpUserFile ();
+
+__PACKAGE__->run() if !caller;
+
+sub _actions { return qw( SSO ); }
+
+sub _config {
+    my %c;
+    open( my $fh, '<', '/etc/eka-builder/config' ) or die "The website builder isn't set up on this server yet (missing /etc/eka-builder/config).\n";
+    while ( my $line = <$fh> ) {
+        next if $line =~ /^\s*(#|$)/;
+        chomp $line;
+        my ( $k, $v ) = split /=/, $line, 2;
+        $c{ lc( _trim($k) ) } = _trim($v) if defined $v;
+    }
+    close $fh;
+    die "The website builder's address or key is missing from /etc/eka-builder/config.\n" if !$c{url} || !$c{key};
+    return \%c;
+}
+
+sub _trim { my $s = shift // ''; $s =~ s/^\s+|\s+$//g; return $s; }
+
+sub SSO {
+    my ($self) = @_;
+    my $user   = $self->get_caller_username();
+    my $conf   = _config();
+    my $cpuser = Cpanel::Config::LoadCpUserFile::load($user);
+
+    my $package = $cpuser->{'PLAN'} // '';
+    my $email   = $cpuser->{'CONTACTEMAIL'} || ( $user . '@' . ( $cpuser->{'DOMAIN'} || Sys::Hostname::hostname() ) );
+
+    # cPanel package → builder plan, e.g. "plans=Basic:starter,Pro:business"; else "default_plan".
+    my $plan = $conf->{default_plan} // '';
+    for my $pair ( split /\s*,\s*/, ( $conf->{plans} // '' ) ) {
+        my ( $pkg, $p ) = split /:/, $pair, 2;
+        $plan = $p if defined $p && _trim($pkg) eq $package;
+    }
+
+    my $server = $conf->{server_name} || Sys::Hostname::hostname();
+    my $body   = JSON::PP->new->utf8->encode(
+        {
+            account => "cpanel:$server:$user",
+            email   => $email,
+            name    => $cpuser->{'DOMAIN'} || $user,
+            ( length $plan ? ( plan => $plan ) : () ),
+        }
+    );
+    ( my $base = $conf->{url} ) =~ s{/+$}{};
+    my $res = HTTP::Tiny->new( timeout => 20, verify_SSL => ( $conf->{insecure} ? 0 : 1 ) )->post(
+        "$base/api/host/sso",
+        {
+            headers => { 'Content-Type' => 'application/json', 'Authorization' => "Bearer $conf->{key}" },
+            content => $body,
+        }
+    );
+    my $data = eval { JSON::PP->new->utf8->decode( $res->{content} ) } || {};
+    die( ( $data->{error} || "The website builder didn't answer ($res->{status} $res->{reason})." ) . "\n" ) if !$res->{success} || !$data->{url};
+    return $data->{url};
+}
+
+1;

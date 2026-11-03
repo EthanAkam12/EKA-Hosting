@@ -68,6 +68,7 @@
       <li><a href="#review">Customer review</a></li>
       <li><a href="#publish">Publishing</a></li>
       <li><a href="#shop">Online shops</a></li>
+      <li><a href="#customers">Customers, plans &amp; control panels</a></li>
       <li><a href="#demo">Demo mode</a></li>
       <li><a href="#settings">Settings</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
@@ -254,6 +255,21 @@
       <p>Tick <strong>Sold out</strong> to grey a product out. This suits small shops with a handful of products; there's no basket or stock control.</p>
       <h3>Bigger shops: CubeCart</h3>
       <p>For a full shop with a basket, stock and orders, install <strong>CubeCart</strong> (free) on the hosting to run the basket, payments and orders, and design the look in EKA Builder. In <strong>Site → Online shop (CubeCart)</strong>, click <strong>Download as CubeCart skin</strong>, upload the ZIP into CubeCart's <code>skins</code> folder, extract it, and choose it in the CubeCart admin. Instructions are in the ZIP.</p>
+    </section>
+
+    <section id="customers">
+      <h2>Customers, plans &amp; control panels</h2>
+      <p>As the administrator (you log in with the password from <code>settings.txt</code>, leaving the email empty), you see every website. Your customers log in with their <strong>email and password</strong> and see only their own websites.</p>
+      <h3>Adding customers</h3>
+      <p>Click <strong>Customers</strong> at the top of the dashboard, then <strong>+ Add customer</strong>. Give their email and choose a plan; leave the password empty and one is made up and shown once, with a button to copy the login details. From the list you can change a customer's plan, make a <strong>New password</strong>, <strong>Edit</strong> or disable them, or delete them (keeping or deleting their websites). <strong>Open as customer</strong> logs you in as them to help with a problem; log out and back in to return.</p>
+      <h3>Plans</h3>
+      <p>Each plan sets how many <strong>websites</strong> a customer can have and their <strong>AI allowance</strong>: the AI cost, in US dollars at Anthropic's prices, they can use each calendar month (0 = no AI). As a guide, a new AI-designed website costs about $0.30–$1 and a change a few cents. When a customer runs out, AI stops for them until the 1st, and everything else keeps working. Customers see their plan and a "% used" bar on their dashboard.</p>
+      <h3>Billing</h3>
+      <p><strong>Billing report</strong> on the Customers page downloads a spreadsheet for any month: each customer's plan, websites, AI actions and AI cost. Use it to bill AI separately or to check your margins.</p>
+      <h3>One-click login from cPanel, DirectAdmin and WHMCS</h3>
+      <p>The builder's <code>tools</code> folder has a <strong>cPanel</strong> plugin (a Website Builder icon), a <strong>DirectAdmin</strong> plugin and a <strong>WHMCS</strong> module (creates, suspends and removes customers with their orders, plus an "Open Website Builder" button). Each needs the <strong>host API address and key</strong> from the bottom of the Customers page. Step-by-step instructions are in <code>tools/README.md</code>. Customers who arrive this way don't need a builder password.</p>
+      <h3>Forgotten passwords</h3>
+      <p>Customers can click <strong>Forgot your password?</strong> on the login page for an email link, when the server can send email (see <a href="#settings">Settings</a>). Otherwise, make them a new password from the Customers page.</p>
     </section>
 
     <section id="demo">

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "eka_builder",
+    "name": "Website Builder",
+    "description": "Build a website with AI: EKA Website Builder",
+    "type": "link",
+    "group_id": "domains",
+    "order": 1,
+    "uri": "eka_builder/index.live.php",
+    "target": "_blank",
+    "icon": "eka_builder.svg",
+    "featuremanager": true
+  }
+]

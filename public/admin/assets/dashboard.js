@@ -23,6 +23,7 @@ async function load() {
 function statusBadge(site) {
   if (site.status === "generating") return h("span", { class: "badge badge-busy" }, h("span", { class: "spinner", style: { width: "10px", height: "10px", borderWidth: "2px" } }), "Building");
   if (site.status === "error") return h("span", { class: "badge badge-err" }, "Failed");
+  if (site.suspended) return h("span", { class: "badge badge-err", title: "The customer's account is suspended, so the site is offline" }, "Suspended");
   if (site.publishedAt) return h("span", { class: "badge badge-live" }, "● Live");
   return h("span", { class: "badge" }, "Draft");
 }

@@ -21,6 +21,7 @@ function render() {
     customersPanel(),
     plansPanel(),
     billingPanel(),
+    hostApiPanel(),
   );
 }
 
@@ -190,6 +191,25 @@ function billingPanel() {
     h("h2", {}, "Billing report"),
     h("p", { class: "small muted", style: { marginTop: 0 } }, "A spreadsheet (CSV) with one row per customer: plan, websites, and the AI they used that month, to bill them or check your margins."),
     h("div", { class: "row" }, month, h("button", { class: "btn", onclick: () => { location.href = `/api/billing.csv?month=${month.value}`; } }, "Download report")));
+}
+
+// ---- control panels and billing systems -------------------------------------------------
+
+function hostApiPanel() {
+  const keyBox = h("div", { class: "pw", style: { display: "none", wordBreak: "break-all" } });
+  return h("div", { class: "panel" },
+    h("h2", {}, "Connect your control panel or billing system"),
+    h("p", { class: "small muted", style: { marginTop: 0 } }, "Customers can open the builder from cPanel or DirectAdmin with one click (no second password), and WHMCS can create, suspend and remove customers as they buy, stop paying or cancel. Each needs the address and key below. Full steps are in Help → Customers; the plugins are in the builder's tools folder."),
+    h("div", { class: "field" }, h("label", {}, "Host API address"), h("div", { class: "pw" }, data.hostApi.url)),
+    h("div", { class: "field" }, h("label", {}, "Host API key (keep it secret: it can log in as any customer)"), keyBox,
+      h("button", { class: "btn btn-sm", onclick: async (e) => {
+        const { key } = await api("/host-api-key");
+        keyBox.textContent = key;
+        keyBox.style.display = "block";
+        e.target.remove();
+      } }, "Show key"),
+      data.hostApi.keyFromSettings ? null : h("div", { class: "field-hint" }, "Made automatically and saved in the data folder (.host-api-key). To choose your own, set HOST_API_KEY in settings.txt.")),
+  );
 }
 
 document.getElementById("logout").addEventListener("click", async () => {

@@ -1,0 +1,61 @@
+#!/usr/local/bin/php -n
+<?php
+// EKA Website Builder for DirectAdmin users. DirectAdmin runs this as
+// "diradmin" (see plugin.conf) and tells it who's logged in (USERNAME), so
+// users can't pretend to be someone else, and only diradmin can read the
+// host API key in ../data/config.ini.
+
+function fail($msg) {
+    echo '<div style="padding:16px;border:1px solid #f5c2c2;background:#fdecec;border-radius:8px"><b>The website builder couldn\'t be opened.</b><br>'
+        . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '<br>Please try again in a minute, or contact your hosting provider.</div>';
+    exit(0);
+}
+
+$user = getenv('USERNAME');
+if (!$user || !preg_match('/^[a-z0-9_-]{1,32}$/i', $user)) fail('Unknown user.');
+
+$conf = @parse_ini_file(dirname(__DIR__) . '/data/config.ini');
+if (!$conf || empty($conf['url']) || empty($conf['key'])) fail('The plugin isn\'t set up yet (data/config.ini).');
+
+// The user's email, domain and package from DirectAdmin's records.
+$info = array();
+foreach (@file("/usr/local/directadmin/data/users/$user/user.conf", FILE_IGNORE_NEW_LINES) ?: array() as $line) {
+    $p = strpos($line, '=');
+    if ($p !== false) $info[substr($line, 0, $p)] = substr($line, $p + 1);
+}
+$domain = isset($info['domain']) ? $info['domain'] : '';
+$email = !empty($info['email']) ? $info['email'] : ($user . '@' . ($domain ?: gethostname()));
+$package = isset($info['package']) ? $info['package'] : '';
+
+// DirectAdmin package → builder plan, e.g. plans = "basic:starter,pro:business".
+$plan = isset($conf['default_plan']) ? $conf['default_plan'] : '';
+foreach (array_filter(array_map('trim', explode(',', isset($conf['plans']) ? $conf['plans'] : ''))) as $pair) {
+    $bits = explode(':', $pair, 2);
+    if (count($bits) === 2 && trim($bits[0]) === $package) $plan = trim($bits[1]);
+}
+
+$server = !empty($conf['server_name']) ? $conf['server_name'] : gethostname();
+$body = array('account' => "directadmin:$server:$user", 'email' => $email, 'name' => $domain ?: $user);
+if ($plan !== '') $body['plan'] = $plan;
+
+$ch = curl_init(rtrim($conf['url'], '/') . '/api/host/sso');
+curl_setopt_array($ch, array(
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => json_encode($body),
+    CURLOPT_HTTPHEADER => array('Content-Type: application/json', 'Authorization: Bearer ' . $conf['key']),
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => 20,
+));
+$raw = curl_exec($ch);
+$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$data = json_decode((string) $raw, true);
+if ($status !== 200 || empty($data['url'])) fail(isset($data['error']) ? $data['error'] : 'The builder didn\'t answer (' . ($raw === false ? curl_error($ch) : $status) . ').');
+
+$url = htmlspecialchars($data['url'], ENT_QUOTES, 'UTF-8');
+?>
+<div style="max-width:560px;padding:24px;border:1px solid #e3e6eb;border-radius:12px;font:15px/1.5 system-ui,sans-serif">
+  <h2 style="margin:0 0 8px">Website Builder</h2>
+  <p style="margin:0 0 16px">Build and edit your website with AI and drag-and-drop.</p>
+  <a href="<?php echo $url; ?>" target="_blank" rel="noopener" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open the website builder ↗</a>
+  <p style="margin:12px 0 0;color:#6b7385;font-size:13px">The link works once, for two minutes. Reload this page for a new one.</p>
+</div>

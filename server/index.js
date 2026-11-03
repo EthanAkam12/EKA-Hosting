@@ -105,6 +105,13 @@ if (!ADMIN_PASSWORD) {
   console.log(`\n  No ADMIN_PASSWORD set. Log in with: ${ADMIN_PASSWORD}\n  (stored in ${path.join(DATA_DIR, ".admin-password")}; set ADMIN_PASSWORD to choose your own)\n`);
 }
 
+// The key control panels and billing systems use to manage customers (see
+// the host API below). Set HOST_API_KEY, or one is made and shown on the
+// Customers page.
+const HOST_API_KEY = process.env.HOST_API_KEY || (await readOrCreateSecret(path.join(DATA_DIR, ".host-api-key"), () => crypto.randomBytes(24).toString("base64url")));
+// The builder's public address, for links made by the host API (else taken from the request).
+const BUILDER_URL = (process.env.BUILDER_URL || "").replace(/\/+$/, "");
+
 const store = new Store(DATA_DIR);
 await store.init();
 const users = new Users(DATA_DIR);
@@ -163,6 +170,7 @@ function findPage(site, rest, { drafts = false } = {}) {
 }
 
 async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = false, origin = `${req.protocol}://${req.get("host")}`, live = false, review = false }) {
+  if (meta.suspended && !draft) return res.status(503).type("html").send(simplePage("Website unavailable", "This website is temporarily unavailable."));
   const site = draft ? await store.getDraft(meta.id) : await store.getPublished(meta.id);
   if (sandbox) {
     // Previews on the builder's own domain share its origin, so block any
@@ -420,6 +428,92 @@ api.post("/demo/start", (req, res) => {
   auth.startDemo(req, res, DEMO_HOURS * 3600);
   res.json({ ok: true });
 });
+// ---- host API: control panels and billing systems ------------------------------
+//
+// Authorization: Bearer <HOST_API_KEY>. Customers are matched by "account",
+// the panel's own reference (e.g. "cpanel:server1:bob"), then by email.
+//   POST /api/host/sso       { account, email, name?, plan? } → { url } one-time sign-in link (creates the customer if new)
+//   POST /api/host/accounts  { account, email, name?, plan? } → creates or updates
+//   POST /api/host/accounts/suspend | unsuspend | terminate  { account, keepSites? }
+//   GET  /api/host/accounts?account=…  → the customer, their plan and usage
+//   GET  /api/host/plans     → plans (ids for "plan")
+
+const hostHits = new Map();
+function hostAuthed(req, res) {
+  const now = Date.now();
+  const rec = hostHits.get(req.ip) || { bad: 0, since: now };
+  if (now - rec.since > 15 * 60 * 1000) { rec.bad = 0; rec.since = now; }
+  if (rec.bad > 20) { res.status(429).json({ error: "Too many bad keys. Try again later." }); return false; }
+  const given = String(req.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const a = crypto.createHash("sha256").update(given).digest(), b = crypto.createHash("sha256").update(HOST_API_KEY).digest();
+  if (given && crypto.timingSafeEqual(a, b)) return true;
+  rec.bad++;
+  hostHits.set(req.ip, rec);
+  res.status(401).json({ error: "Wrong or missing API key." });
+  return false;
+}
+
+const publicBase = (req) => BUILDER_URL || `${req.protocol}://${req.get("host")}`;
+const hostRef = (body) => String(body?.account || "").trim().slice(0, 200);
+const findHostCustomer = (body) => (hostRef(body) && users.byExternal(hostRef(body))) || users.byEmail(body?.email);
+const planFor = (v) => (v === undefined || v === null || v === "" ? undefined : users.plan(String(v))?.id || users.plans().find((p) => p.name.toLowerCase() === String(v).toLowerCase())?.id);
+
+async function upsertHostCustomer(body) {
+  let user = findHostCustomer(body);
+  const plan = planFor(body?.plan);
+  if (body?.plan !== undefined && body?.plan !== "" && !plan) throw new Error(`No plan called "${body.plan}". Plans: ${users.plans().map((p) => p.id).join(", ")}.`);
+  if (!user) {
+    if (!body?.email) throw new Error("Give the customer's email.");
+    user = (await users.create({ email: body.email, name: body.name || "", plan, external: hostRef(body) })).user;
+  } else {
+    await users.update(user.id, { ...(plan ? { plan } : {}), ...(body.name ? { name: body.name } : {}), ...(hostRef(body) && !user.external ? { external: hostRef(body) } : {}) });
+  }
+  return users.get(user.id);
+}
+
+const host = express.Router();
+host.use(express.json({ limit: "64kb" }));
+host.use((req, res, next) => (hostAuthed(req, res) ? next() : undefined));
+host.post("/sso", async (req, res) => {
+  try {
+    const user = await upsertHostCustomer(req.body);
+    if (user.disabled) return res.status(403).json({ error: "This customer is suspended." });
+    res.json({ url: `${publicBase(req)}/login/link?t=${encodeURIComponent(auth.loginLink(user, 120))}` });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+host.post("/accounts", async (req, res) => {
+  try { res.json({ customer: customerRow(await upsertHostCustomer(req.body)) }); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+host.get("/accounts", (req, res) => {
+  const user = findHostCustomer({ account: req.query.account, email: req.query.email });
+  if (!user) return res.status(404).json({ error: "No such customer." });
+  res.json({ customer: customerRow(user) });
+});
+for (const action of ["suspend", "unsuspend", "terminate"]) {
+  host.post(`/accounts/${action}`, async (req, res) => {
+    const user = findHostCustomer(req.body);
+    if (!user) return res.status(404).json({ error: "No such customer." });
+    if (action === "terminate") {
+      for (const meta of store.list().filter((m) => m.owner === user.id && !m.demo)) {
+        if (req.body?.keepSites) await store.updateMeta(meta.id, { owner: undefined });
+        else await store.remove(meta.id);
+      }
+      await users.remove(user.id);
+      pageCache.clear();
+      return res.json({ ok: true });
+    }
+    // Suspended customers can't log in; their live websites stay online
+    // unless takeSitesOffline is set.
+    await users.update(user.id, { disabled: action === "suspend" });
+    if (action === "suspend" && req.body?.takeSitesOffline) for (const meta of store.list().filter((m) => m.owner === user.id && m.publishedAt)) await store.updateMeta(meta.id, { suspended: true });
+    if (action === "unsuspend") for (const meta of store.list().filter((m) => m.owner === user.id && m.suspended)) await store.updateMeta(meta.id, { suspended: false });
+    pageCache.clear();
+    res.json({ ok: true });
+  });
+}
+host.get("/plans", (req, res) => res.json({ plans: users.plans() }));
+app.use("/api/host", host);
+
 // ---- customer review (public, by link) ----------------------------------------
 
 const reviewHits = new Map();
@@ -632,7 +726,13 @@ function customerRow(u) {
 
 api.get("/customers", (req, res) => {
   if (adminOnly(req, res)) return;
-  res.json({ customers: users.list().map(customerRow), plans: users.plans(), mail: mailer.enabled });
+  res.json({ customers: users.list().map(customerRow), plans: users.plans(), mail: mailer.enabled, hostApi: { url: `${publicBase(req)}/api/host`, keyFromSettings: !!process.env.HOST_API_KEY } });
+});
+
+// The host API key, shown to the administrator only when asked.
+api.get("/host-api-key", (req, res) => {
+  if (adminOnly(req, res)) return;
+  res.json({ key: HOST_API_KEY });
 });
 
 api.post("/customers", async (req, res) => {
