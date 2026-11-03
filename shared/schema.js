@@ -82,6 +82,8 @@ export const BG_EFFECT_LABELS = ["Fade in", "Slow zoom (Ken Burns)", "Zoom out a
 // ---------------------------------------------------------------------------
 
 const ALIGN = { type: "select", options: ["left", "center", "right"] };
+export const FORM_KINDS = ["contact", "enquiry", "booking"];
+export const FORM_FIELD_TYPES = ["text", "email", "tel", "textarea", "date", "time", "number", "select", "checkbox"];
 
 export const BLOCKS = {
   heading: {
@@ -258,24 +260,67 @@ export const BLOCKS = {
     ],
   },
   form: {
-    label: "Contact form", icon: "✉", group: "Content",
+    label: "Form", icon: "✉", group: "Content",
     defaults: () => ({
+      kind: "contact",
       fields: [
-        { label: "Name", type: "text", required: true },
-        { label: "Email", type: "email", required: true },
-        { label: "Message", type: "textarea", required: true },
+        { label: "Name", type: "text", required: true, options: "" },
+        { label: "Email", type: "email", required: true, options: "" },
+        { label: "Message", type: "textarea", required: true, options: "" },
       ],
       submitText: "Send message",
       successMessage: "Thanks! We'll be in touch soon.",
+      confirmEmail: false,
     }),
     fields: [
-      { key: "fields", label: "Fields", type: "list", itemLabel: "label", itemDefaults: () => ({ label: "Phone", type: "tel", required: false }), itemFields: [
+      { key: "kind", label: "What it's for", type: "select", options: FORM_KINDS, labels: ["Contact message", "Enquiry / quote request", "Booking request"] },
+      { key: "fields", label: "Fields", type: "list", itemLabel: "label", itemDefaults: () => ({ label: "Phone", type: "tel", required: false, options: "" }), itemFields: [
         { key: "label", label: "Label", type: "text" },
-        { key: "type", label: "Type", type: "select", options: ["text", "email", "tel", "textarea"] },
+        { key: "type", label: "Type", type: "select", options: FORM_FIELD_TYPES, labels: ["Short text", "Email", "Phone", "Long text", "Date", "Time", "Number", "Drop-down list", "Tick box"] },
+        { key: "options", label: "Choices for a drop-down (comma separated)", type: "text" },
         { key: "required", label: "Required", type: "checkbox" },
       ] },
       { key: "submitText", label: "Button text", type: "text" },
       { key: "successMessage", label: "Thank-you message", type: "text" },
+      { key: "confirmEmail", label: "Email the visitor a copy (needs an Email field)", type: "checkbox" },
+    ],
+  },
+  products: {
+    label: "Products", icon: "🛍", group: "Shop & blog",
+    defaults: () => ({
+      items: [
+        { image: "", name: "Product name", price: "£25.00", text: "A short description of the product.", buttonText: "Buy now", href: "", soldOut: false },
+        { image: "", name: "Product name", price: "£40.00", text: "A short description of the product.", buttonText: "Buy now", href: "", soldOut: false },
+        { image: "", name: "Product name", price: "£15.00", text: "A short description of the product.", buttonText: "Buy now", href: "", soldOut: false },
+      ],
+      columns: 3, mobileColumns: 1, ratio: "1:1", align: "left",
+    }),
+    fields: [
+      { key: "items", label: "Products", type: "list", itemLabel: "name", itemDefaults: () => ({ image: "", name: "New product", price: "£0.00", text: "", buttonText: "Buy now", href: "", soldOut: false }), itemFields: [
+        { key: "image", label: "Photo", type: "image" },
+        { key: "name", label: "Name", type: "text" },
+        { key: "price", label: "Price", type: "text" },
+        { key: "text", label: "Description", type: "textarea" },
+        { key: "buttonText", label: "Button", type: "text" },
+        { key: "href", label: "Buy link (a Stripe or PayPal payment link; empty = goes to Contact)", type: "url" },
+        { key: "soldOut", label: "Sold out", type: "checkbox" },
+      ] },
+      { key: "columns", label: "Columns (desktop)", type: "slider", min: 1, max: 5, placeholder: 3, unit: "" },
+      { key: "mobileColumns", label: "Columns on phones", type: "slider", min: 1, max: 2, placeholder: 1, unit: "" },
+      { key: "ratio", label: "Photo shape", type: "select", options: ["1:1", "4:3", "3:4", "auto"], labels: ["Square", "4:3", "Portrait 3:4", "Original shape"] },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  posts: {
+    label: "Blog posts", icon: "✎", group: "Shop & blog",
+    defaults: () => ({ count: 6, columns: 3, showImage: true, showDate: true, showExcerpt: true, buttonText: "Read more" }),
+    fields: [
+      { key: "count", label: "How many posts (newest first)", type: "slider", min: 1, max: 48, placeholder: 6, unit: "" },
+      { key: "columns", label: "Columns (desktop)", type: "slider", min: 1, max: 4, placeholder: 3, unit: "" },
+      { key: "showImage", label: "Show the cover photo", type: "checkbox" },
+      { key: "showDate", label: "Show the date", type: "checkbox" },
+      { key: "showExcerpt", label: "Show the summary", type: "checkbox" },
+      { key: "buttonText", label: "Link text", type: "text" },
     ],
   },
   spacer: {
@@ -293,6 +338,40 @@ export const BLOCKS = {
     defaults: () => ({ code: "<div style=\"padding:1rem;border:1px dashed currentColor\">Custom HTML</div>" }),
     fields: [{ key: "code", label: "HTML (rendered as-is)", type: "code" }],
   },
+};
+
+// Ready-made forms (Add tab and the AI): the form block with these props.
+export const FORM_PRESETS = {
+  booking: () => ({
+    kind: "booking",
+    fields: [
+      { label: "Your name", type: "text", required: true, options: "" },
+      { label: "Email", type: "email", required: true, options: "" },
+      { label: "Phone", type: "tel", required: true, options: "" },
+      { label: "What would you like to book?", type: "select", required: true, options: "Appointment, Consultation, Other" },
+      { label: "Preferred date", type: "date", required: true, options: "" },
+      { label: "Preferred time", type: "time", required: false, options: "" },
+      { label: "Number of people", type: "number", required: false, options: "" },
+      { label: "Anything we should know?", type: "textarea", required: false, options: "" },
+    ],
+    submitText: "Request booking",
+    successMessage: "Thanks! We've got your booking request and will confirm it shortly.",
+    confirmEmail: true,
+  }),
+  enquiry: () => ({
+    kind: "enquiry",
+    fields: [
+      { label: "Your name", type: "text", required: true, options: "" },
+      { label: "Email", type: "email", required: true, options: "" },
+      { label: "Phone", type: "tel", required: false, options: "" },
+      { label: "What's it about?", type: "select", required: false, options: "A quote, A question, Something else" },
+      { label: "Tell us what you need", type: "textarea", required: true, options: "" },
+      { label: "I'm happy to be contacted about my enquiry", type: "checkbox", required: true, options: "" },
+    ],
+    submitText: "Send enquiry",
+    successMessage: "Thanks for your enquiry! We'll get back to you soon.",
+    confirmEmail: true,
+  }),
 };
 
 export const SECTION_FIELDS = [
@@ -586,13 +665,44 @@ export function normalizePage(page, index = 0) {
   let slug = index === 0 ? "index" : slugify(page.slug || title);
   if (index > 0 && slug === "index") slug = slugify(title) === "index" ? "home-2" : slugify(title);
   const seo = isObj(page.seo) ? page.seo : {};
-  return {
+  const out = {
     id: str(page.id) || uid("p"),
     title,
     slug,
     seo: { title: str(seo.title), description: str(seo.description) },
     sections: (Array.isArray(page.sections) ? page.sections : []).map(normalizeSection).filter(Boolean),
   };
+  // Blog posts are pages with post details. They live at /blog/<slug>/, stay
+  // out of the menu and are listed by "Blog posts" blocks.
+  if (index > 0 && isObj(page.post)) out.post = normalizePost(page.post);
+  return out;
+}
+
+export function normalizePost(post) {
+  const p = isObj(post) ? post : {};
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(str(p.date)) ? p.date : new Date().toISOString().slice(0, 10);
+  return {
+    date,
+    excerpt: str(p.excerpt).slice(0, 400),
+    cover: str(p.cover),
+    // What the cover photo should show, used to find a stock photo when there's none.
+    coverPhoto: str(p.coverPhoto).slice(0, 120),
+    author: str(p.author).slice(0, 80),
+    draft: p.draft === true,
+  };
+}
+
+export const isPost = (page) => !!page?.post;
+/** Published posts, newest first (drafts too in the editor). */
+export function listPosts(site, { drafts = false } = {}) {
+  return site.pages.filter((p) => p.post && (drafts || !p.post.draft)).sort((a, b) => (a.post.date < b.post.date ? 1 : a.post.date > b.post.date ? -1 : 0));
+}
+
+export function createPost(title = "New post", { date, excerpt = "" } = {}) {
+  const page = createPage(title);
+  page.post = normalizePost({ date, excerpt, draft: true });
+  page.sections = [createSection({ width: "narrow", padding: "md" }, [[createBlock("text", { html: "<p>Start writing your post here…</p>" })]])];
+  return page;
 }
 
 export function normalizeSite(site) {

@@ -1,6 +1,6 @@
 // Left-hand tabs: Add, AI, Pages, Style, Site.
 
-import { BLOCKS, FONT_CHOICES, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, createPage, createSection, findNode } from "/admin/shared/schema.js";
+import { BLOCKS, FONT_CHOICES, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, createPage, createSection, createBlock, createPost, listPosts, findNode } from "/admin/shared/schema.js";
 import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
@@ -177,24 +177,92 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
   function renderPages() {
     const s = state.get();
     root.append(h("div", { class: "group-title" }, "Pages"));
-    s.site.pages.forEach((p, i) => {
+    const pages = s.site.pages.map((p, i) => [p, i]).filter(([p]) => !p.post);
+    pages.forEach(([p, i], n) => {
       root.append(h("div", { class: `page-row${p.id === s.pageId ? " active" : ""}`, onclick: () => state.setPage(p.id) },
         h("span", { class: "name" }, p.title),
         h("span", { class: "slug" }, p.slug === "index" ? "/" : `/${p.slug}`),
-        i > 1 ? h("button", { class: "icon-btn", title: "Move up", onclick: (e) => { e.stopPropagation(); movePage(i, -1); } }, "↑") : null,
-        i > 0 && i < s.site.pages.length - 1 ? h("button", { class: "icon-btn", title: "Move down", onclick: (e) => { e.stopPropagation(); movePage(i, 1); } }, "↓") : null,
+        n > 1 ? h("button", { class: "icon-btn", title: "Move up", onclick: (e) => { e.stopPropagation(); movePage(i, pages[n - 1][1]); } }, "↑") : null,
+        n > 0 && n < pages.length - 1 ? h("button", { class: "icon-btn", title: "Move down", onclick: (e) => { e.stopPropagation(); movePage(i, pages[n + 1][1]); } }, "↓") : null,
         i > 0 ? h("button", { class: "icon-btn", title: "Duplicate page", onclick: (e) => { e.stopPropagation(); duplicatePage(p.id); } }, "⧉") : null,
         i > 0 ? h("button", { class: "icon-btn", title: "Delete page", onclick: (e) => { e.stopPropagation(); deletePage(p); } }, "🗑") : null,
       ));
     });
     root.append(h("button", { class: "btn btn-block", style: { marginTop: "12px" }, onclick: addPage }, "+ Add page"));
     root.append(h("p", { class: "field-hint" }, "Rename a page or set its Google description in the right-hand panel when nothing is selected. The home page always stays first."));
+
+    // Blog posts: pages with a date, listed by "Blog posts" blocks.
+    root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Blog posts"));
+    const posts = listPosts(s.site, { drafts: true });
+    if (!posts.length) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "No posts yet. Posts are listed wherever you add a \"Blog posts\" block (Add tab → Shop & blog), usually on a Blog or News page."));
+    for (const p of posts) {
+      root.append(h("div", { class: `page-row${p.id === s.pageId ? " active" : ""}`, onclick: () => state.setPage(p.id) },
+        h("span", { class: "name" }, p.title, p.post.draft ? h("small", { class: "muted" }, " · draft") : null),
+        h("span", { class: "slug" }, p.post.date),
+        h("button", { class: "icon-btn", title: "Delete post", onclick: (e) => { e.stopPropagation(); deletePage(p); } }, "🗑")));
+    }
+    root.append(h("div", { class: "row", style: { marginTop: "12px", flexWrap: "wrap" } },
+      h("button", { class: "btn", onclick: () => newPost() }, "+ New post"),
+      s.aiEnabled ? h("button", { class: "btn", onclick: writePostWithAi }, "✦ Write a post with AI") : null));
+    if (posts.length && !s.site.pages.some((p) => !p.post && p.sections.some((sec) => sec.columns.some((c) => c.blocks.some((b) => b.type === "posts"))))) {
+      root.append(h("div", { class: "notice", style: { marginTop: "10px" } }, "No page lists your posts yet. ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); addBlogPage(); } }, "Add a Blog page"), " so visitors can find them."));
+    }
   }
 
-  function movePage(i, d) {
+  function newPost(page = createPost("New post")) {
+    state.mutate((site) => { site.pages.push(page); }, { label: "New blog post" });
+    const added = state.get().site.pages.find((p) => p.id === page.id);
+    if (added) state.setPage(added.id);
+    render();
+    return added;
+  }
+
+  function addBlogPage() {
+    const page = createPage("Blog");
+    page.sections = [
+      createSection({ background: "surface", width: "narrow", align: "center" }, [[createBlock("heading", { text: "Blog", level: 1, align: "center" }), createBlock("text", { html: "<p>News, tips and stories.</p>", align: "center" })]]),
+      createSection({}, [[createBlock("posts", { count: 12 })]]),
+    ];
     state.mutate((site) => {
-      const j = i + d;
-      if (j < 1 || j >= site.pages.length) return;
+      const contact = site.pages.findIndex((p) => p.slug === "contact" && !p.post);
+      site.pages.splice(contact > 0 ? contact : site.pages.filter((p) => !p.post).length, 0, page);
+    }, { label: "Added Blog page" });
+    const added = state.get().site.pages.find((p) => p.id === page.id);
+    if (added) state.setPage(added.id);
+    render();
+  }
+
+  function writePostWithAi() {
+    const topic = h("textarea", { class: "textarea", rows: "3", placeholder: "e.g. 5 tips for looking after antique furniture" });
+    const m = modal({
+      title: "Write a blog post with AI",
+      body: h("div", {}, h("div", { class: "field" }, h("label", {}, "What's the post about?"), topic,
+        h("div", { class: "field-hint" }, "The AI writes it in the site's style and tone, with a cover photo. It's saved as a draft for you to check before it goes live."))),
+      footer: [h("button", { class: "btn", onclick: () => m.close() }, "Cancel"), h("button", { class: "btn btn-primary", onclick: go }, "Write it")],
+    });
+    async function go(e) {
+      if (!topic.value.trim()) return topic.focus();
+      e.target.disabled = true;
+      e.target.textContent = "Writing…";
+      try {
+        const s = state.get();
+        const { jobId } = await api(`/sites/${s.siteId}/ai/post`, { method: "POST", body: { topic: topic.value.trim(), site: s.site } });
+        const result = await waitForJob(jobId, () => {});
+        m.close();
+        newPost(result.page);
+        toast("Draft written. Read it through, then untick Draft in the right-hand panel to publish it.");
+      } catch (err) {
+        toast(err.message, { error: true });
+        e.target.disabled = false;
+        e.target.textContent = "Write it";
+      }
+    }
+  }
+
+  // Swaps two pages (by index in site.pages; posts in between are skipped).
+  function movePage(i, j) {
+    state.mutate((site) => {
+      if (i < 1 || j < 1 || j >= site.pages.length) return;
       [site.pages[i], site.pages[j]] = [site.pages[j], site.pages[i]];
     });
   }
@@ -419,10 +487,12 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     renderHosting(s, meta);
 
     root.append(h("hr", { class: "sep" }));
-    root.append(h("div", { class: "group-title" }, "Contact forms"));
+    root.append(h("div", { class: "group-title" }, "Forms: messages, enquiries and bookings"));
     const formEmail = h("input", { class: "input", type: "email", value: meta.formEmail || "", placeholder: "owner@theirbusiness.co.uk" });
-    root.append(h("div", { class: "field" }, h("label", {}, "Email form messages to"), formEmail,
-      h("div", { class: "field-hint" }, "On the customer's own hosting, every contact form message is emailed here. Re-publish after changing it.")));
+    root.append(h("div", { class: "field" }, h("label", {}, "Email them to"), formEmail,
+      h("div", { class: "field-hint" }, s.mail
+        ? "Every message, enquiry and booking request is emailed here and kept in the list below. Re-publish after changing it if the site is on the customer's own hosting."
+        : "On the customer's own hosting, every message is emailed here. Sites hosted by this builder keep them in the list below; to email them too, the server needs email settings (SMTP_HOST in settings.txt).")));
     root.append(h("div", { class: "row", style: { flexWrap: "wrap" } },
       h("button", { class: "btn btn-sm", onclick: async () => {
         try {
@@ -431,7 +501,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
           toast("Saved. Publish again to update the live site.");
         } catch (e) { toast(e.message, { error: true }); }
       } }, "Save email"),
-      h("button", { class: "btn btn-sm", onclick: () => showSubmissions(s.siteId) }, "Messages received here"),
+      h("button", { class: "btn btn-sm", onclick: () => showSubmissions(s.siteId) }, "Messages, enquiries & bookings"),
     ));
 
     root.append(h("hr", { class: "sep" }));
@@ -582,15 +652,32 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
 
   async function showSubmissions(siteId) {
     const { submissions } = await api(`/sites/${siteId}/submissions`);
-    modal({
-      title: `Form messages (${submissions.length})`,
-      wide: true,
-      body: submissions.length
-        ? h("div", {}, submissions.map((sub) => h("div", { class: "version", style: { display: "block" } },
-          h("div", { class: "small muted" }, `${new Date(sub.at).toLocaleString()} · page: ${sub.page}`),
-          Object.entries(sub.fields).map(([k, v]) => h("div", {}, h("strong", {}, `${k}: `), h("span", { style: { whiteSpace: "pre-wrap" } }, v))))))
-        : h("p", { class: "muted" }, "No messages yet. They'll appear here when visitors use a contact form on the live site."),
-    });
+    const KINDS = { booking: "Booking request", enquiry: "Enquiry", contact: "Message" };
+    let filter = "open";
+    const list = h("div", {});
+    const tabs = h("div", { class: "chips", style: { marginBottom: "12px" } });
+    const paint = () => {
+      const shown = submissions.filter((x) => (filter === "open" ? !x.done : filter === "all" ? true : (x.kind || "contact") === filter));
+      tabs.replaceChildren(...[["open", "To do"], ["booking", "Bookings"], ["enquiry", "Enquiries"], ["contact", "Messages"], ["all", "All"]].map(([k, label]) => {
+        const n = submissions.filter((x) => (k === "open" ? !x.done : k === "all" ? true : (x.kind || "contact") === k)).length;
+        return h("span", { class: `chip${filter === k ? " on" : ""}`, role: "button", tabindex: "0", onclick: () => { filter = k; paint(); } }, `${label} (${n})`);
+      }));
+      list.replaceChildren(...(shown.length ? shown.map((sub) => {
+        const email = Object.values(sub.fields).find((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()));
+        const done = h("input", { type: "checkbox", checked: !!sub.done, disabled: !sub.id, onchange: async (e) => {
+          try { await api(`/sites/${siteId}/submissions/${sub.id}`, { method: "PATCH", body: { done: e.target.checked } }); sub.done = e.target.checked; paint(); } catch (err) { toast(err.message, { error: true }); }
+        } });
+        return h("div", { class: "version", style: { display: "block", opacity: sub.done ? 0.6 : 1 } },
+          h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "wrap", gap: "8px" } },
+            h("div", { class: "small muted" }, h("strong", {}, KINDS[sub.kind] || "Message"), ` · ${new Date(sub.at).toLocaleString()} · page: ${sub.page}`),
+            h("div", { class: "row", style: { gap: "10px" } },
+              email ? h("a", { class: "btn btn-sm", href: `mailto:${email}?subject=${encodeURIComponent(`Re: your ${(KINDS[sub.kind] || "message").toLowerCase()}`)}` }, "Reply") : null,
+              h("label", { class: "check small" }, done, "Done"))),
+          Object.entries(sub.fields).filter(([, v]) => String(v).trim()).map(([k, v]) => h("div", {}, h("strong", {}, `${k}: `), h("span", { style: { whiteSpace: "pre-wrap" } }, v))));
+      }) : [h("p", { class: "muted" }, submissions.length ? "Nothing here." : "No messages yet. They'll appear here when visitors use a form on the live site.")]));
+    };
+    paint();
+    modal({ title: "Messages, enquiries and bookings", wide: true, body: h("div", {}, tabs, list) });
   }
 
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.tab)));

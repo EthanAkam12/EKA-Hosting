@@ -1,6 +1,6 @@
 // Ready-made sections for the "Add" panel. Each returns a fresh section.
 
-import { createBlock as b, createSection as s } from "/admin/shared/schema.js";
+import { createBlock as b, createSection as s, FORM_PRESETS } from "/admin/shared/schema.js";
 
 export const SECTION_TEMPLATES = [
   {
@@ -86,6 +86,33 @@ export const SECTION_TEMPLATES = [
       ],
       [b("form")],
     ]),
+  },
+  {
+    id: "booking", name: "Booking form", desc: "Date, time, service + details", icon: "📅",
+    make: () => s({ layout: "1-1", anchor: "book", background: "surface", valign: "top" }, [
+      [
+        b("heading", { text: "Book an appointment", level: 2 }),
+        b("text", { html: "<p>Choose a day and time that suits you and we'll confirm your booking by email or phone.</p>" }),
+        b("list", { items: ["Free to request, no payment now", "We reply within one working day", "Need to change it? Just let us know"] }),
+      ],
+      [b("form", FORM_PRESETS.booking())],
+    ]),
+  },
+  {
+    id: "enquiry", name: "Enquiry form", desc: "Quotes and questions", icon: "✍",
+    make: () => s({ width: "narrow", anchor: "enquire" }, [[
+      b("heading", { text: "Make an enquiry", level: 2, align: "center" }),
+      b("text", { html: "<p>Tell us what you're looking for and we'll get back to you with a quote or an answer.</p>", align: "center" }),
+      b("form", FORM_PRESETS.enquiry()),
+    ]]),
+  },
+  {
+    id: "products", name: "Shop / products", desc: "Products with Buy buttons", icon: "🛍",
+    make: () => s({ anchor: "shop" }, [[b("heading", { text: "Shop", level: 2, align: "center" }), b("products")]]),
+  },
+  {
+    id: "posts", name: "Latest blog posts", desc: "Newest posts as cards", icon: "✎",
+    make: () => s({ background: "surface" }, [[b("heading", { text: "Latest news", level: 2, align: "center" }), b("posts", { count: 3 })]]),
   },
   {
     id: "gallery", name: "Gallery", desc: "Grid of photos", icon: "▦",

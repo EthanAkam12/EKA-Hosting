@@ -331,6 +331,7 @@ async function boot() {
   s.demo = me.demo;
   s.stockPhotos = me.stockPhotos;
   s.stockSource = me.stockSource;
+  s.mail = me.mail;
   if (me.demo) {
     demoBanner(me);
     const pub = $("publish-btn");

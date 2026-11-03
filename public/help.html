@@ -63,7 +63,8 @@
       <li><a href="#media">Images, galleries &amp; video</a></li>
       <li><a href="#pages">Pages &amp; Google</a></li>
       <li><a href="#ai">Using AI</a></li>
-      <li><a href="#forms">Contact forms</a></li>
+      <li><a href="#forms">Forms: contact, enquiries &amp; bookings</a></li>
+      <li><a href="#blog">Blog</a></li>
       <li><a href="#review">Customer review</a></li>
       <li><a href="#publish">Publishing</a></li>
       <li><a href="#shop">Online shops</a></li>
@@ -95,6 +96,7 @@
       <h2>Making a new website</h2>
       <p>Click <strong>+ New website</strong>. There are four short steps:</p>
       <ol>
+        <li><strong>What are you making?</strong> Pick <strong>Business website</strong>, <strong>Online shop</strong> or <strong>Blog</strong> at the top of the first step, and tick any extras: a <strong>booking form</strong>, an <strong>enquiry / quote form</strong> or a <strong>blog</strong>. Each adds the pages it needs (Shop, Book, Blog), and you can change the pages before carrying on.</li>
         <li><strong>Brief:</strong> the business name and what they do, plus optional logo, photos of the business, phone, email, address, opening hours, social links, brand colours, a style and which pages they need.</li>
         <li><strong>Pages:</strong> a sentence or two about what goes on each page. Leave one blank and it's written from the business description.</li>
         <li><strong>Homepage:</strong> you're shown a homepage design. Click <strong>Generate another</strong> for a different layout and flick between them. Type changes in the boxes for the whole site or any page.</li>
@@ -204,8 +206,21 @@
     </section>
 
     <section id="forms">
-      <h2>Contact forms</h2>
-      <p>Add a <strong>Contact form</strong> block and choose its fields. On sites hosted by the builder, messages appear under <strong>Site → Messages received here</strong>. On a customer's own hosting, they're emailed to the address in <strong>Site → Contact forms</strong>. Forms include spam protection.</p>
+      <h2>Forms: contact, enquiries &amp; bookings</h2>
+      <p>In the <strong>Add</strong> tab, <strong>Booking form</strong> and <strong>Enquiry form</strong> (under Ready-made sections) add a form already set up for the job; the <strong>Form</strong> block lets you build your own. For each form you choose:</p>
+      <ul>
+        <li><strong>What it's for:</strong> a contact message, an enquiry / quote request or a booking request. This sets the email subject and how it's labelled in the messages list.</li>
+        <li><strong>Fields:</strong> short or long text, email, phone, <strong>date</strong>, <strong>time</strong>, number, a <strong>drop-down list</strong> (type the choices separated by commas, e.g. your services) and a <strong>tick box</strong> (e.g. "I agree to be contacted"). Tick <strong>Required</strong> for anything visitors must fill in.</li>
+        <li><strong>Email the visitor a copy:</strong> they get a "we've received your booking request" email with what they sent. Booking copies say the booking isn't confirmed until the business replies.</li>
+      </ul>
+      <p>Everything sent arrives in <strong>Site → Messages, enquiries &amp; bookings</strong>, with tabs for bookings, enquiries and messages, a <strong>Reply</strong> button and a <strong>Done</strong> tick so nothing is forgotten. It's also emailed to the address in <strong>Site → Forms</strong>: on a customer's own hosting this always works; on the builder's own server it needs email set up (see <a href="#settings">Settings</a>; most Linux servers can already send).</p>
+      <div class="tip">Booking forms collect requests; they don't block out times or take payment. The business confirms each booking by replying. Forms include spam protection.</div>
+    </section>
+
+    <section id="blog">
+      <h2>Blog</h2>
+      <p>Blog posts are written in the editor like pages. In the <strong>Pages</strong> tab, under <strong>Blog posts</strong>, click <strong>+ New post</strong> (or <strong>✦ Write a post with AI</strong> and say what it's about). In the right-hand panel set the title, date, a short summary, a cover photo and the author. New posts are <strong>drafts</strong>: untick Draft and publish the site to put a post live.</p>
+      <p>Posts appear wherever there's a <strong>Blog posts</strong> block (Add tab → Shop &amp; blog), newest first, usually on a Blog page and as "Latest news" on the home page. Each post gets its own address (<code>/blog/post-name/</code>), a link back to the blog, and is added to the sitemap for Google. New blogs made with AI start with three posts written for the business; templates start with three drafts to fill in.</p>
     </section>
 
     <section id="review">
@@ -229,7 +244,16 @@
 
     <section id="shop">
       <h2>Online shops</h2>
-      <p>For a shop, install <strong>CubeCart</strong> (free) on the hosting to run the basket, payments and orders, and design the look in EKA Builder. In <strong>Site → Online shop (CubeCart)</strong>, click <strong>Download as CubeCart skin</strong>, upload the ZIP into CubeCart's <code>skins</code> folder, extract it, and choose it in the CubeCart admin. Instructions are in the ZIP.</p>
+      <h3>Simple shop (built in)</h3>
+      <p>Choose <strong>Online shop</strong> when making the site, or add a <strong>Products</strong> block (Add tab → Shop &amp; blog). Each product has a photo, name, price, description and a button. To take payments, paste a <strong>payment link</strong> into the product's Buy link:</p>
+      <ul>
+        <li><strong>Stripe:</strong> in the Stripe dashboard, <em>Payment links → New</em>, set the product and price, and copy the link. Stripe handles the card payment, delivery address and receipt.</li>
+        <li><strong>PayPal:</strong> a <em>PayPal.Me</em> link with the amount, e.g. <code>paypal.me/yourname/25</code>, or a PayPal "Pay" button link.</li>
+        <li>No link? The button goes to the Contact page instead, which suits made-to-order items.</li>
+      </ul>
+      <p>Tick <strong>Sold out</strong> to grey a product out. This suits small shops with a handful of products; there's no basket or stock control.</p>
+      <h3>Bigger shops: CubeCart</h3>
+      <p>For a full shop with a basket, stock and orders, install <strong>CubeCart</strong> (free) on the hosting to run the basket, payments and orders, and design the look in EKA Builder. In <strong>Site → Online shop (CubeCart)</strong>, click <strong>Download as CubeCart skin</strong>, upload the ZIP into CubeCart's <code>skins</code> folder, extract it, and choose it in the CubeCart admin. Instructions are in the ZIP.</p>
     </section>
 
     <section id="demo">
@@ -239,6 +263,7 @@
 
     <section id="settings">
       <h2>Settings</h2>
+      <p><strong>Email for forms:</strong> on a Linux server with <code>sendmail</code> (most have it), form emails work straight away. Otherwise add your email provider's details in <code>settings.txt</code>: <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, and <code>MAIL_FROM</code> for the sender address.</p>
       <p>Settings live in <code>settings.txt</code> (Windows) or environment variables (servers). Restart the builder after changing them.</p>
       <div class="table-scroll"><table>
         <tr><th>Setting</th><th>What it does</th></tr>

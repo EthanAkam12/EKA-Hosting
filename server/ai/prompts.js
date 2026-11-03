@@ -150,6 +150,8 @@ export function formatBrief(brief = {}) {
   const lines = [];
   const add = (label, value) => { if (value && String(value).trim()) lines.push(`${label}: ${String(value).trim()}`); };
   add("Business name", brief.name);
+  const type = { shop: "Online shop", blog: "Blog", business: "Business website" }[brief.siteType];
+  if (type && brief.siteType !== "business") add("Type of website", type);
   add("Description", brief.description);
   add("Phone", brief.phone);
   add("Email", brief.email);
@@ -164,10 +166,29 @@ export function formatBrief(brief = {}) {
   const info = Object.entries(brief.pageInfo || {}).filter(([, v]) => v && String(v).trim());
   if (info.length) lines.push(`What the owner wants on each page (follow closely):\n${info.map(([page, text]) => `- ${page}: ${String(text).trim()}`).join("\n")}`);
   if (brief.logoUrl) add("Logo", `${brief.logoUrl} (already uploaded; put it in header.logoImage${brief.imagesAttached ? "; it's the first attached image, so you can match its colours" : ""})`);
+  const wants = siteTypeRules(brief);
+  if (wants) lines.push(`WHAT THIS SITE NEEDS (follow these):\n${wants}`);
   if (brief.photos?.length) {
     lines.push(`The owner's own photos (use the URLs exactly; place each where it works best, e.g. a strong wide shot as the hero background, people or the shop front in the about section, products in a gallery${brief.imagesAttached ? `; they're attached${brief.logoUrl ? " after the logo" : ""}, in this order, so you can see them` : ""}):\n${brief.photos.map((p, i) => `${i + 1}. ${p.url}${p.note ? ` (${p.note})` : ""}`).join("\n")}`);
   }
   return lines.join("\n");
+}
+
+// Instructions for the kind of site and its extras (shop, blog, bookings, enquiries).
+export function siteTypeRules(brief = {}) {
+  const rules = [];
+  const x = brief.extras || {};
+  if (brief.siteType === "shop") {
+    rules.push(`- It's an online shop. The "Shop" page shows the products with "products" blocks (group them under H2 headings if there are categories). Use products and prices from the description; if none are given, add 3-6 example products that suit the business, with realistic prices (the owner replaces them). Leave every product "href" "" (the owner pastes in a Stripe or PayPal payment link later) and "image" "" with a descriptive "name".`);
+    rules.push(`- The home page features 3 products in a "products" block, with a button to the Shop page, plus delivery/returns or "how to order" reassurance.`);
+  }
+  if (brief.siteType === "blog") {
+    rules.push(`- It's a blog. The home page introduces the blog and its author/business briefly, then shows the latest posts with a "posts" block (count 6-9), plus a short About teaser. There is no separate Blog page: the home page lists the posts.`);
+  }
+  if (x.blog && brief.siteType !== "blog") rules.push(`- Include a "Blog" page: a page header and a "posts" block (count 12). Put a "posts" block (count 3) under a "Latest news" heading near the bottom of the home page too.`);
+  if (x.booking) rules.push(`- Include a "Book" page (slug "book") with a booking form: a "form" block with kind "booking", confirmEmail true, and fields name, email, phone, a "select" of what can be booked (use their real services as comma-separated options), a "date" field, a "time" field if appointments have times, "number" of people if it fits, and a notes textarea. Next to it, explain how booking works (e.g. "we'll confirm by email"). Make the home page's main button and the header button go to "/book" (e.g. "Book now").`);
+  if (x.enquiry) rules.push(`- Contact forms are enquiry forms: "form" blocks with kind "enquiry", confirmEmail true, and fields that suit the business (name, email, phone, a "select" of what the enquiry is about, details textarea).`);
+  return rules.join("\n");
 }
 
 const CONTACT_RULES = `- Use the contact details exactly as given (phone, email, address, hours). Put them in the contact section and the footer; make phone links "tel:" and email links "mailto:". Never invent contact details that weren't given.`;
@@ -231,4 +252,39 @@ export function pagePrompt({ brief, concept, title, previous = [], wishes = "" }
     { text: `APPROVED SITE (theme, header, footer and home page):\n${JSON.stringify(concept)}\n\nBUSINESS BRIEF:\n${formatBrief(brief)}`, cache: true },
     { text: `DESIGN THIS PAGE: "${title}" (slug "${slugify(title)}").${info}${extra}${prev}` },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Blog posts
+// ---------------------------------------------------------------------------
+
+export const POST_SYSTEM = `${GENERATE_SYSTEM}
+
+YOU ARE WRITING ONE BLOG POST for this business's website, in the site's tone of voice.
+Respond with ONLY a JSON object:
+{ "page": { "title": string (a specific, engaging headline), "slug": string, "seo": { "title": "", "description": string (120-155 characters) },
+  "post": { "excerpt": string (1-2 sentence summary), "coverPhoto": string (a concrete description of a cover photo, e.g. "restored walnut writing desk in a sunny room") },
+  "sections": [SECTION] } }
+The title, date and cover photo are shown automatically above the sections, so DON'T repeat the title as a heading.
+- Write the body as 1-3 sections with props.width "narrow" and padding "md": mostly text blocks (use <p>, <strong>, <ul>/<li>; break it up with H2 heading blocks every few paragraphs). 400-800 words of genuinely useful, specific writing; no filler.
+- You may add one image block (alt text describing a concrete photo, src "") partway through if it helps.
+- End with a short call to action: a text block plus a buttons block linking to the contact page or section.
+- Don't invent facts about the business (prices, awards, staff names) that weren't given.`;
+
+export function postPrompt({ site, topic }) {
+  const home = site.pages.find((p) => p.slug === "index");
+  const existing = site.pages.filter((p) => p.post).map((p) => `- ${p.title}`).join("\n");
+  return [
+    { text: `THE WEBSITE: ${site.name}. ${site.business?.type || ""}\nHome page (for tone and facts):\n${JSON.stringify(home?.sections || []).slice(0, 12000)}`, cache: true },
+    { text: `${existing ? `Posts already on the blog (don't repeat them):\n${existing}\n\n` : ""}WRITE A POST ABOUT: ${topic}` },
+  ];
+}
+
+export const STARTER_POSTS_SYSTEM = POST_SYSTEM.replace("YOU ARE WRITING ONE BLOG POST", "YOU ARE WRITING THE FIRST THREE BLOG POSTS")
+  .replace('Respond with ONLY a JSON object:\n{ "page":', 'Respond with ONLY a JSON object: { "posts": [ three of these ] } where each is:\n{ "page":')
+  .replace("400-800 words", "300-500 words");
+
+export function starterPostsPrompt({ site, brief }) {
+  const home = site.pages.find((p) => p.slug === "index");
+  return `THE WEBSITE: ${site.name}\n${formatBrief(brief)}\nHome page (for tone):\n${JSON.stringify(home?.sections || []).slice(0, 8000)}\n\nWrite three varied, useful first posts that this business's customers would actually want to read (e.g. a how-to, a behind-the-scenes or story post, and a seasonal or buying-guide post).`;
 }

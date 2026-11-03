@@ -109,6 +109,8 @@ export function pictureSlots(site, base) {
   const slots = [];
   const describes = (t) => (t && t.trim().split(/\s+/).length >= 2 ? t.trim() : "");
   for (const page of site.pages) {
+    // A blog post's cover photo.
+    if (page.post && !page.post.cover) slots.push({ query: describes(page.post.coverPhoto) || describes(page.title) || base, orientation: "landscape", set: (url) => { page.post.cover = url; } });
     for (const section of page.sections) {
       if (section.props.background === "image" && !section.props.image) {
         slots.push({ query: describes(section.style?.bgPhoto) || base, orientation: "landscape", set: (url) => { section.props.image = url; } });
@@ -126,6 +128,9 @@ export function pictureSlots(site, base) {
               orientation: ratio === "3:4" ? "portrait" : ratio === "1:1" ? "square" : "landscape",
               set: (url, photo) => { block.props.src = url; if (!alt) block.props.alt = photo.alt; },
             });
+          }
+          if (block.type === "products") {
+            for (const item of block.props.items) if (!item.image && item.name) slots.push({ query: describes(item.name) || base, orientation: "square", set: (url) => { item.image = url; } });
           }
           if (block.type === "gallery" && !block.props.images.some((i) => i.src)) {
             block.props.images = [];

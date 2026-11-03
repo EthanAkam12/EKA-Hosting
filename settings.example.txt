@@ -15,6 +15,16 @@ PIXABAY_API_KEY=
 # (A Pexels key works too, if you have one.)
 PEXELS_API_KEY=
 
+# Optional: email for website forms (messages, enquiries, booking requests).
+# On a Linux server with sendmail this works without settings. Otherwise, fill
+# in your email provider's SMTP details (your host can tell you these).
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+# The address form emails come from, e.g. Website <forms@yourdomain.co.uk>
+MAIL_FROM=
+
 # Optional: the email address shown on the Support page.
 SUPPORT_EMAIL=
 

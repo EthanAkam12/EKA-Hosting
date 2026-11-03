@@ -278,11 +278,22 @@ export class Store {
   }
 
   async listSubmissions(id) {
+    let done = {};
+    try { done = JSON.parse(await fs.readFile(this.file(id, "submissions-done.json"), "utf8")); } catch { /* none marked yet */ }
     try {
       const raw = await fs.readFile(this.file(id, "submissions.jsonl"), "utf8");
-      return raw.split("\n").filter(Boolean).map((l) => JSON.parse(l)).reverse();
+      return raw.split("\n").filter(Boolean).map((l) => JSON.parse(l)).map((x) => ({ ...x, done: !!(x.id && done[x.id]) })).reverse();
     } catch {
       return [];
     }
+  }
+
+  // Which messages the owner has dealt with: { id: true }.
+  async setSubmissionDone(id, sid, value) {
+    const file = this.file(id, "submissions-done.json");
+    let done = {};
+    try { done = JSON.parse(await fs.readFile(file, "utf8")); } catch { /* first one */ }
+    if (value) done[sid] = true; else delete done[sid];
+    await fs.writeFile(file, JSON.stringify(done));
   }
 }

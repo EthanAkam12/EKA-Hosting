@@ -96,3 +96,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .usage-table th, .usage-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .usage-table th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
 .usage-table td:not(:first-child), .usage-table th:not(:first-child) { text-align: right; width: 90px; }
+
+/* Pill toggles (wizard choices, filters) */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line-strong); background: #fff; border-radius: 99px; padding: 5px 12px; font-size: 13px; cursor: pointer; user-select: none; }
+.chip:hover { border-color: var(--brand); }
+.chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.chip.fixed { opacity: .7; cursor: default; }

@@ -8,7 +8,7 @@ import { readabilityIssues } from "/admin/shared/checks.js";
 export function createInspector({ state, canvas, root, head, pickImage, askAi }) {
   function linkOptions() {
     const s = state.get().site;
-    const out = s.pages.map((p) => ({ value: p.slug === "index" ? "/" : `/${p.slug}`, label: `Page: ${p.title}` }));
+    const out = s.pages.map((p) => ({ value: p.post ? `/blog/${p.slug}` : p.slug === "index" ? "/" : `/${p.slug}`, label: `${p.post ? "Post" : "Page"}: ${p.title}` }));
     for (const p of s.pages) for (const sec of p.sections) if (sec.props.anchor) out.push({ value: p.id === state.page().id ? `#${sec.props.anchor}` : `/${p.slug === "index" ? "" : p.slug}#${sec.props.anchor}`, label: `Section #${sec.props.anchor} (${p.title})` });
     return out;
   }
@@ -257,7 +257,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     root.append(h("hr", { class: "sep" }));
     const auto = hd.links === null;
     root.append(fieldControl({ key: "auto", label: "Build the menu from my pages automatically", type: "checkbox" }, auto, (v) => set("header:links", (site) => {
-      site.header.links = v ? null : site.pages.map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
+      site.header.links = v ? null : site.pages.filter((p) => !p.post).map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
     }, { rebuild: true }), ctx()));
     if (!auto) {
       root.append(fieldControl(menuField, hd.links, (v, opts) => set("header:links", (site) => { site.header.links = v.length ? v : null; }, opts), ctx()));
@@ -317,6 +317,22 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
       const p = site.pages.find((x) => x.id === page.id);
       if (p) apply(p, v);
     }, opts), ctx()));
+    if (page.post) {
+      head.textContent = "Blog post";
+      const post = page.post;
+      const pp = (f, key) => pf(f, () => post[key], (p, v) => { p.post[key] = v; });
+      // The web address follows the title until it's changed by hand.
+      pf({ key: "title", label: "Title", type: "text" }, () => page.title, (p, v) => { if (p.slug === slugify(p.title) || /^new-post(-\d+)?$/.test(p.slug)) p.slug = slugify(v); p.title = v; });
+      pp({ key: "draft", label: "Draft (not on the live site yet)", type: "checkbox" }, "draft");
+      pp({ key: "date", label: "Date", type: "date" }, "date");
+      pp({ key: "excerpt", label: "Summary (shown in the post list and under the title)", type: "textarea" }, "excerpt");
+      pp({ key: "cover", label: "Cover photo", type: "image" }, "cover");
+      pp({ key: "author", label: "Author (optional)", type: "text" }, "author");
+      pf({ key: "slug", label: "Web address (after /blog/)", type: "text" }, () => page.slug, (p, v) => { p.slug = slugify(v); });
+      root.append(h("p", { class: "field-hint" }, "Write the post on the page: click the text to type, and add photos, galleries or buttons from the Add tab like any page."));
+      pf({ key: "seoDesc", label: "Google description", type: "textarea" }, () => page.seo.description, (p, v) => { p.seo.description = v; });
+      return;
+    }
     pf({ key: "title", label: "Page name (shown in the menu)", type: "text" }, () => page.title, (p, v) => { p.title = v; });
     if (page.slug !== "index") pf({ key: "slug", label: "Web address", type: "text" }, () => page.slug, (p, v) => { p.slug = slugify(v); });
     pf({ key: "seoTitle", label: "Google title (optional)", type: "text" }, () => page.seo.title, (p, v) => { p.seo.title = v; });

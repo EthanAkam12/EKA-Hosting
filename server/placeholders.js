@@ -103,11 +103,13 @@ export async function fillPlaceholders(site, { dir, urlPrefix }) {
   let n = 0;
   const next = (wide = false) => makeOne({ dir, urlPrefix, colors, variant: n++ % VARIANTS, wide });
   for (const page of site.pages) {
+    if (page.post && !page.post.cover) page.post.cover = await next(true);
     for (const section of page.sections) {
       if (section.props.background === "image" && !section.props.image) section.props.image = await next(true);
       for (const column of section.columns) {
         for (const block of column.blocks) {
           if (block.type === "image" && !block.props.src) block.props.src = await next();
+          if (block.type === "products") for (const item of block.props.items) if (!item.image) item.image = await next();
           if (block.type === "gallery" && !block.props.images.some((i) => i.src)) {
             block.props.images = [];
             for (let i = 0; i < 6; i++) block.props.images.push({ src: await next(), alt: "" });

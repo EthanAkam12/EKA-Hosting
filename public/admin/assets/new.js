@@ -7,6 +7,17 @@ import { renderPage } from "/admin/shared/render.js";
 
 const STYLES = ["Let the AI decide", "Modern", "Classic", "Bold", "Minimal", "Warm & friendly", "Luxury", "Playful"];
 const PAGE_CHOICES = ["About", "Services", "Gallery", "Pricing", "FAQ", "Contact"];
+// What kind of website: each brings its own pages, and the extras add one.
+const SITE_TYPES = [
+  { id: "business", icon: "🏢", name: "Business website", desc: "Show what you do and get customers in touch", pages: [] },
+  { id: "shop", icon: "🛍", name: "Online shop", desc: "Products with prices and Buy buttons (Stripe or PayPal)", pages: ["Shop"] },
+  { id: "blog", icon: "✎", name: "Blog", desc: "Posts and articles, with the newest on the home page", pages: [] },
+];
+const EXTRAS = [
+  { id: "booking", name: "Booking form", desc: "Visitors request a date and time", page: "Book" },
+  { id: "enquiry", name: "Enquiry / quote form", desc: "Instead of a plain contact form", page: null },
+  { id: "blog", name: "Blog / news", desc: "Posts you can add any time", page: "Blog" },
+];
 const EXAMPLES = [
   "A family-run Italian restaurant in Manchester. Wood-fired pizza, fresh pasta, takeaway and private dining. Warm, rustic feel.",
   "Personal trainer in Bristol offering 1-to-1 sessions, small group bootcamps and online coaching. Free first consultation.",
@@ -21,7 +32,7 @@ let me = { ai: { enabled: false } };
 let state = load() || {
   version: 3,
   step: 1,
-  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", logoUrl: "", photos: [], colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
+  brief: { name: "", description: "", phone: "", email: "", address: "", hours: "", socials: "", siteType: "business", extras: {}, logoUrl: "", photos: [], colors: null, style: STYLES[0], pages: ["About", "Contact"], pageInfo: {} },
   concepts: [], // [{ site, layout, requests: [], history: [] }]
   current: 0,
   notes: {}, // change requests per page: { "Whole site": "", "Home": "", "About": "" }
@@ -32,6 +43,8 @@ state.wizardId ||= Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => 
 const wapi = (path, opts = {}) => api(path, { ...opts, headers: { ...opts.headers, "X-EKA-Wizard": state.wizardId } });
 state.brief.pageInfo ||= {};
 state.brief.photos ||= [];
+state.brief.siteType ||= "business";
+state.brief.extras ||= {};
 let busy = null; // text while waiting on the AI
 const openBoxes = new Set(["Home"]); // which page change boxes are expanded
 let device = "desktop";
@@ -140,6 +153,30 @@ function renderBrief() {
   );
   paintPages();
 
+  // What kind of website: switching swaps the pages that type brings.
+  const typePages = (id) => [...(SITE_TYPES.find((t) => t.id === id)?.pages || [])];
+  const typeCards = h("div", { class: "type-cards", role: "radiogroup", "aria-label": "Type of website" });
+  const extraChips = h("div", { class: "chips" });
+  const paintType = () => {
+    typeCards.replaceChildren(...SITE_TYPES.map((t) => h("button", {
+      type: "button", class: `type-card${b.siteType === t.id ? " on" : ""}`, role: "radio", "aria-checked": String(b.siteType === t.id),
+      onclick: () => {
+        if (b.siteType === t.id) return;
+        const drop = new Set(typePages(b.siteType));
+        b.pages = [...typePages(t.id), ...b.pages.filter((p) => !drop.has(p) && !typePages(t.id).includes(p))];
+        if (t.id === "blog" && b.extras.blog) { b.extras.blog = false; b.pages = b.pages.filter((p) => p !== "Blog"); }
+        b.siteType = t.id; save(); paintType(); paintPages();
+      } }, h("span", { class: "ic", "aria-hidden": "true" }, t.icon), h("strong", {}, t.name), h("small", {}, t.desc))));
+    extraChips.replaceChildren(...EXTRAS.filter((x) => !(x.id === "blog" && b.siteType === "blog")).map((x) => h("span", {
+      class: `chip${b.extras[x.id] ? " on" : ""}`, role: "checkbox", "aria-checked": String(!!b.extras[x.id]), tabindex: "0", title: x.desc,
+      onclick: () => {
+        b.extras[x.id] = !b.extras[x.id];
+        if (x.page) b.pages = b.extras[x.id] ? [...b.pages.filter((p) => p !== x.page && p.toLowerCase() !== "contact"), x.page, ...b.pages.filter((p) => p.toLowerCase() === "contact")] : b.pages.filter((p) => p !== x.page);
+        save(); paintType(); paintPages();
+      } }, `${b.extras[x.id] ? "✓ " : "+ "}${x.name}`)));
+  };
+  paintType();
+
   const go = h("button", { class: "btn btn-primary", onclick: () => {
     err.textContent = "";
     if (!b.name.trim() && !b.description.trim()) { err.textContent = "Add the business name or a description first."; return; }
@@ -152,6 +189,13 @@ function renderBrief() {
     h("p", { class: "muted", style: { margin: 0 } }, me.ai.enabled
       ? "The AI designs a homepage from this. You can ask for another design or changes before building the full site."
       : "AI isn't set up, so designs come from built-in templates using these details. Add your API key in settings.txt for AI-written designs."),
+
+    h("div", { class: "card" },
+      h("h3", {}, "What are you making?"),
+      typeCards,
+      h("div", { class: "field", style: { marginTop: "14px" } }, h("label", {}, "Add to it (optional)"), extraChips,
+        h("div", { class: "field-hint" }, "You can add any of these later too: shop products, blog posts and forms are blocks in the editor.")),
+    ),
 
     h("div", { class: "card" },
       h("h3", {}, "The business"),
@@ -213,7 +257,9 @@ const PAGE_HINTS = {
   pricing: "Packages or prices to list…",
   faq: "Questions customers often ask, and the answers…",
   contact: "How people should get in touch, delivery/collection, areas covered…",
-  shop: "What's for sale, how buying works…",
+  shop: "What's for sale (a few products with prices is plenty to start), delivery or collection, how payment works…",
+  blog: "What the blog is about, and ideas for the first few posts…",
+  book: "What people can book (services, appointments, tables…), how long, any rules like deposits…",
 };
 
 function renderPages() {

@@ -3,7 +3,7 @@
 // details, colours, logo, pages) so the builder is useful straight away.
 // AI-written copy and written change requests need a real provider.
 
-import { createBlock as b, createSection as s, createPage, createEmptySite, slugify } from "../../shared/schema.js";
+import { createBlock as b, createSection as s, createPage, createEmptySite, createPost, slugify, FORM_PRESETS } from "../../shared/schema.js";
 
 const PALETTES = [
   { primary: "#2563eb", accent: "#f59e0b", dark: "#0f172a", surface: "#f1f5fb" },
@@ -71,11 +71,77 @@ const cards = () => [
   [b("card", { icon: "✓", title: "Fair pricing", text: "Clear prices up front with no hidden extras." })],
 ];
 
+// The site's contact form: an enquiry form if the owner asked for one.
+const contactForm = (brief) => (brief.extras?.enquiry ? b("form", FORM_PRESETS.enquiry()) : b("form"));
+
 function contactSection(brief, props = {}) {
   return s({ layout: "1-1", anchor: "contact", padding: "lg", valign: "top", ...props }, [
     [b("heading", { text: "Get in touch", level: 2 }), b("text", { html: contactHtml(brief) })],
-    [b("form")],
+    [contactForm(brief)],
   ]);
+}
+
+// ---- shops, blogs and bookings -----------------------------------------------
+
+const EXAMPLE_PRODUCTS = () => [
+  { image: "", name: "Bestseller", price: "£24.00", text: "Our most popular item. Replace this with a real product, its photo and price.", buttonText: "Buy now", href: "", soldOut: false },
+  { image: "", name: "New arrival", price: "£36.00", text: "Something new in stock. Add a short, appealing description.", buttonText: "Buy now", href: "", soldOut: false },
+  { image: "", name: "Gift idea", price: "£18.00", text: "A great present. Paste a Stripe or PayPal payment link to sell it online.", buttonText: "Buy now", href: "", soldOut: false },
+];
+
+const bookingForm = (brief) => {
+  const props = FORM_PRESETS.booking();
+  const services = String(brief.pageInfo?.Book || "").split(/[,\n]/).map((x) => x.trim()).filter((x) => x && x.length < 40).slice(0, 8);
+  if (services.length > 1) props.fields[3].options = services.join(", ");
+  return b("form", props);
+};
+
+function bookingSection(brief, props = {}) {
+  return s({ layout: "1-1", anchor: "book", valign: "top", ...props }, [
+    [b("heading", { text: "Request a booking", level: 2 }), b("text", { html: "<p>Choose a day and time that suits you and we'll confirm by email or phone, usually within one working day.</p>" }),
+      b("list", { items: ["Free to request, nothing to pay now", "We'll confirm or suggest another time", "Need to change it? Just let us know"] })],
+    [bookingForm(brief)],
+  ]);
+}
+
+const productsSection = (title, count = 3, props = {}) => s({ anchor: "shop", ...props }, [[b("heading", { text: title, level: 2, align: "center" }), b("products", { items: EXAMPLE_PRODUCTS().slice(0, count) })]]);
+
+// The home page for a shop or blog, and the main button for bookings.
+function finishHome(sections, brief) {
+  const out = [...sections];
+  if (brief.siteType === "shop") {
+    const heroButtons = out[0].columns.flatMap((c) => c.blocks).find((x) => x.type === "buttons");
+    if (heroButtons?.props.items[1]) heroButtons.props.items[1] = { ...heroButtons.props.items[1], text: "Visit the shop", href: hasPage(brief, "shop") ? "/shop" : "#shop" };
+    out.splice(1, 0, productsSection("Popular right now", 3), s({ align: "center", padding: "sm" }, [[b("buttons", { align: "center", items: [{ text: "See everything in the shop", href: "/shop", style: "outline" }] })]]));
+  }
+  if (brief.siteType === "blog") {
+    out.splice(1, 0, s({ background: "surface" }, [[b("heading", { text: "Latest posts", level: 2, align: "center" }), b("posts", { count: 6 })]]));
+  } else if (brief.extras?.blog) {
+    out.splice(out.length - 1, 0, s({ background: "surface" }, [[b("heading", { text: "Latest news", level: 2, align: "center" }), b("posts", { count: 3 })]]));
+  }
+  if (brief.extras?.booking) {
+    const first = out[0].columns.flatMap((c) => c.blocks).find((x) => x.type === "buttons");
+    if (first?.props.items[0]) first.props.items[0] = { ...first.props.items[0], text: "Book now", href: hasPage(brief, "book") ? "/book" : "#book" };
+    if (!hasPage(brief, "book")) out.splice(out.length - 1, 0, bookingSection(brief, { background: "surface" }));
+  }
+  return out;
+}
+
+const hasPage = (brief, slug) => plannedPages(brief).some((p) => p.slug === slug);
+
+// Placeholder first posts (drafts, so nothing half-written goes live).
+function starterPosts(brief) {
+  const name = brief.name || "us";
+  return [
+    ["Welcome to our blog", `Why we started writing, and what you'll find here from ${name}.`],
+    ["Behind the scenes", "A look at how we work and the people who make it happen."],
+    ["Our top tips", "Practical advice from years of experience."],
+  ].map(([title, excerpt], i) => {
+    const post = createPost(title, { date: new Date(Date.now() - i * 6 * 86400000).toISOString().slice(0, 10), excerpt });
+    post.post.coverPhoto = String(brief.description || "").split(/[.,]/)[0].slice(0, 80);
+    post.sections[0].columns[0].blocks[0].props.html = `<p>${esc(excerpt)}</p><p>This is a starter post: replace this text with your own, then untick <strong>Draft</strong> in the post settings to put it on the live site.</p>`;
+    return post;
+  });
 }
 
 // Three clearly different home page layouts.
@@ -155,8 +221,8 @@ function baseSite(brief, variant) {
   const fonts = STYLE_FONTS[brief.style] || VARIANT_FONTS[variant % VARIANT_FONTS.length];
   site.theme.fonts = { heading: fonts[0], body: fonts[1] };
   site.theme.radius = [10, 16, 2][variant % 3];
-  site.header.ctaText = "Get in touch";
-  site.header.ctaHref = contactHref(brief);
+  site.header.ctaText = brief.extras?.booking ? "Book now" : brief.siteType === "shop" ? "Shop now" : "Get in touch";
+  site.header.ctaHref = brief.extras?.booking ? (hasPage(brief, "book") ? "/book" : "#book") : brief.siteType === "shop" && hasPage(brief, "shop") ? "/shop" : contactHref(brief);
   site.header.links = headerLinks(brief);
   const bits = [brief.phone, brief.email].filter(Boolean).join(" · ");
   site.footer.text = `© ${new Date().getFullYear()} ${name}${bits ? ` · ${bits}` : ""}`;
@@ -164,6 +230,18 @@ function baseSite(brief, variant) {
 }
 
 const EXTRA_PAGES = {
+  shop: () => [
+    s({ background: "surface", width: "narrow", align: "center" }, [[b("heading", { text: "Shop", level: 1, align: "center" }), b("text", { html: "<p>Order online and we'll get it to you.</p>", align: "center" })]]),
+    s({}, [[b("products", { items: [...EXAMPLE_PRODUCTS(), ...EXAMPLE_PRODUCTS()].map((x, i) => ({ ...x, name: i < 3 ? x.name : `${x.name} ${i - 2}` })) })]]),
+  ],
+  blog: () => [
+    s({ background: "surface", width: "narrow", align: "center" }, [[b("heading", { text: "Blog", level: 1, align: "center" }), b("text", { html: "<p>News, tips and stories.</p>", align: "center" })]]),
+    s({}, [[b("posts", { count: 12 })]]),
+  ],
+  book: (brief) => [
+    s({ background: "surface", width: "narrow", align: "center" }, [[b("heading", { text: "Book", level: 1, align: "center" }), b("text", { html: "<p>Request a booking online in a minute.</p>", align: "center" })]]),
+    bookingSection(brief),
+  ],
   about: (brief, name) => [
     s({ background: "surface", width: "narrow", align: "center" }, [[b("heading", { text: `About ${name}`, level: 1, align: "center" })]]),
     s({ layout: "1-1", valign: "center" }, [[b("text", { html: `<p>${esc(about(brief))}</p>` }), b("list")], [b("image", { ratio: "4:3" })]]),
@@ -190,6 +268,9 @@ const PAGE_INTROS = {
   services: "What we do, and how we can help.",
   gallery: "A look at our work.",
   contact: "We'd love to hear from you.",
+  shop: "Order online and we'll get it to you.",
+  blog: "News, tips and stories.",
+  book: "Request a booking online in a minute.",
   faq: "Answers to the questions we're asked most.",
   pricing: "Clear prices, no surprises.",
 };
@@ -227,7 +308,7 @@ const PAGE_BODIES = {
       [b("card", { icon: "📞", title: "Call", text: brief.phone || "Phone number coming soon", style: "outline", align: "center" })],
       [b("card", { icon: "✉️", title: "Email", text: brief.email || "Email address coming soon", style: "outline", align: "center" })],
       [b("card", { icon: "📍", title: "Visit", text: brief.address || "Visits by appointment", style: "outline", align: "center" })],
-    ]), s({ width: "narrow" }, [[b("form")]])],
+    ]), s({ width: "narrow" }, [[contactForm(brief)]])],
     (brief) => [contactSection(brief, { background: "dark" })],
   ],
   faq: [
@@ -239,6 +320,25 @@ const PAGE_BODIES = {
     () => [s({ layout: "1-1-1" }, [[b("pricing", { name: "Basic" })], [b("pricing", { name: "Standard", featured: true })], [b("pricing", { name: "Premium" })]])],
     () => [s({ layout: "1-1", width: "normal" }, [[b("pricing", { name: "Standard" })], [b("pricing", { name: "Premium", featured: true })]])],
     () => [s({ layout: "1-1-1" }, [[b("pricing", { name: "Basic" })], [b("pricing", { name: "Standard", featured: true })], [b("pricing", { name: "Premium" })]]), s({ width: "narrow", background: "surface" }, [[b("faq")]])],
+  ],
+  shop: [
+    () => [s({}, [[b("products", { items: [...EXAMPLE_PRODUCTS(), ...EXAMPLE_PRODUCTS()] })]])],
+    () => [s({}, [[b("products", { columns: 4, mobileColumns: 2, items: [...EXAMPLE_PRODUCTS(), ...EXAMPLE_PRODUCTS()].slice(0, 4) })]]), s({ background: "surface", width: "narrow" }, [[b("heading", { text: "Delivery & returns", level: 2 }), b("list", { items: ["Free UK delivery on orders over £50", "Dispatched within 2 working days", "30-day returns"] })]])],
+    () => [s({ width: "wide" }, [[b("products", { columns: 2, ratio: "4:3", items: EXAMPLE_PRODUCTS().slice(0, 2) })]]), s({}, [[b("products", { items: EXAMPLE_PRODUCTS() })]])],
+  ],
+  blog: [
+    () => [s({}, [[b("posts", { count: 12 })]])],
+    () => [s({ width: "narrow" }, [[b("posts", { count: 12, columns: 1 })]])],
+    () => [s({}, [[b("posts", { count: 12, columns: 2 })]])],
+  ],
+  book: [
+    (brief) => [bookingSection(brief)],
+    (brief) => [s({ layout: "1-1-1", padding: "md" }, [
+      [b("card", { icon: "📅", title: "1. Pick a time", text: "Choose the day and time that suits you best.", style: "outline", align: "center" })],
+      [b("card", { icon: "✉️", title: "2. We confirm", text: "We'll confirm by email or phone, or suggest another time.", style: "outline", align: "center" })],
+      [b("card", { icon: "✓", title: "3. See you then", text: "Nothing to pay now. Need to change it? Just let us know.", style: "outline", align: "center" })],
+    ]), s({ width: "narrow" }, [[bookingForm(brief)]])],
+    (brief) => [bookingSection(brief, { background: "dark" })],
   ],
   other: [
     (brief, name, title) => [s({ width: "narrow" }, [[b("text", { html: `<p>${esc(pageIntro(brief, title))}</p>` })]])],
@@ -279,7 +379,7 @@ export function createDemoProvider() {
       const { site, name } = baseSite(brief, v);
       const home = createPage("Home", "index");
       home.seo.description = about(brief).slice(0, 155);
-      home.sections = LAYOUTS[v](brief, name);
+      home.sections = finishHome(LAYOUTS[v](brief, name), brief);
       // Templates can't write copy: use the owner's homepage description as the hero text.
       const homeInfo = String(brief.pageInfo?.Home || "").trim();
       const heroText = homeInfo && home.sections[0]?.columns.flatMap((c) => c.blocks).find((x) => x.type === "text");
@@ -311,6 +411,10 @@ export function createDemoProvider() {
       const page = demoPage(brief, concept.name, title, variant);
       finishPhotoBackgrounds(page.sections, concept.theme.colors);
       return { page };
+    },
+
+    async starterPosts({ brief }) {
+      return starterPosts(brief);
     },
 
     // Old "describe it" flow: same as the first concept, built in one go.

@@ -8,7 +8,7 @@
 // The editor uses the same renderer with { editor: true }, which adds data
 // attributes for selection and drag-and-drop. What you see is what you ship.
 
-import { BLOCKS, FONT_CHOICES, LAYOUT_COLUMNS } from "./schema.js";
+import { BLOCKS, FONT_CHOICES, LAYOUT_COLUMNS, listPosts } from "./schema.js";
 import { escapeHtml as esc, safeUrl, sanitizeRichText } from "./sanitize.js";
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,22 @@ import { escapeHtml as esc, safeUrl, sanitizeRichText } from "./sanitize.js";
 // ---------------------------------------------------------------------------
 
 export function pageUrl(page, base = "/") {
+  if (page.post) return `${base}blog/${page.slug}/`;
   return page.slug === "index" ? base : `${base}${page.slug}/`;
+}
+
+/** The page at a path inside the site ("about", "blog/my-post", "" = home). */
+export function pageAtPath(site, path) {
+  const slug = String(path || "").replace(/^\/+|\/+$/g, "").replace(/\/index\.html$|^index\.html$/, "") || "index";
+  const post = slug.match(/^blog\/([^/]+)$/);
+  if (post) return site.pages.find((p) => p.post && p.slug === post[1]) || null;
+  return site.pages.find((p) => !p.post && p.slug === slug) || null;
+}
+
+// "21 March 2026"
+export function formatDate(iso) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
 // "/about" or "/about#team" → the right URL for wherever the site is served
@@ -26,8 +41,7 @@ function resolveHref(href, ctx) {
   if (!url) return "#";
   if (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/_m/")) {
     const [path, hash] = url.slice(1).split("#");
-    const slug = path.replace(/\/+$/, "") || "index";
-    const page = ctx.site.pages.find((p) => p.slug === slug);
+    const page = pageAtPath(ctx.site, path);
     if (page) return pageUrl(page, ctx.base) + (hash ? `#${hash}` : "");
   }
   return url;
@@ -218,14 +232,47 @@ const renderers = {
         const name = `field_${i}`;
         const id = `${fid}-${i}`;
         const req = f.required ? " required" : "";
-        const input = f.type === "textarea"
-          ? `<textarea id="${id}" name="${name}" rows="5"${req}></textarea>`
-          : `<input id="${id}" name="${name}" type="${esc(f.type)}"${req}${f.type === "email" ? ' autocomplete="email"' : ""}>`;
-        return `<label for="${id}">${esc(f.label)}${f.required ? " *" : ""}</label>${input}`;
+        const label = `<label for="${id}">${esc(f.label)}${f.required ? " *" : ""}</label>`;
+        if (f.type === "checkbox") return `<label class="eka-check" for="${id}"><input id="${id}" name="${name}" type="checkbox" value="Yes"${req}><span>${esc(f.label)}${f.required ? " *" : ""}</span></label>`;
+        if (f.type === "textarea") return `${label}<textarea id="${id}" name="${name}" rows="5"${req}></textarea>`;
+        if (f.type === "select") {
+          const options = String(f.options || "").split(",").map((o) => o.trim()).filter(Boolean);
+          return `${label}<select id="${id}" name="${name}"${req}><option value="">Choose…</option>${options.map((o) => `<option>${esc(o)}</option>`).join("")}</select>`;
+        }
+        const type = ["text", "email", "tel", "date", "time", "number"].includes(f.type) ? f.type : "text";
+        const auto = { email: ' autocomplete="email"', tel: ' autocomplete="tel"' }[type] || (/name/i.test(f.label) && type === "text" ? ' autocomplete="name"' : "");
+        return `${label}<input id="${id}" name="${name}" type="${type}"${type === "number" ? ' min="0" inputmode="numeric"' : ""}${auto}${req}>`;
       })
       .join("");
     const action = ctx.editor ? "#" : esc(ctx.formAction || "#");
-    return `<div class="eka-form-wrap"><div id="sent-${block.id}" class="eka-form-ok" role="status">${esc(p.successMessage)}</div><form class="eka-form" method="post" action="${action}" id="${fid}"><input type="hidden" name="_block" value="${esc(block.id)}"><input type="hidden" name="_page" value="${esc(ctx.page.slug)}"><div class="eka-hp" aria-hidden="true"><label>Leave empty<input name="website" tabindex="-1" autocomplete="off"></label></div>${fields}<button class="eka-btn btn-primary" type="submit">${esc(p.submitText)}</button></form></div>`;
+    return `<div class="eka-form-wrap"><div id="sent-${block.id}" class="eka-form-ok" role="status">${esc(p.successMessage)}</div><form class="eka-form" method="post" action="${action}" id="${fid}"><input type="hidden" name="_block" value="${esc(block.id)}"><input type="hidden" name="_page" value="${esc(ctx.page.post ? `blog/${ctx.page.slug}` : ctx.page.slug)}"><div class="eka-hp" aria-hidden="true"><label>Leave empty<input name="website" tabindex="-1" autocomplete="off"></label></div>${fields}<button class="eka-btn btn-primary" type="submit">${esc(p.submitText)}</button></form></div>`;
+  },
+
+  products(p, ctx) {
+    const items = p.items.filter((x) => x.name || x.image);
+    if (!items.length) return ctx.editor ? `<div class="eka-hint">Add products in the panel</div>` : "";
+    const ratio = p.ratio === "auto" ? "" : ` r-${p.ratio.replace(":", "-")}`;
+    const cols = Math.max(1, Math.min(5, Number(p.columns) || 3)), mcols = Math.max(1, Math.min(2, Number(p.mobileColumns) || 1));
+    const contact = ctx.site.pages.some((pg) => pg.slug === "contact" && !pg.post) ? "/contact" : "#contact";
+    return `<div class="eka-products t-${p.align}" style="--pc:${cols};--pcm:${mcols}">${items.map((x) => {
+      const pic = x.image ? img(x.image, x.name, ctx, { sizes: `(max-width: 760px) ${Math.round(100 / mcols)}vw, ${Math.round(100 / cols)}vw` }) : ctx.editor ? placeholderImage("Product photo") : "";
+      const button = x.soldOut
+        ? `<span class="eka-btn btn-outline is-off" aria-disabled="true">Sold out</span>`
+        : x.buttonText ? `<a class="eka-btn btn-primary" ${attrHref(x.href || contact, ctx)}>${esc(x.buttonText)}</a>` : "";
+      return `<div class="eka-product${x.soldOut ? " sold" : ""}">${pic ? `<div class="eka-product-img${ratio}">${pic}${x.soldOut ? '<span class="eka-badge">Sold out</span>' : ""}</div>` : ""}<div class="eka-product-body"><h3>${esc(x.name)}</h3>${x.price ? `<p class="eka-product-price">${esc(x.price)}</p>` : ""}${x.text ? `<p>${esc(x.text)}</p>` : ""}${button}</div></div>`;
+    }).join("")}</div>`;
+  },
+
+  posts(p, ctx) {
+    const posts = listPosts(ctx.site, { drafts: ctx.editor }).slice(0, Math.max(1, Math.min(48, Number(p.count) || 6)));
+    if (!posts.length) return ctx.editor ? `<div class="eka-hint">No blog posts yet. Write one in the Pages tab → Blog posts.</div>` : `<p class="eka-posts-none">No posts yet. Check back soon!</p>`;
+    const cols = Math.max(1, Math.min(4, Number(p.columns) || 3));
+    return `<div class="eka-posts" style="--pc:${cols}">${posts.map((post) => {
+      const href = esc(pageUrl(post, ctx.base));
+      const pic = p.showImage ? (post.post.cover ? img(post.post.cover, post.title, ctx, { sizes: `(max-width: 760px) 100vw, ${Math.round(100 / cols)}vw` }) : ctx.editor ? placeholderImage("Cover photo") : "") : "";
+      const meta = [p.showDate ? `<time datetime="${post.post.date}">${formatDate(post.post.date)}</time>` : "", ctx.editor && post.post.draft ? '<span class="eka-badge">Draft</span>' : ""].filter(Boolean).join(" ");
+      return `<article class="eka-post-card">${pic ? `<a class="eka-post-img" href="${href}" tabindex="-1" aria-hidden="true">${pic}</a>` : ""}<div class="eka-post-body">${meta ? `<p class="eka-post-meta">${meta}</p>` : ""}<h3><a href="${href}">${esc(post.title)}</a></h3>${p.showExcerpt && post.post.excerpt ? `<p>${esc(post.post.excerpt)}</p>` : ""}${p.buttonText ? `<a class="eka-card-link" href="${href}">${esc(p.buttonText)} →</a>` : ""}</div></article>`;
+    }).join("")}</div>`;
   },
 
   spacer(p) {
@@ -502,7 +549,7 @@ export function renderSection(section, ctx) {
 
 function navLinks(site) {
   if (site.header.links) return site.header.links;
-  return site.pages.map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
+  return site.pages.filter((p) => !p.post).map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
 }
 
 function renderHeader(site, ctx) {
@@ -758,8 +805,29 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-map{position:relative;border-radius:var(--r);overflow:hidden;background:var(--c-surface)}
 .eka-form{display:grid;gap:8px;text-align:left}
 .eka-form label{font-weight:600;font-size:.92rem;margin-top:6px}
-.eka-form input,.eka-form textarea{width:100%;font:inherit;padding:12px 14px;border-radius:var(--r);border:1px solid color-mix(in srgb,var(--c-text) 22%,transparent);background:var(--c-bg);color:var(--c-text)}
-.eka-form input:focus,.eka-form textarea:focus{outline:2px solid var(--c-primary);outline-offset:1px;border-color:transparent}
+.eka-form input,.eka-form textarea,.eka-form select{width:100%;font:inherit;padding:12px 14px;border-radius:var(--r);border:1px solid color-mix(in srgb,var(--c-text) 22%,transparent);background:var(--c-bg);color:var(--c-text)}
+.eka-form input:focus,.eka-form textarea:focus,.eka-form select:focus{outline:2px solid var(--c-primary);outline-offset:1px;border-color:transparent}
+.eka-form .eka-check{display:flex;gap:10px;align-items:flex-start;font-weight:400;cursor:pointer}.eka-form .eka-check input{width:20px;height:20px;flex:none;margin:2px 0 0;accent-color:var(--c-primary)}
+.eka-products,.eka-posts{display:grid;grid-template-columns:repeat(var(--pc),minmax(0,1fr));gap:28px}
+@media (max-width:1000px){.eka-products,.eka-posts{grid-template-columns:repeat(min(var(--pc),2),minmax(0,1fr))}}
+@media (max-width:760px){.eka-products{grid-template-columns:repeat(var(--pcm),minmax(0,1fr));gap:18px}.eka-posts{grid-template-columns:1fr}}
+.eka-product,.eka-post-card{display:flex;flex-direction:column;border-radius:var(--r);overflow:hidden;background:var(--c-bg);color:var(--c-text);border:1px solid color-mix(in srgb,var(--c-text) 10%,transparent)}
+.eka-product-img,.eka-post-img{position:relative;display:block}.eka-product-img img,.eka-post-img img{width:100%;object-fit:cover;aspect-ratio:4/3}
+.eka-product-img.r-1-1 img{aspect-ratio:1/1}.eka-product-img.r-3-4 img{aspect-ratio:3/4}.eka-product-img:not([class*=" r-"]) img{aspect-ratio:auto}
+.eka-product.sold img{filter:grayscale(.7);opacity:.75}
+.eka-badge{display:inline-block;padding:3px 10px;border-radius:99px;background:var(--c-dark);color:var(--c-on-dark);font-size:.78rem;font-weight:700}.eka-product-img .eka-badge{position:absolute;top:12px;left:12px}
+.eka-product-body,.eka-post-body{padding:20px 22px 24px;display:flex;flex-direction:column;flex:1}
+.eka-product-body h3,.eka-post-body h3{font-size:1.15rem;margin-bottom:.3em}.eka-post-body h3 a{color:inherit;text-decoration:none}.eka-post-body h3 a:hover{color:var(--c-primary)}
+.eka-product-price{font-weight:700;font-size:1.1rem;color:var(--c-primary);margin-bottom:.5em}
+.eka-product-body p:not(.eka-product-price),.eka-post-body p{opacity:.82;margin-bottom:1em}
+.eka-product-body .eka-btn{margin-top:auto;align-self:flex-start}.t-center .eka-product-body{text-align:center}.t-center .eka-product-body .eka-btn{align-self:center}
+.eka-btn.is-off{opacity:.55;pointer-events:none}
+.eka-post-meta{font-size:.85rem;color:var(--c-muted);margin-bottom:.4em!important;opacity:1!important}
+.eka-post-head{padding:calc(56px*var(--sp)) 0 calc(28px*var(--sp))}.eka-post-head .eka-wrap{max-width:780px}
+.eka-lead{font-size:1.2rem;color:var(--c-muted);max-width:60ch}
+.eka-post-head h1{font-size:clamp(2rem,4.5vw,3rem);margin:.2em 0 .3em}.eka-post-head .eka-post-meta{font-size:.95rem}
+.eka-post-cover{max-width:1000px;margin:0 auto calc(20px*var(--sp));padding:0 20px}.eka-post-cover img{width:100%;border-radius:var(--r);aspect-ratio:16/9;object-fit:cover}
+.eka-post-back{max-width:780px;margin:0 auto;padding:12px 20px calc(56px*var(--sp))}.eka-post-back a{font-weight:600;text-decoration:none}
 .eka-form button{margin-top:12px;justify-self:start}
 .eka-hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 .eka-form-ok{display:none;padding:16px 18px;border-radius:var(--r);background:color-mix(in srgb,#16a34a 14%,transparent);color:inherit;font-weight:600;margin-bottom:16px}
@@ -854,11 +922,29 @@ function fontLinks(site, page) {
  */
 export function renderBody(site, page, opts = {}) {
   const ctx = { site, page, base: opts.base || "/", editor: !!opts.editor, ids: !!opts.review, formAction: opts.formAction, eagerImages: 2, css: [] };
-  const sections = page.sections.map((s, i) => { ctx.sectionIndex = i; return renderSection(s, ctx); }).join("");
+  let sections = page.sections.map((s, i) => { ctx.sectionIndex = i; return renderSection(s, ctx); }).join("");
+  if (page.post) sections = postHead(site, page, ctx) + sections + postFoot(site, ctx);
   const header = renderHeader(site, ctx), footer = renderFooter(site, ctx);
   const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
   const empty = ctx.editor && !page.sections.length ? `<div class="eka-page-empty">This page is empty. Drag a section or block here, or ask the AI to build it.</div>` : "";
   return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}${contactButtons(site, ctx)}`;
+}
+
+// Blog posts get a title, date and cover photo above their content, and a
+// link back to the blog below it.
+function postHead(site, page, ctx) {
+  const p = page.post;
+  const meta = [`<time datetime="${p.date}">${formatDate(p.date)}</time>`, p.author ? esc(p.author) : "", ctx.editor && p.draft ? '<span class="eka-badge">Draft: not on the live site yet</span>' : ""].filter(Boolean).join(" · ");
+  const cover = p.cover ? `<div class="eka-post-cover">${img(p.cover, page.title, ctx, { sizes: "(max-width: 1000px) 100vw, 1000px", eager: true })}</div>` : "";
+  return `<header class="eka-post-head"><div class="eka-wrap"><p class="eka-post-meta">${meta}</p><h1>${esc(page.title)}</h1>${p.excerpt ? `<p class="eka-lead">${esc(p.excerpt)}</p>` : ""}</div></header>${cover}`;
+}
+
+function postFoot(site, ctx) {
+  // The page that lists the posts: a Blog page rather than the home page's "latest news".
+  const lists = site.pages.filter((p) => !p.post && p.sections.some((s) => s.columns.some((c) => c.blocks.some((b) => b.type === "posts"))));
+  const blog = lists.find((p) => p.slug !== "index") || lists[0];
+  const href = blog ? pageUrl(blog, ctx.base) : ctx.base;
+  return `<p class="eka-post-back"><a href="${esc(href)}">← ${blog ? `Back to ${esc(blog.title)}` : "Home"}</a></p>`;
 }
 
 export function renderCss(site) {
@@ -877,6 +963,7 @@ function absolute(url, origin) {
 // The picture shown when a page is shared (WhatsApp, Facebook…): the page's
 // first real photo, else the logo.
 export function shareImage(site, page) {
+  if (page.post?.cover && !isPlaceholder(page.post.cover)) return page.post.cover;
   for (const s of page.sections) {
     if (s.props.background === "image" && s.props.image && !isPlaceholder(s.props.image)) return s.props.image;
     for (const c of s.columns) for (const b of c.blocks) {
@@ -916,14 +1003,16 @@ function headExtras(site, page, opts) {
   const out = [`<link rel="icon" href="${esc(icon ? safeUrl(icon) : letterIcon(site))}">`];
   const img = shareImage(site, page);
   if (img) out.push(`<meta property="og:image" content="${esc(absolute(safeUrl(img), origin))}"><meta name="twitter:card" content="summary_large_image">`);
-  out.push(`<meta property="og:type" content="website"><meta property="og:site_name" content="${esc(site.name)}">`);
+  out.push(page.post
+    ? `<meta property="og:type" content="article"><meta property="article:published_time" content="${page.post.date}"><meta property="og:site_name" content="${esc(site.name)}">`
+    : `<meta property="og:type" content="website"><meta property="og:site_name" content="${esc(site.name)}">`);
   if (page.slug === "index") out.push(businessJsonLd(site, origin, opts.canonical));
   return out.join("");
 }
 
 export function sitemapXml(site, origin) {
   const o = origin.replace(/\/$/, "");
-  const urls = site.pages.map((p) => `<url><loc>${esc(o + pageUrl(p, "/"))}</loc></url>`).join("");
+  const urls = site.pages.filter((p) => !p.post?.draft).map((p) => `<url><loc>${esc(o + pageUrl(p, "/"))}</loc>${p.post ? `<lastmod>${p.post.date}</lastmod>` : ""}</url>`).join("");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`;
 }
 

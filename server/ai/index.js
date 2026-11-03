@@ -10,7 +10,7 @@ import { createAnthropicProvider } from "./anthropic.js";
 import { applyChanges } from "./changes.js";
 import { partialDesign } from "./partial.js";
 import { createDemoProvider } from "./demo.js";
-import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, describeLayout, describePage } from "./prompts.js";
+import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, POST_SYSTEM, STARTER_POSTS_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, postPrompt, starterPostsPrompt, describeLayout, describePage } from "./prompts.js";
 
 function pickProvider() {
   const choice = (process.env.AI_PROVIDER || "").toLowerCase();
@@ -137,6 +137,36 @@ export function createAi({ provider = pickProvider() } = {}) {
       const links = Array.isArray(data.headerLinks) ? data.headerLinks.filter((l) => l && l.text) : [];
       site.header.links = links.length ? links : null;
       return { site: applyBrief(normalizeSite(site), brief) };
+    },
+
+    // A blog post in the site's style, saved as a draft for the owner to check.
+    async writePost({ site, topic, onProgress }) {
+      if (provider.writePost) return { page: normalizePage(await provider.writePost({ site, topic }), 1) };
+      const text = await provider.complete({
+        kind: "post",
+        system: POST_SYSTEM,
+        prompt: postPrompt({ site, topic }),
+        model: editModel,
+        onProgress,
+      });
+      const data = parseJson(text);
+      const raw = data.page || data;
+      const page = normalizePage({ ...raw, post: { ...raw.post, date: new Date().toISOString().slice(0, 10), draft: true } }, 1);
+      if (!page.post) throw new Error("The AI's answer wasn't in the expected format. Please try again.");
+      return { page };
+    },
+
+    // The first few posts for a new blog (one AI call for all of them).
+    async starterPosts({ site, brief, onProgress }) {
+      let raw;
+      if (provider.starterPosts) raw = await provider.starterPosts({ site, brief });
+      else {
+        const text = await provider.complete({ kind: "posts", system: STARTER_POSTS_SYSTEM, prompt: starterPostsPrompt({ site, brief }), model: editModel, onProgress });
+        raw = (parseJson(text).posts || []).map((x) => x?.page || x);
+      }
+      const today = Date.now();
+      // Dated a few days apart, newest first.
+      return (Array.isArray(raw) ? raw : []).slice(0, 3).map((p, i) => normalizePage({ ...p, post: { draft: false, ...p?.post, date: new Date(today - i * 6 * 86400000).toISOString().slice(0, 10) } }, 1)).filter((p) => p?.post);
     },
 
     // Returns { site, summary, changed }

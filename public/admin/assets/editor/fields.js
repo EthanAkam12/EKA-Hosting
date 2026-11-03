@@ -15,6 +15,9 @@ export function fieldControl(field, value, onChange, ctx) {
     case "text":
       return wrap(h("input", { id, class: "input", value: value ?? "", oninput: (e) => onChange(e.target.value) }));
 
+    case "date":
+      return wrap(h("input", { id, class: "input", type: "date", value: value ?? "", onchange: (e) => e.target.value && onChange(e.target.value) }));
+
     case "textarea":
       return wrap(h("textarea", { id, class: "textarea", rows: "4", oninput: (e) => onChange(e.target.value) }, value ?? ""));
 

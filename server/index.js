@@ -24,8 +24,10 @@ import { buildCubecartSkin } from "./cubecart-skin.js";
 import { fillPlaceholders } from "./placeholders.js";
 import { createStock, fillStockPhotos, fillOwnerPhotos, keywordsFromBrief } from "./stock.js";
 import { deploy, testConnection } from "./deploy.js";
+import { createMailer } from "./mailer.js";
+import { ownerEmail, visitorEmail } from "./form-mail.js";
 import yazl from "yazl";
-import { renderPage, pageUrl, sitemapXml } from "../shared/render.js";
+import { renderPage, pageUrl, pageAtPath, sitemapXml } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
 import { createEmptySite, normalizeSite, normalizePage, findNode, slugify } from "../shared/schema.js";
 
@@ -151,9 +153,10 @@ function cachedRender(key, render) {
   return hit;
 }
 
-function findPage(site, rest) {
-  const slug = String(rest || "").replace(/^\/+|\/+$/g, "").replace(/\/index\.html$|^index\.html$/, "") || "index";
-  return site.pages.find((p) => p.slug === slug) || null;
+// Draft blog posts only show in the editor's previews.
+function findPage(site, rest, { drafts = false } = {}) {
+  const page = pageAtPath(site, rest);
+  return page && (!page.post?.draft || drafts) ? page : null;
 }
 
 async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = false, origin = `${req.protocol}://${req.get("host")}`, live = false, review = false }) {
@@ -166,7 +169,7 @@ async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = 
   if (!site) {
     return res.status(404).type("html").send(simplePage("Coming soon", "This website hasn't been published yet."));
   }
-  const page = findPage(site, rest);
+  const page = findPage(site, rest, { drafts: draft });
   if (!page) {
     const home = site.pages[0];
     return res.status(404).type("html").send(simplePage("Page not found", `<a href="${base}">Go to the ${escapeHtml(home.title)} page</a>`));
@@ -238,6 +241,7 @@ app.get("/_m/:siteId/:file", async (req, res) => {
   });
 });
 
+const mailer = createMailer();
 const formHits = new Map();
 app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" }), async (req, res) => {
   const meta = store.getMeta(req.params.siteId);
@@ -245,8 +249,8 @@ app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" 
   if (!site) return res.sendStatus(404);
 
   const body = req.body || {};
-  const page = site.pages.find((p) => p.slug === body._page) || site.pages[0];
-  const pagePath = page.slug === "index" ? "" : `${page.slug}/`;
+  const page = pageAtPath(site, String(body._page || "")) || site.pages[0];
+  const pagePath = pageUrl(page, "/").slice(1);
   const onSiteHost = !!siteForHost(req);
   const base = onSiteHost ? "/" : `/s/${meta.slug}/`;
   const backTo = (hash) => res.redirect(303, `${base}${pagePath}${hash}`);
@@ -264,16 +268,31 @@ app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" 
   const found = body._block ? findNode(site, String(body._block)) : null;
   const formBlock = found && found.kind === "block" && found.node.type === "form" ? found.node : null;
   const fields = {};
+  let visitor = "";
   if (formBlock) {
     formBlock.props.fields.forEach((f, i) => {
       const value = String(body[`field_${i}`] ?? "").slice(0, 5000);
       fields[f.label || `Field ${i + 1}`] = value;
+      if (!visitor && f.type === "email" && /^[^\s@<>",;]+@[^\s@<>",;]+\.[a-z]{2,}$/i.test(value.trim())) visitor = value.trim();
     });
   }
   if (!Object.values(fields).some((v) => v.trim())) return backTo(`#f-${encodeURIComponent(body._block || "")}`);
 
-  await store.addSubmission(meta.id, { at: new Date().toISOString(), page: page.slug, fields });
+  const kind = formBlock.props.kind || "contact";
+  await store.addSubmission(meta.id, { id: crypto.randomBytes(6).toString("hex"), at: new Date().toISOString(), page: page.slug, kind, fields });
   backTo(`#sent-${encodeURIComponent(formBlock.id)}`);
+
+  // Email the owner (and the visitor a copy, if the form asks) after answering.
+  const owner = store.getMeta(meta.id).formEmail || site.business?.email || "";
+  const lines = Object.entries(fields).filter(([, v]) => v.trim());
+  if (mailer.enabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(owner)) {
+    const mail = ownerEmail({ kind, siteName: site.name, lines, page: page.title });
+    mailer.send({ to: owner, subject: mail.subject, text: mail.body, replyTo: visitor, fromName: `${site.name} website` }).catch((err) => console.warn("Form email not sent:", err.message));
+    if (formBlock.props.confirmEmail && visitor) {
+      const copy = visitorEmail({ kind, siteName: site.name, lines });
+      mailer.send({ to: visitor, subject: copy.subject, text: copy.body, replyTo: owner, fromName: site.name }).catch((err) => console.warn("Visitor copy not sent:", err.message));
+    }
+  }
 });
 
 // Caddy asks this before issuing an on-demand HTTPS certificate, so
@@ -512,6 +531,7 @@ api.get("/me", (req, res) => {
     baseDomain: BASE_DOMAIN || null,
     stockPhotos: stock.enabled,
     stockSource: stock.enabled ? { name: stock.name, site: stock.site } : null,
+    mail: mailer.enabled,
     version: VERSION,
     supportEmail: SUPPORT_EMAIL,
     demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
@@ -552,6 +572,9 @@ function cleanBrief(input = {}) {
     logoUrl: /^\/_tmp\/[\w.-]+$/.test(input.logoUrl || "") ? input.logoUrl : "",
     colors,
     style: STYLE_CHOICES.includes(input.style) ? input.style : STYLE_CHOICES[0],
+    // Business website, online shop or blog, plus optional extras.
+    siteType: ["business", "shop", "blog"].includes(input.siteType) ? input.siteType : "business",
+    extras: Object.fromEntries(["booking", "enquiry", "blog"].map((k) => [k, input.extras?.[k] === true])),
     pages: Array.isArray(input.pages) ? input.pages.map((p) => str(p, 40)).filter(Boolean).slice(0, 12) : [],
     // The owner's own photos (uploaded in the wizard), each with an optional note.
     photos: (Array.isArray(input.photos) ? input.photos : [])
@@ -710,6 +733,12 @@ api.post("/sites", async (req, res) => {
           site.pages.sort((a, b) => rank(a) - rank(b));
         } else {
           site = (await ai.buildFromConcept({ brief, concept, requests, pageNotes, onProgress: progress })).site;
+        }
+        // A blog gets its first posts written now, so it doesn't open empty.
+        if ((brief.siteType === "blog" || brief.extras.blog) && !site.pages.some((p) => p.post)) {
+          try {
+            site.pages.push(...(await ai.starterPosts({ site, brief, onProgress: progress })));
+          } catch (err) { console.warn("Starter posts skipped:", err.message); }
         }
         await fillImages(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });
         const adopted = await adoptTmpMedia(site, meta.id);
@@ -973,6 +1002,24 @@ api.post("/sites/:id/ai", async (req, res) => {
   res.json({ jobId: job.id });
 });
 
+// "Write a post with AI": a draft blog post in the site's style, with a cover photo.
+api.post("/sites/:id/ai/post", async (req, res) => {
+  if (demoAiBlocked(req, res)) return;
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (!ai.enabled) return res.status(400).json({ error: "Writing posts needs AI. You can still write them yourself: Pages tab → New post." });
+  const topic = String(req.body?.topic || "").trim().slice(0, 500);
+  if (!topic) return res.status(400).json({ error: "Say what the post is about." });
+  const site = req.body?.site ? normalizeSite(req.body.site) : await store.getDraft(meta.id);
+  const job = startJob("post", meta.id, async (progress) => {
+    const { page } = await ai.writePost({ site, topic, onProgress: progress });
+    const holder = { ...site, pages: [page] };
+    await fillImages(holder, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, avoid: JSON.stringify(site) });
+    return { page: holder.pages[0] };
+  });
+  res.json({ jobId: job.id });
+});
+
 api.get("/jobs/:id", (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ error: "This job has expired. Reload the page." });
@@ -1045,6 +1092,15 @@ api.get("/sites/:id/submissions", async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;
   res.json({ submissions: await store.listSubmissions(meta.id) });
+});
+
+// Mark a message, enquiry or booking as dealt with (or not).
+api.patch("/sites/:id/submissions/:sid", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (!/^[a-f0-9]{12}$/.test(req.params.sid)) return res.status(404).json({ error: "Message not found." });
+  await store.setSubmissionDone(meta.id, req.params.sid, !!req.body?.done);
+  res.json({ ok: true });
 });
 
 app.use("/api", api);
