@@ -44,7 +44,7 @@ the key in `/etc/eka-builder/config`. Remove it with `bash uninstall.sh`.
 
 1. Pack the `eka_builder` folder: `tar -czf eka_builder.tar.gz -C directadmin/eka_builder .`
 2. In DirectAdmin as admin: **Plugin Manager → Add plugin**, upload it, and install.
-3. On the server, edit `/usr/local/directadmin/plugins/eka_builder/data/config.ini`
+3. On the server, edit `/usr/local/directadmin/plugins/eka_builder/conf/config.ini`
    (address, key, and optionally `plans = "basic:starter,pro:business"`).
 
 Users find **EKA Website Builder** in their plugins list. The plugin runs as

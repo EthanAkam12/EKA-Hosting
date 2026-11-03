@@ -1,0 +1,10 @@
+; EKA Website Builder (DirectAdmin plugin). Copy to config.ini and fill in.
+; The address and key are on the builder's Customers page.
+url = "https://builder.yourhost.com"
+key = "YOUR_HOST_API_KEY"
+; Optional: DirectAdmin package → builder plan, e.g. "basic:starter,pro:business"
+plans = ""
+; The plan for packages not listed (empty = the builder's first plan).
+default_plan = ""
+; A name for this server, if you have several.
+server_name = ""

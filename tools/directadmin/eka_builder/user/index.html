@@ -3,7 +3,7 @@
 // EKA Website Builder for DirectAdmin users. DirectAdmin runs this as
 // "diradmin" (see plugin.conf) and tells it who's logged in (USERNAME), so
 // users can't pretend to be someone else, and only diradmin can read the
-// host API key in ../data/config.ini.
+// host API key in ../conf/config.ini.
 
 function fail($msg) {
     echo '<div style="padding:16px;border:1px solid #f5c2c2;background:#fdecec;border-radius:8px"><b>The website builder couldn\'t be opened.</b><br>'
@@ -14,8 +14,8 @@ function fail($msg) {
 $user = getenv('USERNAME');
 if (!$user || !preg_match('/^[a-z0-9_-]{1,32}$/i', $user)) fail('Unknown user.');
 
-$conf = @parse_ini_file(dirname(__DIR__) . '/data/config.ini');
-if (!$conf || empty($conf['url']) || empty($conf['key'])) fail('The plugin isn\'t set up yet (data/config.ini).');
+$conf = @parse_ini_file(dirname(__DIR__) . '/conf/config.ini');
+if (!$conf || empty($conf['url']) || empty($conf['key'])) fail('The plugin isn\'t set up yet (conf/config.ini).');
 
 // The user's email, domain and package from DirectAdmin's records.
 $info = array();
