@@ -11,8 +11,9 @@ async function load() {
   if (!me) demoBanner(meData);
   me = meData;
   showUsageButton();
+  setupHeader();
   notice.replaceChildren(
-    me.ai.enabled
+    me.account ? accountBar(me.account, sites) : me.ai.enabled || me.role !== "admin"
       ? ""
       : h("div", { class: "notice" }, h("strong", {}, "AI isn't set up yet. "), "New websites will start from a template, and AI edits are off. Set ANTHROPIC_API_KEY on the server to turn AI on."),
   );
@@ -26,12 +27,60 @@ function statusBadge(site) {
   return h("span", { class: "badge" }, "Draft");
 }
 
+// ---- accounts ------------------------------------------------------------------
+
+// The administrator gets a Customers link; customers see their plan.
+function setupHeader() {
+  const top = document.querySelector(".top-in");
+  if (top.dataset.ready) return;
+  top.dataset.ready = "1";
+  const logout = document.getElementById("logout");
+  if (me.role === "admin") logout.before(h("a", { class: "btn btn-ghost", href: "/admin/customers" }, "Customers"));
+  if (me.account) {
+    logout.before(h("button", { class: "btn btn-ghost", onclick: changePassword, title: me.account.email }, "My account"));
+    document.querySelector(".head p").textContent = "Create, edit and publish your websites.";
+  }
+}
+
+function accountBar(acc, sites) {
+  const parts = [];
+  if (acc.plan) parts.push(h("span", {}, h("strong", {}, acc.plan.name), ` plan · ${acc.sites} of ${acc.plan.sites} website${acc.plan.sites === 1 ? "" : "s"}`));
+  else parts.push(h("span", {}, "No plan yet: ask your hosting provider."));
+  if (me.ai.enabled && acc.plan) {
+    parts.push(acc.plan.ai
+      ? h("span", { class: "row", style: { gap: "8px" } }, "AI this month:", h("span", { class: "meter", title: `${acc.aiPercent}% used` }, h("span", { style: { width: `${acc.aiPercent}%`, background: acc.aiPercent >= 90 ? "var(--danger)" : "" } })), `${acc.aiPercent}% used`)
+      : h("span", {}, "AI isn't included in your plan"));
+  }
+  if (acc.plan && sites.length >= acc.plan.sites) document.getElementById("new").title = "You've used all the websites in your plan";
+  return h("div", { class: "notice notice-info row", style: { flexWrap: "wrap", gap: "8px 24px" } }, parts);
+}
+
+function changePassword() {
+  const current = h("input", { class: "input", type: "password", autocomplete: "current-password" });
+  const next = h("input", { class: "input", type: "password", autocomplete: "new-password", minlength: "8" });
+  const m = modal({
+    title: "My account",
+    body: h("div", {},
+      h("p", { class: "muted", style: { marginTop: 0 } }, `Logged in as ${me.account.email}.`),
+      h("div", { class: "field" }, h("label", {}, "Current password"), current),
+      h("div", { class: "field" }, h("label", {}, "New password (at least 8 characters)"), next)),
+    footer: [h("button", { class: "btn", onclick: () => m.close() }, "Cancel"), h("button", { class: "btn btn-primary", onclick: async () => {
+      try {
+        await api("/account/password", { method: "POST", body: { current: current.value, password: next.value } });
+        m.close();
+        toast("Password changed.");
+      } catch (e) { toast(e.message, { error: true }); }
+    } }, "Change password")],
+  });
+}
+
 // ---- getting started ---------------------------------------------------------
 
 const HIDE_KEY = "eka-getting-started-hidden";
 function gettingStarted(sites) {
   try { if (localStorage.getItem(HIDE_KEY)) return null; } catch { /* ignore */ }
   if (me.demo) return null;
+  if (me.account) return null; // customers: their host has set everything up
   const steps = [
     { done: sites.length > 0, title: "Make your first website", text: "Describe a business and pick the designs you like.", action: h("a", { class: "btn btn-sm btn-primary", href: "/admin/new" }, "+ New website") },
     { done: me.ai.enabled, title: "Turn on AI", text: "For AI-written designs and changes you describe. Paste your Anthropic API key into settings.txt.", action: h("a", { class: "btn btn-sm", href: "/help#ai", target: "_blank" }, "How") },
@@ -94,6 +143,7 @@ function card(site) {
     h("div", { class: "card-body" },
       h("div", { class: "card-title" }, h("h2", { title: site.name }, site.name), statusBadge(site)),
       h("div", { class: "small muted" }, `Edited ${timeAgo(site.updatedAt)}`, site.publishedAt ? ` · Published ${timeAgo(site.publishedAt)}` : ""),
+      site.ownerEmail ? h("div", { class: "small muted", title: "This customer's website" }, `👤 ${site.ownerEmail}`) : null,
       progress,
     ),
     h("div", { class: "card-actions" },
@@ -160,7 +210,7 @@ const money = (usd) => (usd < 0.01 && usd > 0 ? "under 1¢" : `$${usd.toFixed(2)
 
 async function showUsageButton() {
   const btn = document.getElementById("usage");
-  if (me.demo || !me.ai.enabled) return;
+  if (me.role !== "admin" || !me.ai.enabled) return;
   try {
     const { thisMonth } = await api("/usage");
     btn.textContent = `AI this month: ${money(thisMonth.total.cost)}`;

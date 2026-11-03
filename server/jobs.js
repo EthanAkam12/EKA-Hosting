@@ -2,13 +2,17 @@
 // polls it, so long generations never hit HTTP timeouts.
 
 import crypto from "node:crypto";
+import { usageContext } from "./ai/usage.js";
 
 const jobs = new Map();
 const KEEP_MS = 30 * 60 * 1000;
 
 export function startJob(kind, siteId, run) {
   const id = crypto.randomBytes(8).toString("hex");
-  const job = { id, kind, siteId, status: "running", progress: { chars: 0 }, result: null, error: null, startedAt: Date.now(), finishedAt: null };
+  // Who started it: only they (or the administrator) can read it.
+  const user = usageContext.getStore()?.user;
+  const owner = user && user.role !== "admin" ? `${user.role}:${user.id}` : "admin";
+  const job = { id, kind, siteId, owner, status: "running", progress: { chars: 0 }, result: null, error: null, startedAt: Date.now(), finishedAt: null };
   jobs.set(id, job);
   Promise.resolve()
     // Raw AI text (`text`) stays on the server; only counts and previews are shown.

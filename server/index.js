@@ -15,8 +15,9 @@ import compression from "compression";
 
 import { Store } from "./store.js";
 import { createAuth } from "./auth.js";
+import { Users, publicUser } from "./users.js";
 import { createAi, applyBrief } from "./ai/index.js";
-import { usageContext, initUsageLog, usageSummary } from "./ai/usage.js";
+import { usageContext, initUsageLog, usageSummary, loadMonthTotals, accountCostThisMonth, accountUsage } from "./ai/usage.js";
 import { startJob, getJob, publicJob } from "./jobs.js";
 import { saveUpload, deleteUpload } from "./media.js";
 import { buildStaticSite } from "./export.js";
@@ -106,7 +107,9 @@ if (!ADMIN_PASSWORD) {
 
 const store = new Store(DATA_DIR);
 await store.init();
-const auth = createAuth({ password: ADMIN_PASSWORD, secret: SESSION_SECRET, secure: SECURE_COOKIES });
+const users = new Users(DATA_DIR);
+await users.init();
+const auth = createAuth({ password: ADMIN_PASSWORD, secret: SESSION_SECRET, secure: SECURE_COOKIES, users });
 const ai = createAi();
 
 const app = express();
@@ -212,6 +215,7 @@ function simplePage(title, body) {
 
 // Images uploaded in the new-site wizard before the site exists (admin only).
 initUsageLog(DATA_DIR);
+await loadMonthTotals();
 const stock = createStock();
 
 // Empty picture spots get matching stock photos where possible, and
@@ -335,6 +339,15 @@ app.get(["/s/:slug", "/s/:slug/*"], (req, res, next) => {
 
 app.get("/", (req, res) => res.redirect("/admin"));
 app.get("/admin/login", (req, res) => res.sendFile(path.join(ROOT, "public/admin/login.html")));
+app.get("/admin/reset", (req, res) => res.sendFile(path.join(ROOT, "public/admin/reset.html")));
+// One-time sign-in links (control panels, "open as customer").
+app.get("/login/link", async (req, res, next) => {
+  try {
+    const user = await auth.useLoginLink(req, res, String(req.query.t || ""));
+    if (!user) return res.status(400).type("html").send(simplePage("Link expired", 'This sign-in link has expired or was already used. Open the builder again from your control panel, or <a href="/admin/login">log in</a>.'));
+    res.redirect(303, "/admin");
+  } catch (err) { next(err); }
+});
 // Customer review links: the draft site plus comments and an Approve button, no login.
 app.get("/review/:token", (req, res) => {
   if (!store.findByReviewToken(req.params.token)) return res.status(404).type("html").send(simplePage("Link not found", "This review link has been turned off or doesn't exist."));
@@ -350,6 +363,7 @@ app.get("/help", (req, res) => res.sendFile(path.join(ROOT, "public/help.html"))
 app.get("/support", (req, res) => res.sendFile(path.join(ROOT, "public/support.html")));
 app.get("/api/public-info", (req, res) => res.json({ demo: DEMO, supportEmail: SUPPORT_EMAIL, version: VERSION }));
 app.get("/admin", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/dashboard.html")));
+app.get("/admin/customers", auth.requirePage, (req, res) => (req.user.role === "admin" ? res.sendFile(path.join(ROOT, "public/admin/customers.html")) : res.redirect("/admin")));
 app.get("/admin/new", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/new.html")));
 app.get("/admin/sites/:id", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/editor.html")));
 app.get(["/admin/preview/:id", "/admin/preview/:id/*"], auth.requirePage, (req, res, next) => {
@@ -377,7 +391,29 @@ api.use((req, res, next) => {
   res.status(415).json({ error: "Unsupported request." });
 });
 
-api.post("/login", (req, res) => auth.login(req, res));
+api.post("/login", (req, res, next) => auth.login(req, res).catch(next));
+
+// "Forgot your password?": a link by email (when the server can send email).
+api.post("/password/forgot", async (req, res) => {
+  const user = users.byEmail(req.body?.email);
+  if (!mailer.enabled) return res.status(400).json({ error: SUPPORT_EMAIL ? `Ask your hosting provider (${SUPPORT_EMAIL}) to reset it for you.` : "Ask your hosting provider to reset it for you." });
+  if (user && !user.disabled) {
+    const link = `${req.protocol}://${req.get("host")}/admin/reset?t=${encodeURIComponent(auth.resetLink(user))}`;
+    mailer.send({ to: user.email, subject: "Reset your website builder password", text: `Someone (hopefully you) asked to reset your password.\n\nChoose a new one here (the link works for an hour):\n${link}\n\nIf it wasn't you, ignore this email; your password hasn't changed.` })
+      .catch((err) => console.warn("Reset email not sent:", err.message));
+  }
+  // The same answer either way, so this can't be used to find out who has an account.
+  res.json({ ok: true });
+});
+
+api.post("/password/reset", async (req, res) => {
+  const user = auth.readResetLink(String(req.body?.token || ""));
+  if (!user) return res.status(400).json({ error: "This link has expired or was already used. Ask for a new one." });
+  try {
+    await users.setPassword(user.id, String(req.body?.password || ""));
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
 api.post("/logout", (req, res) => auth.logout(req, res));
 api.post("/demo/start", (req, res) => {
   if (!DEMO) return res.status(404).json({ error: "The demo isn't switched on here." });
@@ -440,9 +476,28 @@ const wizardId = (req) => (/^[a-f0-9]{16}$/.test(req.get("X-EKA-Wizard") || "") 
 api.use((req, res, next) => usageContext.run({ user: req.user, wizard: wizardId(req) }, next));
 api.param("id", (req, res, next, id) => usageContext.run({ user: req.user, siteId: id }, next));
 
-// Demo visitors only see their own sites; the admin doesn't see demo sites.
+// Customers and demo visitors only see their own sites; the administrator
+// sees every customer's site but not demo sites.
 function canSee(user, meta) {
-  return user?.role === "demo" ? meta.owner === user.id : !meta.demo;
+  if (user?.role === "demo") return !!meta.demo && meta.owner === user.id;
+  if (user?.role === "user") return !meta.demo && meta.owner === user.id;
+  return user?.role === "admin" && !meta.demo;
+}
+const isAdmin = (req) => req.user?.role === "admin";
+const isCustomer = (req) => req.user?.role === "user";
+function adminOnly(req, res) {
+  if (isAdmin(req)) return false;
+  res.status(403).json({ error: "Only the administrator can do that." });
+  return true;
+}
+
+// A customer's plan and how much of it they've used.
+function accountStatus(userId) {
+  const user = users.get(userId);
+  const plan = user && users.plan(user.plan);
+  const sites = store.list().filter((m) => m.owner === userId && !m.demo).length;
+  const aiUsed = accountCostThisMonth(userId);
+  return { plan, sites, aiUsed, aiLeft: plan ? Math.max(0, plan.aiMonthly - aiUsed) : 0 };
 }
 
 const siteOr404 = (req, res) => {
@@ -466,6 +521,18 @@ function demoBlocked(req, res, what) {
 const demoAiUse = new Map();
 let demoAiDay = { date: "", count: 0 };
 function demoAiBlocked(req, res) {
+  if (isCustomer(req) && ai.enabled) {
+    const { plan, aiLeft } = accountStatus(req.user.id);
+    if (!plan || plan.aiMonthly <= 0) {
+      res.status(403).json({ error: "AI isn't included in your plan. You can still build and edit everything by hand, or ask your hosting provider about upgrading." });
+      return true;
+    }
+    if (aiLeft <= 0) {
+      res.status(429).json({ error: "You've used this month's AI allowance. It resets on the 1st; everything else (editing by hand, styling, publishing) still works. Ask your hosting provider if you need more." });
+      return true;
+    }
+    return false;
+  }
   if (!isDemo(req) || !ai.enabled) return false;
   const today = new Date().toISOString().slice(0, 10);
   if (demoAiDay.date !== today) demoAiDay = { date: today, count: 0 };
@@ -535,12 +602,17 @@ api.get("/me", (req, res) => {
     version: VERSION,
     supportEmail: SUPPORT_EMAIL,
     demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
+    role: req.user.role,
+    account: isCustomer(req) ? (() => {
+      const st = accountStatus(req.user.id);
+      return { email: req.user.email, name: req.user.name, plan: st.plan ? { name: st.plan.name, sites: st.plan.sites, ai: st.plan.aiMonthly > 0 } : null, sites: st.sites, aiPercent: st.plan?.aiMonthly ? Math.min(100, Math.round((st.aiUsed / st.plan.aiMonthly) * 100)) : null };
+    })() : null,
   });
 });
 
 // AI usage and estimated cost (admin only): this month and all time.
 api.get("/usage", async (req, res) => {
-  if (isDemo(req)) return res.status(403).json({ error: "Not available in the demo." });
+  if (adminOnly(req, res)) return;
   const month = new Date();
   month.setUTCDate(1); month.setUTCHours(0, 0, 0, 0);
   const metas = store.list().filter((m) => !m.demo);
@@ -551,7 +623,115 @@ api.get("/usage", async (req, res) => {
   res.json({ thisMonth, allTime, names });
 });
 
-api.get("/sites", (req, res) => res.json({ sites: store.list().filter((m) => canSee(req.user, m)).map(withUrl) }));
+// ---- customers and plans (administrator) -----------------------------------------
+
+function customerRow(u) {
+  const st = accountStatus(u.id);
+  return { ...publicUser(u), planName: st.plan?.name || "(no plan)", sites: st.sites, aiUsed: Math.round(st.aiUsed * 100) / 100, aiMonthly: st.plan?.aiMonthly ?? 0 };
+}
+
+api.get("/customers", (req, res) => {
+  if (adminOnly(req, res)) return;
+  res.json({ customers: users.list().map(customerRow), plans: users.plans(), mail: mailer.enabled });
+});
+
+api.post("/customers", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  try {
+    const { user, password } = await users.create({ email: req.body?.email, name: req.body?.name, plan: req.body?.plan, password: req.body?.password || undefined });
+    res.json({ customer: customerRow(user), password });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+api.patch("/customers/:cid", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  try {
+    const { email, name, plan, disabled } = req.body || {};
+    res.json({ customer: customerRow(await users.update(req.params.cid, { email, name, plan, disabled })) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// A new password for a customer: the one given, or a made-up one shown once.
+api.post("/customers/:cid/password", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  try {
+    const password = await users.setPassword(req.params.cid, req.body?.password || undefined);
+    res.json({ password: req.body?.password ? undefined : password });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// Delete a customer. Their websites are deleted too, or kept as the administrator's.
+api.delete("/customers/:cid", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  const user = users.get(req.params.cid);
+  if (!user) return res.status(404).json({ error: "Customer not found." });
+  for (const meta of store.list().filter((m) => m.owner === user.id && !m.demo)) {
+    if (req.query.sites === "keep") await store.updateMeta(meta.id, { owner: undefined });
+    else await store.remove(meta.id);
+  }
+  await users.remove(user.id);
+  pageCache.clear();
+  res.json({ ok: true });
+});
+
+// "Open as this customer": a one-time sign-in link (it replaces your own login in this browser).
+api.post("/customers/:cid/login-link", (req, res) => {
+  if (adminOnly(req, res)) return;
+  const user = users.get(req.params.cid);
+  if (!user || user.disabled) return res.status(404).json({ error: "Customer not found or disabled." });
+  res.json({ url: `/login/link?t=${encodeURIComponent(auth.loginLink(user, 60))}` });
+});
+
+api.post("/plans", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  res.json({ plan: await users.savePlan({ ...req.body, id: undefined }) });
+});
+api.patch("/plans/:pid", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  if (!users.plan(req.params.pid)) return res.status(404).json({ error: "Plan not found." });
+  res.json({ plan: await users.savePlan({ ...req.body, id: req.params.pid }) });
+});
+api.delete("/plans/:pid", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  try { await users.removePlan(req.params.pid); res.json({ ok: true }); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// Monthly report for billing customers: one row per customer.
+api.get("/billing.csv", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  const month = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : new Date().toISOString().slice(0, 7);
+  const usage = await accountUsage(month);
+  const cell = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+  const rows = [["Month", "Email", "Name", "Plan", "Websites", "AI actions", "AI cost (US$)", "AI allowance (US$)", "Status"]];
+  for (const u of users.list()) {
+    const st = accountStatus(u.id);
+    const a = usage[u.id] || { calls: 0, cost: 0 };
+    rows.push([month, u.email, u.name, st.plan?.name || "", st.sites, a.calls, a.cost.toFixed(2), st.plan?.aiMonthly ?? 0, u.disabled ? "disabled" : "active"]);
+  }
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="eka-billing-${month}.csv"`);
+  res.send(rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n");
+});
+
+// Customers change their own password.
+api.post("/account/password", async (req, res) => {
+  if (!isCustomer(req)) return res.status(400).json({ error: "The administrator's password is set in settings.txt." });
+  const user = await users.check(req.user.email, req.body?.current);
+  if (!user) return res.status(400).json({ error: "Your current password isn't right." });
+  try {
+    await users.setPassword(user.id, String(req.body?.password || ""));
+    // Their session key changed: sign them straight back in.
+    await auth.useLoginLink(req, res, auth.loginLink(users.get(user.id), 30));
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+api.get("/sites", (req, res) => {
+  const sites = store.list().filter((m) => canSee(req.user, m)).map(withUrl);
+  // The administrator sees whose site each one is.
+  if (isAdmin(req)) for (const s of sites) if (s.owner) s.ownerEmail = users.get(s.owner)?.email || "(deleted customer)";
+  res.json({ sites });
+});
 
 // ---- new-site wizard ----------------------------------------------------------
 
@@ -699,11 +879,25 @@ api.post("/wizard/refine", async (req, res) => {
   res.json({ jobId: job.id });
 });
 
-api.post("/sites", async (req, res) => {
+function siteLimitReached(req, res) {
   if (isDemo(req) && store.list().filter((m) => m.owner === req.user.id).length >= DEMO_SITES) {
-    return res.status(400).json({ error: `The demo allows ${DEMO_SITES} websites. Delete one to make another.` });
+    res.status(400).json({ error: `The demo allows ${DEMO_SITES} websites. Delete one to make another.` });
+    return true;
   }
-  const owner = isDemo(req) ? req.user.id : undefined;
+  if (isCustomer(req)) {
+    const { plan, sites } = accountStatus(req.user.id);
+    if (!plan || sites >= plan.sites) {
+      res.status(400).json({ error: plan ? `Your plan includes ${plan.sites} website${plan.sites === 1 ? "" : "s"}. Delete one, or ask your hosting provider about upgrading.` : "Your account doesn't have a plan yet. Ask your hosting provider." });
+      return true;
+    }
+  }
+  return false;
+}
+const ownerOf = (req) => (isDemo(req) ? { owner: req.user.id, demo: true } : isCustomer(req) ? { owner: req.user.id } : {});
+
+api.post("/sites", async (req, res) => {
+  if (siteLimitReached(req, res)) return;
+  const { owner, demo } = ownerOf(req);
   // From the wizard: build the full site from the approved concept.
   if (req.body?.concept) {
     const brief = cleanBrief(req.body.brief);
@@ -711,7 +905,8 @@ api.post("/sites", async (req, res) => {
     const requests = Array.isArray(req.body.requests) ? req.body.requests.map((r) => String(r).slice(0, 2000)).slice(0, 20) : [];
     const pageNotes = cleanPageNotes(req.body.pageNotes);
     const name = brief.name || concept.name;
-    const meta = await store.create({ name, prompt: brief.description, owner });
+    if (ai.enabled && demoAiBlocked(req, res)) return;
+    const meta = await store.create({ name, prompt: brief.description, owner, demo });
     if (wizardId(req)) await store.updateMeta(meta.id, { wizardId: wizardId(req) });
     const job = usageContext.run({ user: req.user, siteId: meta.id }, () => startJob("generate", meta.id, async (progress) => {
       try {
@@ -760,12 +955,12 @@ api.post("/sites", async (req, res) => {
   if (!name && !prompt) return res.status(400).json({ error: "Give the site a name or a description." });
 
   if (!prompt || req.body?.blank) {
-    const meta = await store.create({ name: name || "New site", site: createEmptySite(name || "New site"), owner });
+    const meta = await store.create({ name: name || "New site", site: createEmptySite(name || "New site"), owner, demo });
     return res.json({ site: withUrl(meta) });
   }
 
   if (demoAiBlocked(req, res)) return;
-  const meta = await store.create({ name: name || "New site", prompt, owner });
+  const meta = await store.create({ name: name || "New site", prompt, owner, demo });
   const job = usageContext.run({ user: req.user, siteId: meta.id }, () => startJob("generate", meta.id, async (progress) => {
     try {
       const { site } = await ai.generateSite({ name, prompt, onProgress: progress });
@@ -785,6 +980,7 @@ api.post("/sites", async (req, res) => {
 api.post("/sites/:id/regenerate", async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;
+  if (ai.enabled && demoAiBlocked(req, res)) return;
   const prompt = String(req.body?.prompt || meta.prompt || "").trim().slice(0, 8000);
   if (!prompt) return res.status(400).json({ error: "A description is needed to generate a site." });
   await store.updateMeta(meta.id, { status: "generating", error: null, prompt });
@@ -853,9 +1049,10 @@ api.post("/sites/:id/duplicate", async (req, res) => {
   if (!meta) return;
   const draft = await store.getDraft(meta.id);
   if (!draft) return res.status(400).json({ error: "This site has no content yet." });
+  if (siteLimitReached(req, res)) return;
   const name = `${meta.name} (copy)`;
   draft.name = name;
-  const copy = await store.create({ name, prompt: meta.prompt, site: draft });
+  const copy = await store.create({ name, prompt: meta.prompt, site: draft, owner: meta.owner, demo: !!meta.demo });
   res.json({ site: withUrl(copy) });
 });
 
@@ -1022,7 +1219,8 @@ api.post("/sites/:id/ai/post", async (req, res) => {
 
 api.get("/jobs/:id", (req, res) => {
   const job = getJob(req.params.id);
-  if (!job) return res.status(404).json({ error: "This job has expired. Reload the page." });
+  const me = isAdmin(req) ? "admin" : `${req.user.role}:${req.user.id}`;
+  if (!job || (job.owner !== me && !isAdmin(req))) return res.status(404).json({ error: "This job has expired. Reload the page." });
   res.json(publicJob(job));
 });
 

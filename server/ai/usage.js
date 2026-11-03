@@ -45,13 +45,60 @@ export async function recordUsage({ kind, model, usage }) {
     siteId: ctx.siteId || null,
     wizard: ctx.wizard || undefined,
     demo: ctx.user?.role === "demo" ? ctx.user.id : undefined,
+    // The customer account that used it (for plan allowances and billing).
+    account: ctx.user?.role === "user" ? ctx.user.id : undefined,
     input: usage.input_tokens || 0,
     output: usage.output_tokens || 0,
     cacheRead: usage.cache_read_input_tokens || 0,
     cacheWrite: usage.cache_creation_input_tokens || 0,
     cost: Math.round(estimateCost(model, usage) * 1e5) / 1e5,
   };
+  if (entry.account) addToMonth(entry.account, entry.at, entry.cost);
   await fs.appendFile(file, JSON.stringify(entry) + "\n").catch((err) => console.warn("Couldn't record AI usage:", err.message));
+}
+
+// Each customer's AI cost this calendar month, kept in memory (loaded from the
+// log at start-up) so checking an allowance doesn't re-read the log.
+let monthKey = "";
+let monthTotals = new Map();
+const keyOf = (iso) => String(iso).slice(0, 7);
+function addToMonth(account, at, cost) {
+  const key = keyOf(at);
+  if (key !== monthKey) { if (key < monthKey) return; monthKey = key; monthTotals = new Map(); }
+  monthTotals.set(account, (monthTotals.get(account) || 0) + (cost || 0));
+}
+
+export async function loadMonthTotals() {
+  monthKey = keyOf(new Date().toISOString());
+  monthTotals = new Map();
+  let lines = [];
+  try { lines = (await fs.readFile(file, "utf8")).split("\n"); } catch { return; }
+  for (const line of lines) {
+    if (!line.includes('"account"') || !line.includes(`"at":"${monthKey}`)) continue;
+    try { const e = JSON.parse(line); addToMonth(e.account, e.at, e.cost); } catch { /* skip */ }
+  }
+}
+
+/** US$ of AI a customer has used this calendar month. */
+export function accountCostThisMonth(account) {
+  if (keyOf(new Date().toISOString()) !== monthKey) { monthKey = keyOf(new Date().toISOString()); monthTotals = new Map(); }
+  return monthTotals.get(account) || 0;
+}
+
+/** Per-customer totals for one month ("2026-11"), for billing. */
+export async function accountUsage(month) {
+  let lines = [];
+  try { lines = (await fs.readFile(file, "utf8")).split("\n").filter(Boolean); } catch { /* none */ }
+  const out = {};
+  for (const line of lines) {
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (!e.account || keyOf(e.at) !== month) continue;
+    const a = (out[e.account] ||= { calls: 0, cost: 0 });
+    a.calls++;
+    a.cost += e.cost || 0;
+  }
+  return out;
 }
 
 // Totals for a period, by kind of job and by website.
