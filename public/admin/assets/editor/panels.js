@@ -8,6 +8,9 @@ import { followDeploy } from "./deploy-ui.js";
 import { showChecklist, siteIssues } from "./checklist.js";
 import { contrast } from "/admin/shared/checks.js";
 import { LANGUAGES } from "/admin/shared/i18n.js";
+import { SECTION_LIBRARY, LIBRARY_CATEGORIES } from "/admin/shared/library.js";
+import { renderPage } from "/admin/shared/render.js";
+import { reworkSections } from "./section-ai.js";
 import { ensurePrivacyPage } from "/admin/shared/legal.js";
 
 const PALETTES = [
@@ -49,6 +52,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
   // -------------------------------------------------------------- Add -----
 
   function renderAdd() {
+    root.append(h("button", { class: "btn btn-primary btn-block", style: { marginBottom: "12px" }, onclick: openLibrary }, `📚 Section library · ${SECTION_LIBRARY.length} designs`));
     root.append(h("p", { class: "small muted", style: { marginTop: 0 } }, "Drag onto the page, or click to add after the selected item."));
     const groups = {};
     for (const [type, def] of Object.entries(BLOCKS)) (groups[def.group] ||= []).push([type, def]);
@@ -72,6 +76,51 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
         onpointerdown: (e) => canvas.startDrag(e, { kind: "new-section", make: () => createSection({ layout: l.layout }) }, l.label),
         onkeydown: (e) => { if (e.key === "Enter") canvas.insertByClick({ kind: "new-section", make: () => createSection({ layout: l.layout }) }); } },
         h("span", { class: "ic" }, l.layout.split("-").map(() => "▯").join("")), l.label))));
+  }
+
+  // ---------------------------------------------------- Section library -----
+
+  // Ready-made sections shown in this site's own colours and fonts. Click one
+  // to add it after the selected section; with AI, it's then filled in for the business.
+  let libraryCat = "hero";
+  function openLibrary() {
+    const s = state.get();
+    const fill = h("input", { type: "checkbox", checked: s.aiEnabled });
+    const nav = h("nav", { class: "lib-nav" });
+    const grid = h("div", { class: "lib-grid" });
+    const preview = (entry) => {
+      const site = structuredClone(s.site);
+      const page = { ...site.pages[0], sections: [].concat(entry.make()) };
+      site.pages = [page];
+      const html = renderPage(site, page, { editor: true }).replace("</head>", "<style>.eka-header,.eka-footer,.eka-fabs,.eka-ph-tag{display:none!important}body{overflow:hidden;pointer-events:none}.eka-empty{display:none}</style></head>");
+      return h("iframe", { srcdoc: html, loading: "lazy", tabindex: "-1", title: "", sandbox: "" });
+    };
+    const paint = () => {
+      nav.replaceChildren(...LIBRARY_CATEGORIES.map(([id, label]) => h("button", { class: `lib-cat${id === libraryCat ? " on" : ""}`, onclick: () => { libraryCat = id; paint(); } }, label, h("small", {}, String(SECTION_LIBRARY.filter((e) => e.cat === id).length)))));
+      grid.replaceChildren(...SECTION_LIBRARY.filter((e) => e.cat === libraryCat).map((entry) => h("button", { class: "lib-card", title: `Add "${entry.name}"`, onclick: () => add(entry) },
+        h("div", { class: "lib-thumb" }, preview(entry)), h("span", {}, entry.name))));
+      grid.scrollTop = 0;
+      fit();
+    };
+    // Previews are drawn 1200px wide and scaled down to the card.
+    const fit = () => grid.querySelectorAll(".lib-thumb").forEach((t) => t.style.setProperty("--s", t.clientWidth / 1200));
+    const ro = new ResizeObserver(fit);
+    const add = (entry) => {
+      m.close();
+      canvas.insertByClick({ kind: "new-section", make: entry.make, onAdded: fill.checked ? (ids) => reworkSections(state, ids, "fill") : null });
+    };
+    const m = modal({
+      title: "Section library",
+      wide: true,
+      body: h("div", {},
+        h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "wrap", marginBottom: "10px", gap: "8px" } },
+          h("span", { class: "small muted" }, "Shown in this site's colours and fonts. It goes after the selected section; change anything afterwards."),
+          s.aiEnabled ? h("label", { class: "check small" }, fill, "✦ Fill it in for this business with AI (text and photos)") : null),
+        h("div", { class: "lib" }, nav, grid)),
+    });
+    m.el.querySelector(".modal").classList.add("modal-lib");
+    ro.observe(grid);
+    paint();
   }
 
   // --------------------------------------------------------------- AI -----

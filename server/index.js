@@ -1405,6 +1405,29 @@ api.post("/sites/:id/ai", async (req, res) => {
   res.json({ jobId: job.id });
 });
 
+// "Fill with AI" / "Restyle" for one or more sections of a page.
+api.post("/sites/:id/ai/sections", async (req, res) => {
+  if (demoAiBlocked(req, res)) return;
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (!ai.enabled) return res.status(400).json({ error: "This needs AI. You can still change the text and style by hand." });
+  const site = req.body?.site ? normalizeSite(req.body.site) : await store.getDraft(meta.id);
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).slice(0, 4);
+  const sections = ids.map((id) => findNode(site, id)).filter((f) => f?.kind === "section").map((f) => f.node);
+  if (!sections.length) return res.status(400).json({ error: "Choose a section first." });
+  const mode = req.body?.mode === "restyle" ? "restyle" : "fill";
+  const wishes = String(req.body?.wishes || "").trim().slice(0, 500);
+  const job = startJob(mode, meta.id, async (progress) => {
+    const result = await ai.reworkSections({ site, sections, mode, wishes, about: meta.prompt || "", onProgress: progress });
+    // New pictures get stock photos (or placeholder artwork).
+    const holder = { ...site, pages: [{ ...site.pages[0], sections: result.sections }] };
+    if (mode === "fill") for (const sec of holder.pages[0].sections) for (const c of sec.columns) for (const bl of c.blocks) if (bl.type === "image" && /\/placeholder-/.test(bl.props.src)) bl.props.src = "";
+    await fillImages(holder, { dir: store.mediaDir(meta.id), urlPrefix: `/_m/${meta.id}/`, avoid: JSON.stringify(site) });
+    return { sections: holder.pages[0].sections };
+  });
+  res.json({ jobId: job.id });
+});
+
 // "Write a post with AI": a draft blog post in the site's style, with a cover photo.
 api.post("/sites/:id/ai/post", async (req, res) => {
   if (demoAiBlocked(req, res)) return;

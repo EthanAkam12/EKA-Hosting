@@ -504,7 +504,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
   }
 
   function applyDrop(payload, target) {
-    let selectId = null;
+    let selectId = null, added = null;
     state.mutate((site) => {
       const page = site.pages.find((p) => p.id === state.get().pageId) || site.pages[0];
       let node = null;
@@ -521,6 +521,7 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
         const sections = payload.kind === "new-section" ? makeSections(payload) : [node];
         page.sections.splice(target.index, 0, ...sections);
         selectId = sections[0].id;
+        if (payload.kind === "new-section") added = sections.map((x) => x.id);
       } else if (target.type === "block") {
         const col = findNode(site, target.columnId);
         if (!col) return;
@@ -533,13 +534,14 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
       }
     }, { label: payload.kind === "new-block" ? `Added ${BLOCKS[payload.type]?.label.toLowerCase() || "block"}` : payload.kind === "new-section" ? "Added section" : "Moved" });
     if (selectId) { state.select(selectId); scrollTo(selectId); }
+    if (added) payload.onAdded?.(added);
   }
 
   // Click-to-add: put the new item next to whatever is selected.
   function insertByClick(payload) {
     const s = state.get();
     const sel = s.selectedId ? findNode(s.site, s.selectedId) : null;
-    let selectId = null;
+    let selectId = null, added = null;
     state.mutate((site) => {
       const page = site.pages.find((p) => p.id === s.pageId) || site.pages[0];
       const f = sel ? findNode(site, sel.node.id) : null;
@@ -553,11 +555,13 @@ export function createCanvas({ state, iframe, overlay, frameWrap, onRequestMedia
       } else {
         const sections = makeSections(payload);
         selectId = sections[0].id;
+        added = sections.map((x) => x.id);
         const sectionIdx = f ? page.sections.indexOf(f.kind === "section" ? f.node : f.section) : -1;
         page.sections.splice(sectionIdx >= 0 ? sectionIdx + 1 : page.sections.length, 0, ...sections);
       }
     }, { label: payload.kind === "new-block" ? `Added ${BLOCKS[payload.type]?.label.toLowerCase() || "block"}` : "Added section" });
     if (selectId) { state.select(selectId); scrollTo(selectId); }
+    if (added) payload.onAdded?.(added);
   }
 
   // Plays an element's entrance animation once (animations are off while editing).

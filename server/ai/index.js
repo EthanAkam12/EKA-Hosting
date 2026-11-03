@@ -10,7 +10,7 @@ import { createAnthropicProvider } from "./anthropic.js";
 import { applyChanges } from "./changes.js";
 import { partialDesign } from "./partial.js";
 import { createDemoProvider } from "./demo.js";
-import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, POST_SYSTEM, STARTER_POSTS_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, postPrompt, starterPostsPrompt, describeLayout, describePage } from "./prompts.js";
+import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, POST_SYSTEM, STARTER_POSTS_SYSTEM, SECTION_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, postPrompt, starterPostsPrompt, sectionPrompt, describeLayout, describePage } from "./prompts.js";
 
 function pickProvider() {
   const choice = (process.env.AI_PROVIDER || "").toLowerCase();
@@ -154,6 +154,16 @@ export function createAi({ provider = pickProvider() } = {}) {
       const page = normalizePage({ ...raw, post: { ...raw.post, date: new Date().toISOString().slice(0, 10), draft: true } }, 1);
       if (!page.post) throw new Error("The AI's answer wasn't in the expected format. Please try again.");
       return { page };
+    },
+
+    // "Fill with AI" (text for this business) or "Restyle" (new design, same words) for some sections.
+    async reworkSections({ site, sections, mode, wishes = "", about = "", onProgress }) {
+      const text = await provider.complete({ kind: mode === "restyle" ? "restyle" : "fill", system: SECTION_SYSTEM, prompt: sectionPrompt({ site, sections, mode, wishes, about }), model: editModel, onProgress });
+      const data = parseJson(text);
+      const out = (Array.isArray(data.sections) ? data.sections : data.section ? [data.section] : []).map(normalizeSection).filter(Boolean);
+      if (out.length !== sections.length) throw new Error("The AI's answer didn't fit. Please try again.");
+      out.forEach((sec, i) => { sec.id = sections[i].id; });
+      return { sections: out };
     },
 
     // The first few posts for a new blog (one AI call for all of them).

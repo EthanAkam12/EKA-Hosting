@@ -49,11 +49,13 @@ export async function waitForJob(jobId, onProgress) {
 }
 
 let toastBox;
-export function toast(message, { error = false, ms = 3200 } = {}) {
+// `sticky` toasts stay until removed (the returned element's .remove()).
+export function toast(message, { error = false, ms = 3200, sticky = false } = {}) {
   if (!toastBox) document.body.append((toastBox = h("div", { class: "toasts", role: "status", "aria-live": "polite" })));
-  const t = h("div", { class: `toast${error ? " toast-err" : ""}` }, message);
+  const t = h("div", { class: `toast${error ? " toast-err" : ""}` }, sticky ? h("span", { class: "spinner", style: { width: "12px", height: "12px", borderWidth: "2px", marginRight: "8px", display: "inline-block", verticalAlign: "-1px" } }) : null, message);
   toastBox.append(t);
-  setTimeout(() => t.remove(), error ? ms * 2 : ms);
+  if (!sticky) setTimeout(() => t.remove(), error ? ms * 2 : ms);
+  return t;
 }
 
 export function modal({ title, body, footer = [], wide = false, onClose }) {

@@ -4,6 +4,7 @@ import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS,
 import { h, api } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { readabilityIssues } from "/admin/shared/checks.js";
+import { reworkSections, restyleDialog } from "./section-ai.js";
 
 export function createInspector({ state, canvas, root, head, pickImage, askAi }) {
   function linkOptions() {
@@ -77,6 +78,9 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     head.textContent = fromColumn ? "Column (section settings)" : "Section";
     if (fromColumn) root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Drag blocks from the Add tab into this column. The settings below apply to the whole section."));
     root.append(actions(section.id));
+    if (state.get().aiEnabled) root.append(h("div", { class: "row ai-row", style: { margin: "0 0 12px", gap: "6px" } },
+      h("button", { class: "btn btn-sm grow", title: "Rewrite this section's text (and find photos) for this business", onclick: () => reworkSections(state, [section.id], "fill") }, "✦ Fill with AI"),
+      h("button", { class: "btn btn-sm grow", title: "A new design for this section, keeping its words", onclick: () => restyleDialog(state, [section.id]) }, "✦ Restyle")));
     tabs({ content: "Layout", style: "Style", advanced: "Advanced" });
     readability(section);
     if (tab === "style") return styleControls(section, "section");

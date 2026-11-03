@@ -294,3 +294,27 @@ export function starterPostsPrompt({ site, brief }) {
   const home = site.pages.find((p) => p.slug === "index");
   return `THE WEBSITE: ${site.name}\n${formatBrief(brief)}\nHome page (for tone):\n${JSON.stringify(home?.sections || []).slice(0, 8000)}\n\nWrite three varied, useful first posts that this business's customers would actually want to read (e.g. a how-to, a behind-the-scenes or story post, and a seasonal or buying-guide post).`;
 }
+
+// ---------------------------------------------------------------------------
+// One section at a time: "Fill with AI" and "Restyle"
+// ---------------------------------------------------------------------------
+
+export const SECTION_SYSTEM = `${GENERATE_SYSTEM}
+
+YOU ARE WORKING ON ONE PART OF A PAGE: the section(s) given, nothing else.
+Respond with ONLY a JSON object: { "sections": [SECTION, ...] } with the same number of sections, in the same order, keeping each section's "id".
+- FILL: rewrite every piece of text (headings, paragraphs, buttons, cards, lists, prices, reviews, FAQs, menu items, form labels and drop-down choices) so it's specific to THIS business, in its tone. Keep the layout, block types, styles and ids exactly. Image URLs stay as they are ("" stays ""), but give empty images alt text describing a concrete photo of this business, and set "bgPhoto" for photo backgrounds. Use real details given (phone, email, address, services, prices); never invent facts that could mislead; reviews: write clearly-marked samples ("Sample review") unless real ones are given.
+- RESTYLE: keep every word, link, image and form field. Change the design: layout and column arrangement, section background, card styles, spacing, STYLE settings (colours from the theme, borders, shadows, radius, an entrance animation, a photo background with a tint if it suits), and you may swap blocks for equivalent ones showing the same words (e.g. a list into cards). Make it clearly different and polished, matching the site's theme.`;
+
+function siteSummary(site, about = "") {
+  const text = site.pages.slice(0, 4).flatMap((p) => p.sections.flatMap((sec) => sec.columns.flatMap((c) => c.blocks.map((bl) => bl.props.text || bl.props.html || bl.props.title || "")))).join(" ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 2500);
+  const biz = Object.entries(site.business || {}).filter(([k, v]) => v && k !== "contactButton").map(([k, v]) => `${k}: ${v}`).join("; ");
+  return `THE BUSINESS: ${site.name}${about ? `\nThe owner's description: ${about}` : ""}${biz ? `\nDetails: ${biz}` : ""}\nTheme colours: ${JSON.stringify(site.theme.colors)}\nWhat the site says so far: ${text}`;
+}
+
+export function sectionPrompt({ site, sections, mode, wishes = "", about = "" }) {
+  return [
+    { text: `${languageRule(site.lang) ? `${languageRule(site.lang)}\n\n` : ""}${siteSummary(site, about)}`, cache: true },
+    { text: `${mode === "restyle" ? "RESTYLE" : "FILL"} these section(s)${wishes ? `. The owner says: ${wishes}` : ""}:\n${JSON.stringify(sections)}` },
+  ];
+}
