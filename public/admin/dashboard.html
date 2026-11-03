@@ -43,6 +43,20 @@
   .gs-steps li:last-child { border-bottom: 0; }
   .gs-steps li.done strong { color: var(--muted); text-decoration: line-through; font-weight: 500; }
   .gs-tick { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-strong); display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; }
+  .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .stat-tile { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat-num { font-size: 26px; font-weight: 700; line-height: 1.2; }
+  .stat-chart-wrap { position: relative; }
+  .stat-chart { width: 100%; height: auto; display: block; }
+  .stat-chart .bar { fill: var(--brand); }
+  .stat-chart .grid { stroke: #e9ebf0; stroke-width: 1; }
+  .stat-chart .axis { fill: var(--muted); font-size: 11px; }
+  .stat-chart .hit { fill: transparent; }
+  .stat-chart .hit:hover { fill: rgba(79, 70, 229, .07); }
+  .stat-tip { position: absolute; top: 20px; transform: translateX(-50%); background: #1c2230; color: #fff; font-size: 12.5px; padding: 5px 9px; border-radius: 6px; white-space: nowrap; pointer-events: none; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  .report-preview { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; background: #f4f5f8; padding: 12px; border-radius: 8px; max-height: 50vh; overflow: auto; }
   .meter { display: inline-block; width: 120px; height: 8px; background: #fff; border-radius: 99px; overflow: hidden; border: 1px solid #d9dcff; }
   .meter span { display: block; height: 100%; background: var(--brand); }
   .gs-steps li.done .gs-tick { background: #16a34a; border-color: #16a34a; }

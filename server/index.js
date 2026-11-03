@@ -18,6 +18,7 @@ import { createAuth } from "./auth.js";
 import { Users, publicUser } from "./users.js";
 import { createLicence } from "./licence.js";
 import { createBackups } from "./backup.js";
+import { createStats } from "./stats.js";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { createAi, applyBrief } from "./ai/index.js";
@@ -121,6 +122,9 @@ const BUILDER_URL = (process.env.BUILDER_URL || "").replace(/\/+$/, "");
 
 const store = new Store(DATA_DIR);
 await store.init();
+// Cookie-free visitor counts for the sites served here.
+const stats = createStats({ siteDir: (id) => store.dir(id) });
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => stats.flush().finally(() => process.exit(0)));
 const users = new Users(DATA_DIR);
 await users.init();
 const auth = createAuth({ password: ADMIN_PASSWORD, secret: SESSION_SECRET, secure: SECURE_COOKIES, users });
@@ -132,7 +136,20 @@ const licence = await createLicence({
 });
 const ai = createAi();
 
-const app = express();
+// Express 4 doesn't catch errors from async handlers: without this, one
+// failed request (e.g. publishing a site that's still being built) would
+// stop the whole builder. Errors go to the error handler at the end instead.
+function catchAsync(router) {
+  for (const m of ["get", "post", "put", "patch", "delete", "use", "all"]) {
+    const orig = router[m].bind(router);
+    router[m] = (...args) => orig(...args.map((fn) => (typeof fn === "function" && fn.length < 4 && !fn.stack
+      ? (req, res, next) => { try { const r = fn(req, res, next); if (r && typeof r.catch === "function") r.catch(next); } catch (err) { next(err); } }
+      : fn)));
+  }
+  return router;
+}
+
+const app = catchAsync(express());
 app.disable("x-powered-by");
 if (process.env.TRUST_PROXY) app.set("trust proxy", process.env.TRUST_PROXY === "true" ? true : process.env.TRUST_PROXY);
 app.use(compression());
@@ -199,6 +216,8 @@ async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = 
     return res.status(404).type("html").send(simplePage("Page not found", `<a href="${base}">Go to the ${escapeHtml(home.title)} page</a>`));
   }
   const formAction = `/_forms/${meta.id}`;
+  // Count real visits (not previews, the review page or the owner looking at it).
+  if (!draft && !review && !auth.isAuthed(req)) stats.record({ siteId: meta.id, path: pageUrl(page, "/"), ip: req.ip, ua: req.get("user-agent"), referer: req.get("referer"), host: req.hostname });
   // On the site's own address, tell search engines the page's one true URL.
   const canonical = live ? origin + pageUrl(page, "/") : undefined;
   if (review) {
@@ -251,6 +270,58 @@ const backups = createBackups({
   },
 });
 setTimeout(() => backups.daily(), 60_000).unref();
+
+// ---- monthly email report to each website's owner ----------------------------------
+
+const monthName = (d) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+async function monthlyReport(meta, now) {
+  // The calendar month before `now`.
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+  const days = end.getUTCDate();
+  const prevEnd = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 0));
+  const [m, p] = await Promise.all([stats.summary(meta.id, { days, end }), stats.summary(meta.id, { days: prevEnd.getUTCDate(), end: prevEnd })]);
+  const from = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1), to = from + days * 86400000;
+  const subs = (await store.listSubmissions(meta.id)).filter((x) => { const t = Date.parse(x.at); return t >= from && t < to; });
+  const count = (k) => subs.filter((x) => (x.kind || "contact") === k).length;
+  const change = (a, b) => (b ? ` (${a >= b ? "+" : ""}${Math.round(((a - b) / b) * 100)}% on the month before)` : "");
+  const owner = meta.owner && users.get(meta.owner);
+  const lines = [
+    `Here's how ${meta.name} did in ${monthName(end)}.`,
+    "",
+    `Visitors: ${m.visitors}${change(m.visitors, p.visitors)}`,
+    `Pages viewed: ${m.views}${change(m.views, p.views)}`,
+    count("booking") ? `Booking requests: ${count("booking")}` : "",
+    count("enquiry") ? `Enquiries: ${count("enquiry")}` : "",
+    count("contact") ? `Messages: ${count("contact")}` : "",
+    count("newsletter") ? `Newsletter sign-ups: ${count("newsletter")}` : "",
+    "",
+    m.pages.length ? `Most visited pages:\n${m.pages.slice(0, 5).map(([pg, n]) => `  ${pg}  ${n}`).join("\n")}` : "",
+    m.refs.length ? `\nWhere visitors came from:\n${m.refs.slice(0, 5).map(([r, n]) => `  ${r}  ${n}`).join("\n")}` : "",
+    "",
+    `See more, or update your website: ${BUILDER_URL || ""}/admin/sites/${meta.id}`,
+    "",
+    "(Visits are counted without cookies. To stop these emails, untick \"Monthly report\" in the Site tab.)",
+  ].filter((l, i, a) => l !== "" || a[i - 1] !== "");
+  return { to: owner?.email || meta.formEmail || "", subject: `Your website in ${monthName(end)}: ${m.visitors} visitors`, text: lines.join("\n") };
+}
+
+async function sendMonthlyReports() {
+  if (!mailer.enabled) return;
+  const now = new Date();
+  const key = now.toISOString().slice(0, 7);
+  for (const meta of store.list()) {
+    // Only sites that were live for (some of) last month.
+    if (meta.demo || !meta.publishedAt || meta.publishedAt >= `${key}-01` || meta.monthlyReport === false || meta.lastReport === key) continue;
+    try {
+      const report = await monthlyReport(meta, now);
+      if (report.to) await mailer.send({ to: report.to, subject: report.subject, text: report.text, fromName: "Your website" });
+      await store.updateMeta(meta.id, { lastReport: key });
+    } catch (err) { console.warn(`Monthly report for ${meta.name} not sent:`, err.message); }
+  }
+}
+// Checked hourly; each website's report goes once, early in the month.
+setInterval(() => sendMonthlyReports().catch(() => {}), 3600_000).unref();
+setTimeout(() => sendMonthlyReports().catch(() => {}), 5 * 60_000).unref();
 setInterval(() => backups.daily(), 3600_000).unref();
 const stock = createStock();
 
@@ -424,7 +495,7 @@ app.use("/admin/login-assets", express.static(path.join(ROOT, "public/admin/logi
 // Admin API
 // ---------------------------------------------------------------------------
 
-const api = express.Router();
+const api = catchAsync(express.Router());
 api.use(express.json({ limit: "8mb" }));
 
 // CSRF guard: state-changing calls must be JSON or carry our custom header,
@@ -508,7 +579,7 @@ async function upsertHostCustomer(body) {
   return users.get(user.id);
 }
 
-const host = express.Router();
+const host = catchAsync(express.Router());
 host.use(express.json({ limit: "64kb" }));
 host.use((req, res, next) => (hostAuthed(req, res) ? next() : undefined));
 host.post("/sso", async (req, res) => {
@@ -1281,6 +1352,7 @@ api.patch("/sites/:id/meta", async (req, res) => {
   }
   if (req.body.deploy && typeof req.body.deploy === "object") patch.deploy = cleanDeploySettings(req.body.deploy, meta.deploy || {});
   if (req.body.notes && typeof req.body.notes === "object") patch.notes = cleanPageNotes(req.body.notes);
+  if (typeof req.body.monthlyReport === "boolean") patch.monthlyReport = req.body.monthlyReport;
   const updated = await store.updateMeta(meta.id, patch);
   pageCache.clear();
   res.json({ meta: withUrl(updated) });
@@ -1310,7 +1382,9 @@ api.post("/sites/:id/publish", async (req, res) => {
   if (demoBlocked(req, res, "Publishing")) return;
   const meta = siteOr404(req, res);
   if (!meta) return;
+  if (!req.body?.site && meta.status === "generating") return res.status(400).json({ error: "This site is still being built. Try again in a moment." });
   if (req.body?.site) await store.saveDraft(meta.id, req.body.site);
+  if (!(await store.getDraft(meta.id))) return res.status(400).json({ error: "There's nothing to publish yet." });
   const updated = await store.publish(meta.id);
   // Sites set up to publish to outside hosting upload their files now.
   const jobId = updated.deploy?.enabled ? startDeployJob(updated).id : null;
@@ -1583,6 +1657,32 @@ api.delete("/sites/:id/media/:file", async (req, res) => {
   if (!meta) return;
   await deleteUpload(store.mediaDir(meta.id), req.params.file);
   res.json({ ok: true });
+});
+
+// Visitor statistics: the last 7, 30 or 90 days.
+api.get("/sites/:id/stats", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  const [now, before] = await Promise.all([stats.summary(meta.id, { days }), stats.summary(meta.id, { days, end: new Date(Date.now() - days * 86400000) })]);
+  const subs = (await store.listSubmissions(meta.id)).filter((x) => Date.now() - Date.parse(x.at) < days * 86400000);
+  const kinds = {};
+  for (const x of subs) kinds[x.kind || "contact"] = (kinds[x.kind || "contact"] || 0) + 1;
+  res.json({ stats: now, previous: { views: before.views, visitors: before.visitors }, forms: kinds, hosted: !meta.deploy?.enabled });
+});
+
+// The monthly email report: preview it or send it now.
+api.post("/sites/:id/report", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const report = await monthlyReport(meta, new Date());
+  if (!req.body?.send) return res.json({ report });
+  if (!mailer.enabled) return res.status(400).json({ error: "This server can't send email yet (SMTP settings in settings.txt)." });
+  if (!report.to) return res.status(400).json({ error: "Add an email address in Site → Forms first." });
+  try {
+    await mailer.send({ to: report.to, subject: report.subject, text: report.text, fromName: "Your website" });
+    res.json({ report, sent: true });
+  } catch (err) { res.status(500).json({ error: `Couldn't send it: ${err.message}` }); }
 });
 
 api.get("/sites/:id/submissions", async (req, res) => {

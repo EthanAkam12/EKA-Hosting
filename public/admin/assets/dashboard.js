@@ -165,6 +165,7 @@ function card(site) {
     h("div", { class: "card-actions" },
       ready ? h("a", { class: "btn btn-sm btn-primary", href: `/admin/sites/${site.id}` }, "Edit") : null,
       site.publishedAt ? h("a", { class: "btn btn-sm", href: site.liveUrl, target: "_blank", rel: "noopener" }, "View live ↗") : null,
+      site.publishedAt ? h("button", { class: "btn btn-sm", onclick: () => openStats(site) }, "📈 Stats") : null,
       h("span", { class: "grow" }),
       h("div", { class: "menu" }, menuBtn, menuList),
     ),
@@ -260,4 +261,92 @@ async function openUsage() {
       table(Object.entries(thisMonth.bySite).map(([id, v]) => [names[id] || ({ "(not saved yet)": "Designs not built yet", "(demo visitors)": "Demo visitors" })[id] || "Deleted website", v])),
     ),
   });
+}
+
+// ---- visitor statistics (counted without cookies) ---------------------------------
+
+async function openStats(site) {
+  let days = 30;
+  const body = h("div", {}, h("p", { class: "muted" }, "Loading…"));
+  modal({ title: `${site.name}: visitors`, wide: true, body });
+  async function paint() {
+    const { stats, previous, forms, hosted } = await api(`/sites/${site.id}/stats?days=${days}`);
+    const change = (a, b) => (b ? h("span", { class: "small", style: { color: a >= b ? "#15803d" : "var(--danger)", fontWeight: 600 } }, ` ${a >= b ? "▲" : "▼"} ${Math.abs(Math.round(((a - b) / b) * 100))}%`) : null);
+    const tile = (label, value, extra) => h("div", { class: "stat-tile" }, h("div", { class: "small muted" }, label), h("div", { class: "stat-num" }, String(value), extra));
+    const leads = (forms.booking || 0) + (forms.enquiry || 0) + (forms.contact || 0);
+    const list = (title, rows, empty) => h("div", {}, h("h3", { style: { fontSize: "14px" } }, title), rows.length
+      ? h("table", { class: "usage-table" }, rows.map(([k, n]) => h("tr", {}, h("td", {}, k), h("td", {}, String(n)))))
+      : h("p", { class: "small muted" }, empty));
+    const dev = stats.devices, devTotal = Object.values(dev).reduce((a, b) => a + b, 0);
+    body.replaceChildren(
+      h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "12px" } },
+        h("div", { class: "chips" }, [7, 30, 90].map((d) => h("span", { class: `chip${d === days ? " on" : ""}`, role: "button", tabindex: "0", onclick: () => { days = d; paint(); } }, `Last ${d} days`))),
+        h("span", { class: "small muted" }, "Counted without cookies; bots and your own previews aren't included.")),
+      hosted ? "" : h("div", { class: "notice", style: { marginBottom: "12px" } }, "This site is published to the customer's own hosting, so visits there aren't counted here. Their host's control panel has visitor statistics."),
+      h("div", { class: "stat-tiles" },
+        tile("Visitors", stats.visitors, change(stats.visitors, previous.visitors)),
+        tile("Pages viewed", stats.views, change(stats.views, previous.views)),
+        tile("Enquiries & bookings", leads),
+        tile("Visitors on phones", devTotal ? `${Math.round(((dev.mobile || 0) / devTotal) * 100)}%` : "–")),
+      barChart(stats.daily),
+      h("div", { class: "grid2", style: { marginTop: "14px" } },
+        list("Most visited pages", stats.pages, "No visits yet."),
+        list("Where visitors came from", stats.refs, "Mostly typed in or from bookmarks so far.")),
+      reportSettings(site),
+    );
+  }
+  paint().catch((e) => body.replaceChildren(h("p", { class: "notice notice-err" }, e.message)));
+}
+
+// One series (visitors per day): bars in the brand colour, hover for the numbers.
+function barChart(daily) {
+  const W = 760, H = 180, pad = { l: 34, r: 8, t: 10, b: 22 };
+  const max = Math.max(4, ...daily.map((d) => d.visitors));
+  const nice = Math.ceil(max / 4) * 4;
+  const step = (W - pad.l - pad.r) / daily.length, bw = Math.max(2, step - 2);
+  const y = (v) => pad.t + (H - pad.t - pad.b) * (1 - v / nice);
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "stat-chart", role: "img", "aria-label": `Visitors per day: ${daily.reduce((a, d) => a + d.visitors, 0)} in total, most on one day ${max}` });
+  for (let i = 0; i <= 4; i++) {
+    const v = (nice / 4) * i;
+    svg.append(el("line", { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: "grid" }), el("text", { x: pad.l - 6, y: y(v) + 4, class: "axis", "text-anchor": "end" }, String(v)));
+  }
+  const tip = h("div", { class: "stat-tip", hidden: true });
+  daily.forEach((d, i) => {
+    const x = pad.l + i * step + 1, top = y(d.visitors), hgt = H - pad.b - top;
+    const r = Math.min(4, bw / 2, hgt);
+    // Rounded at the top, square on the baseline.
+    const path = hgt > 0 ? `M${x},${H - pad.b}V${top + r}Q${x},${top} ${x + r},${top}H${x + bw - r}Q${x + bw},${top} ${x + bw},${top + r}V${H - pad.b}Z` : "";
+    if (path) svg.append(el("path", { d: path, class: "bar" }));
+    const hit = el("rect", { x: pad.l + i * step, y: pad.t, width: step, height: H - pad.t - pad.b, class: "hit" });
+    hit.addEventListener("mouseenter", () => {
+      tip.hidden = false;
+      tip.textContent = `${new Date(d.day + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}: ${d.visitors} visitor${d.visitors === 1 ? "" : "s"}, ${d.views} page${d.views === 1 ? "" : "s"}`;
+      const pct = ((pad.l + i * step + step / 2) / W) * 100;
+      tip.style.left = `${pct}%`;
+      // Keep it inside the chart at the edges.
+      tip.style.transform = pct > 75 ? "translateX(-100%)" : pct < 25 ? "none" : "translateX(-50%)";
+    });
+    hit.addEventListener("mouseleave", () => { tip.hidden = true; });
+    svg.append(hit);
+    if (daily.length <= 31 ? i % Math.ceil(daily.length / 6) === 0 : i % 15 === 0) svg.append(el("text", { x: pad.l + i * step + step / 2, y: H - 6, class: "axis", "text-anchor": "middle" }, new Date(d.day + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short" })));
+  });
+  return h("div", { class: "stat-chart-wrap" }, h("div", { class: "small muted", style: { margin: "14px 0 4px" } }, "Visitors per day"), svg, tip);
+}
+
+function reportSettings(site) {
+  const on = h("input", { type: "checkbox", checked: site.monthlyReport !== false, onchange: async (e) => {
+    try { await api(`/sites/${site.id}/meta`, { method: "PATCH", body: { monthlyReport: e.target.checked } }); site.monthlyReport = e.target.checked; toast("Saved."); } catch (err) { toast(err.message, { error: true }); }
+  } });
+  return h("div", { style: { marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--line)" } },
+    h("label", { class: "check" }, on, "Email a monthly report (visitors, enquiries and bookings) early each month"),
+    h("div", { class: "row", style: { marginTop: "8px" } },
+      h("button", { class: "btn btn-sm", onclick: async () => {
+        const { report } = await api(`/sites/${site.id}/report`, { method: "POST", body: {} });
+        modal({ title: report.subject, body: h("div", {}, h("p", { class: "small muted", style: { marginTop: 0 } }, `To: ${report.to || "(no email yet: add one in the editor's Site tab → Forms)"}`), h("pre", { class: "report-preview" }, report.text)),
+          footer: [h("button", { class: "btn btn-primary", onclick: async (e) => {
+            try { await api(`/sites/${site.id}/report`, { method: "POST", body: { send: true } }); toast("Sent."); e.target.closest(".modal-backdrop").remove(); } catch (err) { toast(err.message, { error: true }); }
+          } }, "Send it now")] });
+      } }, "Preview last month's report")));
 }
