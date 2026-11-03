@@ -47,3 +47,28 @@ test("Fill with AI / Restyle: one section, same ids, the business described", as
   const bad = createAi({ provider: { name: "claude", model: "m", complete: async () => JSON.stringify({ sections: [] }) } });
   await assert.rejects(bad.reworkSections({ site, sections: [sec], mode: "fill" }), /didn't fit/);
 });
+
+test("shared sections: editing one copy changes every copy, on any page", async () => {
+  const { syncSharedSections, createPage, reId } = await import("../shared/schema.js");
+  const site = normalizeSite(createEmptySite("S"));
+  const cta = createSection({ background: "primary" }, [[createBlock("heading", { text: "Call us today" })]]);
+  cta.shared = { id: "sh_abc123", name: "Call to action" };
+  const about = createPage("About");
+  about.sections = [reId(cta)];
+  site.pages[0].sections = [cta];
+  site.pages.push(about);
+  const before = normalizeSite(site);
+  const after = structuredClone(before);
+  after.pages[1].sections[0].columns[0].blocks[0].props.text = "Call us now!";
+  after.pages[1].sections[0].props.background = "dark";
+  const synced = normalizeSite(syncSharedSections(before, after));
+  assert.equal(synced.pages[0].sections[0].columns[0].blocks[0].props.text, "Call us now!");
+  assert.equal(synced.pages[0].sections[0].props.background, "dark");
+  assert.equal(synced.pages[0].sections[0].id, cta.id, "each copy keeps its own id");
+  assert.notEqual(synced.pages[0].sections[0].columns[0].blocks[0].id, synced.pages[1].sections[0].columns[0].blocks[0].id, "and its own block ids");
+  // A copy that stopped sharing is left alone.
+  delete after.pages[0].sections[0].shared;
+  after.pages[1].sections[0].columns[0].blocks[0].props.text = "Changed again";
+  const apart = normalizeSite(syncSharedSections(normalizeSite(synced), after));
+  assert.notEqual(apart.pages[0].sections[0].columns[0].blocks[0].props.text, "Changed again");
+});

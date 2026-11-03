@@ -34,7 +34,7 @@ import { ownerEmail, visitorEmail } from "./form-mail.js";
 import yazl from "yazl";
 import { renderPage, pageUrl, pageAtPath, sitemapXml } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
-import { createEmptySite, normalizeSite, normalizePage, findNode, slugify } from "../shared/schema.js";
+import { createEmptySite, normalizeSite, normalizePage, normalizeSection, findNode, slugify } from "../shared/schema.js";
 import { ensurePrivacyPage } from "../shared/legal.js";
 import { LANGUAGES } from "../shared/i18n.js";
 
@@ -1403,6 +1403,32 @@ api.post("/sites/:id/ai", async (req, res) => {
     return { site: result.site, summary: result.summary, changed: result.changed };
   });
   res.json({ jobId: job.id });
+});
+
+// ---- "My sections": designs saved to reuse on any of your websites -------------
+
+const SAVED_DIR = path.join(DATA_DIR, "saved-sections");
+await fs.mkdir(SAVED_DIR, { recursive: true });
+const savedFile = (req) => path.join(SAVED_DIR, `${isAdmin(req) ? "admin" : `${req.user.role}-${req.user.id}`}.json`);
+async function readSaved(req) {
+  try { return JSON.parse(await fs.readFile(savedFile(req), "utf8")); } catch { return []; }
+}
+
+api.get("/saved-sections", async (req, res) => res.json({ saved: await readSaved(req) }));
+api.post("/saved-sections", async (req, res) => {
+  const sections = (Array.isArray(req.body?.sections) ? req.body.sections : []).slice(0, 6).map(normalizeSection).filter(Boolean);
+  if (!sections.length) return res.status(400).json({ error: "Nothing to save." });
+  const list = await readSaved(req);
+  if (list.length >= 200) return res.status(400).json({ error: "You've saved 200 sections. Delete some first." });
+  const item = { id: crypto.randomBytes(6).toString("hex"), name: String(req.body?.name || "").trim().slice(0, 60) || "Saved section", siteId: /^[a-f0-9]{16}$/.test(req.body?.siteId || "") ? req.body.siteId : null, savedAt: new Date().toISOString(), sections };
+  list.unshift(item);
+  await fs.writeFile(savedFile(req), JSON.stringify(list));
+  res.json({ item });
+});
+api.delete("/saved-sections/:sid", async (req, res) => {
+  const list = (await readSaved(req)).filter((x) => x.id !== req.params.sid);
+  await fs.writeFile(savedFile(req), JSON.stringify(list));
+  res.json({ ok: true });
 });
 
 // "Fill with AI" / "Restyle" for one or more sections of a page.

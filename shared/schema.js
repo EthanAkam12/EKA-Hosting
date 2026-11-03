@@ -779,7 +779,38 @@ export function normalizeSection(section) {
     const extra = cols.splice(want);
     for (const c of extra) cols[want - 1].blocks.push(...c.blocks);
   }
-  return withStyle({ id: str(section.id) || uid("s"), type: "section", props: p, columns: cols }, section.style);
+  const out = withStyle({ id: str(section.id) || uid("s"), type: "section", props: p, columns: cols }, section.style);
+  // A shared section: every copy with the same id changes together.
+  if (isObj(section.shared) && /^[\w-]{4,40}$/.test(str(section.shared.id))) out.shared = { id: section.shared.id, name: str(section.shared.name).slice(0, 60) || "Shared section" };
+  return out;
+}
+
+// ---- shared sections ----------------------------------------------------------
+
+const sharedKey = (sec) => JSON.stringify({ ...sec, id: undefined }).replace(/"id":"[^"]*",?/g, "");
+
+/**
+ * After a change, copies whichever copy of a shared section was edited to
+ * its other copies (on any page), with fresh ids for the copies' insides.
+ * `before` is the site before the change. Mutates and returns `after`.
+ */
+export function syncSharedSections(before, after) {
+  const all = (site) => site.pages.flatMap((p) => p.sections.filter((x) => x.shared));
+  const prev = new Map(all(before).map((x) => [x.id, sharedKey(x)]));
+  const groups = new Map();
+  for (const sec of all(after)) (groups.get(sec.shared.id) || groups.set(sec.shared.id, []).get(sec.shared.id)).push(sec);
+  for (const copies of groups.values()) {
+    if (copies.length < 2) continue;
+    const changed = copies.find((c) => prev.has(c.id) && prev.get(c.id) !== sharedKey(c));
+    if (!changed) continue;
+    for (const other of copies) {
+      if (other === changed || sharedKey(other) === sharedKey(changed)) continue;
+      const fresh = reId(changed);
+      Object.assign(other, { props: fresh.props, columns: fresh.columns, shared: { ...changed.shared } });
+      if (fresh.style) other.style = fresh.style; else delete other.style;
+    }
+  }
+  return after;
 }
 
 export function normalizePage(page, index = 0) {

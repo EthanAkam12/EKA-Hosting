@@ -1,5 +1,6 @@
 // Editor entry point: loads the site and wires the canvas, panels and top bar together.
 
+import { saveSection } from "./my-sections.js";
 import { h, api, waitForJob, toast, modal, confirmDialog, timeAgo, demoBanner } from "../ui.js";
 import { createState } from "./state.js";
 import { createCanvas } from "./canvas.js";
@@ -61,6 +62,7 @@ function openContextMenu(id, x, y) {
     movable ? item("✦ Ask AI to change this", "", () => panels.askAi(id)) : null,
     movable ? item("Duplicate", "Ctrl+D", () => canvas.duplicate(id)) : null,
     movable ? item("Copy", "Ctrl+C", () => clipboard.copy(state, id)) : null,
+    f?.kind === "section" ? item("★ Save to My sections", "", () => saveSection(state, id)) : null,
     item(clip ? `Paste ${clip.kind === "section" ? "section" : "block"} after this` : "Paste", "Ctrl+V", () => clipboard.paste(state).then((nid) => nid && canvas.scrollTo(nid)), !!clip && !["header", "footer"].includes(id)),
     h("hr"),
     item("Copy style", "", () => clipboard.copyStyle(state, id)),

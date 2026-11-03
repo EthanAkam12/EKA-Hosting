@@ -11,6 +11,7 @@ import { LANGUAGES } from "/admin/shared/i18n.js";
 import { SECTION_LIBRARY, LIBRARY_CATEGORIES } from "/admin/shared/library.js";
 import { renderPage } from "/admin/shared/render.js";
 import { reworkSections } from "./section-ai.js";
+import { savedEntries, sharedEntries, importSavedMedia, deleteSaved } from "./my-sections.js";
 import { ensurePrivacyPage } from "/admin/shared/legal.js";
 
 const PALETTES = [
@@ -88,6 +89,11 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     const fill = h("input", { type: "checkbox", checked: s.aiEnabled });
     const nav = h("nav", { class: "lib-nav" });
     const grid = h("div", { class: "lib-grid" });
+    // Your own designs first: saved ones (any of your sites) and shared ones on this site.
+    let mine = null;
+    const shared = sharedEntries(s.site);
+    const cats = [["mine", "★ My sections"], ...(shared.length ? [["shared", "⇄ Shared on this site"]] : []), ...LIBRARY_CATEGORIES];
+    const entriesFor = (cat) => (cat === "mine" ? mine || [] : cat === "shared" ? shared : SECTION_LIBRARY.filter((e) => e.cat === cat));
     const preview = (entry) => {
       const site = structuredClone(s.site);
       const page = { ...site.pages[0], sections: [].concat(entry.make()) };
@@ -96,18 +102,27 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
       return h("iframe", { srcdoc: html, loading: "lazy", tabindex: "-1", title: "", sandbox: "" });
     };
     const paint = () => {
-      nav.replaceChildren(...LIBRARY_CATEGORIES.map(([id, label]) => h("button", { class: `lib-cat${id === libraryCat ? " on" : ""}`, onclick: () => { libraryCat = id; paint(); } }, label, h("small", {}, String(SECTION_LIBRARY.filter((e) => e.cat === id).length)))));
-      grid.replaceChildren(...SECTION_LIBRARY.filter((e) => e.cat === libraryCat).map((entry) => h("button", { class: "lib-card", title: `Add "${entry.name}"`, onclick: () => add(entry) },
-        h("div", { class: "lib-thumb" }, preview(entry)), h("span", {}, entry.name))));
+      nav.replaceChildren(...cats.map(([id, label]) => h("button", { class: `lib-cat${id === libraryCat ? " on" : ""}`, onclick: () => { libraryCat = id; paint(); } }, label, h("small", {}, id === "mine" && !mine ? "…" : String(entriesFor(id).length)))));
+      const entries = entriesFor(libraryCat);
+      const empty = libraryCat === "mine" ? (mine ? "Nothing saved yet. Select a section on any page and click ★ Save (right-hand panel) to keep it here for all your websites." : "Loading…") : "";
+      grid.replaceChildren(...(entries.length ? entries.map((entry) => h("div", { class: "lib-card-wrap" },
+        h("button", { class: "lib-card", title: `Add "${entry.name}"`, onclick: () => add(entry) }, h("div", { class: "lib-thumb" }, preview(entry)), h("span", {}, entry.name)),
+        entry.saved ? h("button", { class: "icon-btn lib-del", title: "Delete from My sections", onclick: async () => { await deleteSaved(entry.saved); mine = mine.filter((x) => x !== entry); paint(); } }, "✕") : null)) : [h("p", { class: "muted small" }, empty)]));
       grid.scrollTop = 0;
       fit();
     };
     // Previews are drawn 1200px wide and scaled down to the card.
     const fit = () => grid.querySelectorAll(".lib-thumb").forEach((t) => t.style.setProperty("--s", t.clientWidth / 1200));
     const ro = new ResizeObserver(fit);
-    const add = (entry) => {
+    const add = async (entry) => {
       m.close();
-      canvas.insertByClick({ kind: "new-section", make: entry.make, onAdded: fill.checked ? (ids) => reworkSections(state, ids, "fill") : null });
+      const own = !!(entry.saved || libraryCat === "shared");
+      let make = entry.make;
+      if (entry.saved) {
+        const sections = await importSavedMedia(state, entry.make());
+        make = () => sections;
+      }
+      canvas.insertByClick({ kind: "new-section", make, onAdded: fill.checked && !own ? (ids) => reworkSections(state, ids, "fill") : null });
     };
     const m = modal({
       title: "Section library",
@@ -121,6 +136,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     m.el.querySelector(".modal").classList.add("modal-lib");
     ro.observe(grid);
     paint();
+    savedEntries(state).then((list) => { mine = list; paint(); }).catch(() => { mine = []; paint(); });
   }
 
   // --------------------------------------------------------------- AI -----

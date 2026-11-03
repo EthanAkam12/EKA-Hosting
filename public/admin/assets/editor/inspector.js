@@ -5,6 +5,7 @@ import { h, api } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { readabilityIssues } from "/admin/shared/checks.js";
 import { reworkSections, restyleDialog } from "./section-ai.js";
+import { saveSection, makeShared, stopSharing, sharedCount } from "./my-sections.js";
 
 export function createInspector({ state, canvas, root, head, pickImage, askAi }) {
   function linkOptions() {
@@ -81,6 +82,15 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (state.get().aiEnabled) root.append(h("div", { class: "row ai-row", style: { margin: "0 0 12px", gap: "6px" } },
       h("button", { class: "btn btn-sm grow", title: "Rewrite this section's text (and find photos) for this business", onclick: () => reworkSections(state, [section.id], "fill") }, "✦ Fill with AI"),
       h("button", { class: "btn btn-sm grow", title: "A new design for this section, keeping its words", onclick: () => restyleDialog(state, [section.id]) }, "✦ Restyle")));
+    root.append(h("div", { class: "row", style: { margin: "0 0 12px", gap: "6px" } },
+      h("button", { class: "btn btn-sm grow", title: "Keep this design to reuse on any of your websites", onclick: () => saveSection(state, section.id) }, "★ Save"),
+      section.shared ? null : h("button", { class: "btn btn-sm grow", title: "Use this section on several pages; editing any copy changes them all", onclick: () => makeShared(state, section.id) }, "⇄ Share across pages")));
+    if (section.shared) {
+      const n = sharedCount(state.get().site, section.shared.id);
+      root.append(h("div", { class: "notice notice-info", style: { marginBottom: "12px", fontSize: "13px" } },
+        `⇄ Shared section "${section.shared.name}": on ${n} page${n === 1 ? "" : "s"}. Changes here appear on all of them. Add it to another page from the Section library. `,
+        h("a", { href: "#", onclick: (e) => { e.preventDefault(); stopSharing(state, section.id); } }, "Stop sharing this copy")));
+    }
     tabs({ content: "Layout", style: "Style", advanced: "Advanced" });
     readability(section);
     if (tab === "style") return styleControls(section, "section");

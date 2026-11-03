@@ -119,3 +119,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .lib-thumb iframe { position: absolute; top: 0; left: 0; width: 1200px; height: 760px; border: 0; transform: scale(var(--s, .225)); transform-origin: 0 0; pointer-events: none; }
 .lib-card:hover .lib-thumb, .lib-card:focus-visible .lib-thumb { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand); }
 @media (max-width: 700px) { .lib { grid-template-columns: 1fr; height: auto; } .lib-nav { flex-direction: row; flex-wrap: wrap; } .lib-grid { max-height: 60vh; } }
+.lib-card-wrap { position: relative; }
+.lib-del { position: absolute; top: 6px; right: 6px; background: #fff; box-shadow: var(--shadow); }

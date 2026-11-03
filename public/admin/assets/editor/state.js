@@ -1,6 +1,6 @@
 // Editor state: the site document, selection, undo/redo and autosave.
 
-import { normalizeSite, findNode, BLOCKS } from "/admin/shared/schema.js";
+import { normalizeSite, findNode, BLOCKS, syncSharedSections } from "/admin/shared/schema.js";
 import { api } from "../ui.js";
 
 const MAX_UNDO = 100;
@@ -78,9 +78,11 @@ export function createState({ siteId }) {
         future = [];
       }
       coalesce = { key, at: now };
+      const before = state.site;
       const draft = structuredClone(state.site);
       fn(draft);
-      state.site = normalizeSite(draft);
+      // Shared sections: an edit to one copy goes to every copy.
+      state.site = normalizeSite(syncSharedSections(before, normalizeSite(draft)));
       if (!state.site.pages.some((p) => p.id === state.pageId)) state.pageId = state.site.pages[0].id;
       if (state.selectedId && !["header", "footer"].includes(state.selectedId) && !findNode(state.site, state.selectedId)) state.selectedId = null;
       api_.scheduleSave();
@@ -92,7 +94,7 @@ export function createState({ siteId }) {
       past.push({ snap: JSON.stringify(state.site), label, at: Date.now() });
       future = [];
       coalesce = { key: null, at: 0 };
-      state.site = normalizeSite(site);
+      state.site = normalizeSite(syncSharedSections(state.site, normalizeSite(site)));
       if (!state.site.pages.some((p) => p.id === state.pageId)) state.pageId = state.site.pages[0].id;
       if (state.selectedId && !["header", "footer"].includes(state.selectedId) && !findNode(state.site, state.selectedId)) state.selectedId = null;
       emit("site");

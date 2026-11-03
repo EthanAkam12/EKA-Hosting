@@ -5,7 +5,7 @@
 //   { name, model, complete({ system, prompt, model, effort, onProgress }) → Promise<string> }
 // and register it in pickProvider() below. Everything else is shared.
 
-import { normalizeSite, normalizeSection, normalizeBlock, normalizePage, findNode, slugify } from "../../shared/schema.js";
+import { normalizeSite, normalizeSection, normalizeBlock, normalizePage, findNode, slugify, syncSharedSections } from "../../shared/schema.js";
 import { createAnthropicProvider } from "./anthropic.js";
 import { applyChanges } from "./changes.js";
 import { partialDesign } from "./partial.js";
@@ -212,6 +212,7 @@ export function createAi({ provider = pickProvider() } = {}) {
       }
       if (Array.isArray(data.changes)) {
         const result = applyChanges(site, data.changes);
+        result.site = normalizeSite(syncSharedSections(site, result.site));
         if (!result.applied && data.changes.length) throw new Error("The AI's change didn't fit this site. Please try again, or rephrase it.");
         if (result.failed.length) console.warn("Some AI changes were skipped:", result.failed.join("; "));
         return { site: result.site, summary, changed: result.applied > 0 };
