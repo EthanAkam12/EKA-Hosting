@@ -19,6 +19,7 @@ import { Users, publicUser } from "./users.js";
 import { createLicence } from "./licence.js";
 import { createBackups } from "./backup.js";
 import { createStats } from "./stats.js";
+import { checkDomains } from "./domains.js";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { createAi, applyBrief } from "./ai/index.js";
@@ -434,6 +435,8 @@ app.use((req, res, next) => {
   if (meta.missing) return res.status(404).type("html").send(simplePage("Site not found", "There's no website at this address yet."));
   if (req.method !== "GET" && req.method !== "HEAD") return res.sendStatus(405);
   const origin = `${req.protocol}://${req.get("host")}`;
+  // Lets the domain helper confirm the domain reaches this site.
+  res.setHeader("X-EKA-Site", meta.id);
   if (req.path === "/robots.txt") return res.type("text").send(`User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
   if (req.path === "/sitemap.xml") {
     return store.getPublished(meta.id).then((site) => (site ? res.type("application/xml").send(sitemapXml(site, origin)) : res.sendStatus(404))).catch(next);
@@ -1657,6 +1660,14 @@ api.delete("/sites/:id/media/:file", async (req, res) => {
   if (!meta) return;
   await deleteUpload(store.mediaDir(meta.id), req.params.file);
   res.json({ ok: true });
+});
+
+// The domain helper: which DNS records each custom domain needs, and whether they're right yet.
+api.get("/sites/:id/domain-check", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const result = await checkDomains({ domains: meta.domains || [], siteId: meta.id, slug: meta.slug, baseDomain: BASE_DOMAIN, serverIp: process.env.SERVER_IP || "" });
+  res.json({ ...result, baseDomain: BASE_DOMAIN || null });
 });
 
 // Visitor statistics: the last 7, 30 or 90 days.

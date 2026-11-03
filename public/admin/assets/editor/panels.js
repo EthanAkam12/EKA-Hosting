@@ -538,7 +538,8 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
       h("div", { class: "field-hint" }, "Live at: ", h("a", { href: meta.liveUrl, target: "_blank", rel: "noopener" }, meta.liveUrl))));
     root.append(h("div", { class: "field" }, h("label", {}, "Domain name"), domains,
       h("div", { class: "field-hint" }, "The web address this site lives at, e.g. www.smithantiques.co.uk. Used for the \"View live\" link and search engines.")));
-    root.append(saveMeta);
+    root.append(h("div", { class: "row", style: { flexWrap: "wrap" } }, saveMeta,
+      (meta.domains || []).length && !meta.deploy?.enabled ? h("button", { class: "btn btn-sm", onclick: () => domainHelper(s.siteId) }, "Connect & check the domain") : null));
 
     root.append(h("hr", { class: "sep" }));
     root.append(h("div", { class: "group-title" }, "Publishing"));
@@ -577,6 +578,41 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(h("div", { class: "group-title" }, "Custom CSS"));
     root.append(fieldControl({ key: "customCss", label: "", type: "code" }, s.site.customCss, (v) => state.mutate((site) => { site.customCss = v; }, { key: "site:css", source: "panel" }), {}));
     root.append(h("p", { class: "field-hint", style: { marginTop: "-8px" } }, "Applies to every page. Blocks use classes like .eka-btn, .eka-card, .eka-h."));
+  }
+
+  // Step-by-step DNS settings for each custom domain, with a live check.
+  async function domainHelper(siteId) {
+    const body = h("div", {}, h("p", { class: "muted" }, "Checking…"));
+    const m = modal({ title: "Connect your domain", wide: true, body });
+    const badge = (state) => ({ ok: h("span", { class: "badge badge-live" }, "✓ Working"), elsewhere: h("span", { class: "badge badge-err" }, "Points somewhere else"), missing: h("span", { class: "badge" }, "Not set yet"), unknown: h("span", { class: "badge" }, "Set (can't confirm)") })[state];
+    const code = (t) => h("code", { class: "dns-val", title: "Click to copy", onclick: () => navigator.clipboard?.writeText(t).then(() => toast("Copied.")) }, t);
+    async function check() {
+      body.replaceChildren(h("p", { class: "muted" }, "Checking…"));
+      try {
+        const r = await api(`/sites/${siteId}/domain-check`);
+        const ip = r.ips[0] || "your server's IP address (ask your host)";
+        body.replaceChildren(
+          !r.baseDomain ? h("div", { class: "notice", style: { marginBottom: "12px" } }, "This builder doesn't have a main domain set (BASE_DOMAIN in settings.txt), so it isn't running as a public web host. Use \"Your hosting (FTP)\" to publish to the customer's own hosting instead.") : "",
+          h("p", { style: { marginTop: 0 } }, "Log in where the domain was bought (e.g. GoDaddy, 123-reg, IONOS, Namecheap, Cloudflare), open its ", h("strong", {}, "DNS settings"), ", and add these two records. Changes usually work within an hour, sometimes up to a day."),
+          ...r.domains.map((d) => h("div", { class: "dns-domain" },
+            h("h3", {}, d.domain),
+            h("table", { class: "usage-table dns-table" },
+              h("tr", {}, h("th", {}, "Type"), h("th", {}, "Name / host"), h("th", {}, "Value / points to"), h("th", {}, "Now")),
+              h("tr", {}, h("td", {}, "A"), h("td", {}, code("@")), h("td", {}, code(ip)), h("td", {}, badge(d.apex.state), d.apex.state === "elsewhere" ? h("div", { class: "small muted" }, `now: ${d.apex.a.join(", ")}`) : null)),
+              h("tr", {}, h("td", {}, r.target ? "CNAME" : "A"), h("td", {}, code("www")), h("td", {}, code(r.target || ip)), h("td", {}, badge(d.www.state), d.www.state === "elsewhere" ? h("div", { class: "small muted" }, `now: ${d.www.cname || d.www.a.join(", ")}`) : null))),
+            h("p", { class: "small" }, "Secure address (https): ", d.https === "ok" ? h("strong", { style: { color: "#15803d" } }, "✓ working: the site is live at this address") : d.https === "waiting" ? "waiting for the records above" : d.https === "other" ? "the domain answers, but with a different website (an old host?). Check the records above and remove any others for @ and www." : "not yet: the certificate is made automatically within a few minutes of the records working."))),
+          h("details", { class: "small" }, h("summary", {}, "Tips if it isn't working"),
+            h("ul", {},
+              h("li", {}, "Delete any other A, AAAA or CNAME records for @ and www (often left from parking pages or old hosting)."),
+              h("li", {}, "Cloudflare: set both records to \"DNS only\" (grey cloud), not \"Proxied\"."),
+              h("li", {}, "Some providers want the domain written out instead of @, e.g. ", d0(r)),
+              h("li", {}, "If you can't add a CNAME for www, use an A record with the IP address instead."))),
+          h("div", { class: "row", style: { marginTop: "12px" } }, h("button", { class: "btn", onclick: check }, "Check again")));
+      } catch (e) { body.replaceChildren(h("p", { class: "notice notice-err" }, e.message)); }
+    }
+    const d0 = (r) => r.domains[0]?.domain || "yourdomain.co.uk";
+    check();
+    return m;
   }
 
   // Language, privacy policy, tracking code and the cookie notice.

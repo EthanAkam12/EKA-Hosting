@@ -25,6 +25,11 @@ SMTP_PASS=
 # The address form emails come from, e.g. Website <forms@yourdomain.co.uk>
 MAIL_FROM=
 
+# Optional: this server's public IP address, shown in the domain helper
+# (Site tab -> Connect & check the domain). Found automatically from your
+# main domain if you leave it empty.
+SERVER_IP=
+
 # Your licence key (from whoever sold you the builder). You can also enter it
 # on the Customers page. New installs have a 14-day trial.
 LICENCE_KEY=

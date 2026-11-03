@@ -121,3 +121,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 700px) { .lib { grid-template-columns: 1fr; height: auto; } .lib-nav { flex-direction: row; flex-wrap: wrap; } .lib-grid { max-height: 60vh; } }
 .lib-card-wrap { position: relative; }
 .lib-del { position: absolute; top: 6px; right: 6px; background: #fff; box-shadow: var(--shadow); }
+
+/* Domain helper */
+.dns-domain { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.dns-domain h3 { margin: 0 0 6px; font-size: 16px; }
+.dns-table td:not(:first-child), .dns-table th:not(:first-child) { text-align: left; width: auto; }
+.dns-val { cursor: copy; background: #f4f5f8; padding: 2px 6px; border-radius: 4px; }
