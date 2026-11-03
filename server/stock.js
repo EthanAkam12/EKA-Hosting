@@ -129,6 +129,9 @@ export function pictureSlots(site, base) {
               set: (url, photo) => { block.props.src = url; if (!alt) block.props.alt = photo.alt; },
             });
           }
+          if (block.type === "team") {
+            for (const item of block.props.items) if (!item.image && item.name) slots.push({ query: `${item.role || "friendly professional"} portrait`, orientation: "portrait", set: (url) => { item.image = url; } });
+          }
           if (block.type === "products") {
             for (const item of block.props.items) if (!item.image && item.name) slots.push({ query: describes(item.name) || base, orientation: "square", set: (url) => { item.image = url; } });
           }

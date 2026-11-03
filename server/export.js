@@ -27,7 +27,7 @@ export async function buildStaticSite({ site, siteId, mediaDir, formEmail = "", 
       return `/media/${file}`;
     });
 
-  const hasForm = site.pages.some((p) => p.sections.some((s) => s.columns.some((c) => c.blocks.some((b) => b.type === "form"))));
+  const hasForm = site.pages.some((p) => p.sections.some((s) => s.columns.some((c) => c.blocks.some((b) => b.type === "form" || (b.type === "newsletter" && !b.props.mailchimp)))));
 
   for (const page of site.pages) {
     if (page.post?.draft) continue;
@@ -105,7 +105,8 @@ function contactPhp(site, formEmail) {
   const forms = {};
   for (const page of site.pages) {
     for (const s of page.sections) for (const c of s.columns) for (const b of c.blocks) {
-      if (b.type === "form") forms[b.id] = { labels: b.props.fields.map((f, i) => f.label || `Field ${i + 1}`), page: page.post ? `blog/${page.slug}` : page.slug, noun: formWords(b.props.kind).noun, subject: formWords(b.props.kind).subject, booking: b.props.kind === "booking", confirm: !!b.props.confirmEmail };
+      if (b.type === "newsletter" && !b.props.mailchimp) forms[b.id] = { labels: ["Email"], page: page.post ? `blog/${page.slug}` : page.slug, noun: "newsletter sign-up", subject: "New newsletter sign-up from your website", booking: false, confirm: false };
+      if (b.type === "form") forms[b.id] = { labels: b.props.fields.map((f, i) => f.label || `Field ${i + 1}`), page: page.post ? `blog/${page.slug}` : page.slug, noun: formWords(b.props.kind).noun, subject: formWords(b.props.kind).subject, booking: b.props.kind === "booking", confirm: !!b.props.confirmEmail, deposit: /^https:\/\//.test(b.props.depositLink || "") ? `${b.props.depositText || "Pay the deposit"}: ${b.props.depositLink}` : "" };
     }
   }
   const pages = Object.fromEntries(site.pages.map((p) => [p.post ? `blog/${p.slug}` : p.slug, pageUrl(p, "/")]));
@@ -177,7 +178,7 @@ if ($to !== '' && filter_var($to, FILTER_VALIDATE_EMAIL)) {
     $visitorHeaders = $headers;
     $visitorHeaders[] = 'Reply-To: ' . $clean($to);
     $vSubject = '=?UTF-8?B?' . base64_encode("We've received your " . $form['noun'] . ': ' . $site) . '?=';
-    $vBody = "Thanks for getting in touch with " . $site . ". This is a copy of your " . $form['noun'] . "; we'll reply as soon as we can." . ($form['booking'] ? " Your booking isn't confirmed until we get back to you." : "") . "\\n\\n" . implode("\\n", $lines) . "\\n--\\n" . $site;
+    $vBody = "Thanks for getting in touch with " . $site . ". This is a copy of your " . $form['noun'] . "; we'll reply as soon as we can." . ($form['booking'] ? " Your booking isn't confirmed until we get back to you." : "") . (!empty($form['deposit']) ? "\\n\\n" . $form['deposit'] : "") . "\\n\\n" . implode("\\n", $lines) . "\\n--\\n" . $site;
     @mail($replyTo, $vSubject, $vBody, implode("\\r\\n", $visitorHeaders));
   }
 }

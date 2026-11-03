@@ -683,13 +683,13 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
 
   async function showSubmissions(siteId) {
     const { submissions } = await api(`/sites/${siteId}/submissions`);
-    const KINDS = { booking: "Booking request", enquiry: "Enquiry", contact: "Message" };
+    const KINDS = { booking: "Booking request", enquiry: "Enquiry", contact: "Message", newsletter: "Newsletter sign-up" };
     let filter = "open";
     const list = h("div", {});
     const tabs = h("div", { class: "chips", style: { marginBottom: "12px" } });
     const paint = () => {
       const shown = submissions.filter((x) => (filter === "open" ? !x.done : filter === "all" ? true : (x.kind || "contact") === filter));
-      tabs.replaceChildren(...[["open", "To do"], ["booking", "Bookings"], ["enquiry", "Enquiries"], ["contact", "Messages"], ["all", "All"]].map(([k, label]) => {
+      tabs.replaceChildren(...[["open", "To do"], ["booking", "Bookings"], ["enquiry", "Enquiries"], ["contact", "Messages"], ["newsletter", "Sign-ups"], ["all", "All"]].map(([k, label]) => {
         const n = submissions.filter((x) => (k === "open" ? !x.done : k === "all" ? true : (x.kind || "contact") === k)).length;
         return h("span", { class: `chip${filter === k ? " on" : ""}`, role: "button", tabindex: "0", onclick: () => { filter = k; paint(); } }, `${label} (${n})`);
       }));
@@ -708,7 +708,13 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
       }) : [h("p", { class: "muted" }, submissions.length ? "Nothing here." : "No messages yet. They'll appear here when visitors use a form on the live site.")]));
     };
     paint();
-    modal({ title: "Messages, enquiries and bookings", wide: true, body: h("div", {}, tabs, list) });
+    const signups = submissions.filter((x) => x.kind === "newsletter");
+    const csv = signups.length ? h("button", { class: "btn btn-sm", style: { marginBottom: "10px" }, onclick: () => {
+      const text = ["Email,Signed up", ...signups.map((x) => `${x.fields.Email},${x.at}`)].join("\r\n");
+      const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: "text/csv" })), download: "newsletter-sign-ups.csv" });
+      a.click();
+    } }, `Download ${signups.length} sign-up${signups.length === 1 ? "" : "s"} (CSV, for Mailchimp etc.)`) : null;
+    modal({ title: "Messages, enquiries and bookings", wide: true, body: h("div", {}, tabs, csv, list) });
   }
 
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.tab)));

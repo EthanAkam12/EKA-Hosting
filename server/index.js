@@ -308,6 +308,13 @@ app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" 
   const formBlock = found && found.kind === "block" && found.node.type === "form" ? found.node : null;
   const fields = {};
   let visitor = "";
+  // Newsletter sign-ups: just an email, kept with the messages.
+  if (found?.kind === "block" && found.node.type === "newsletter") {
+    const email = String(body.field_0 || "").trim().slice(0, 200);
+    if (!/^[^\s@<>",;]+@[^\s@<>",;]+\.[a-z]{2,}$/i.test(email)) return backTo(`#f-${encodeURIComponent(found.node.id)}`);
+    await store.addSubmission(meta.id, { id: crypto.randomBytes(6).toString("hex"), at: new Date().toISOString(), page: page.slug, kind: "newsletter", fields: { Email: email } });
+    return backTo(`#sent-${encodeURIComponent(found.node.id)}`);
+  }
   if (formBlock) {
     formBlock.props.fields.forEach((f, i) => {
       const value = String(body[`field_${i}`] ?? "").slice(0, 5000);
@@ -328,7 +335,8 @@ app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" 
     const mail = ownerEmail({ kind, siteName: site.name, lines, page: page.title });
     mailer.send({ to: owner, subject: mail.subject, text: mail.body, replyTo: visitor, fromName: `${site.name} website` }).catch((err) => console.warn("Form email not sent:", err.message));
     if (formBlock.props.confirmEmail && visitor) {
-      const copy = visitorEmail({ kind, siteName: site.name, lines });
+      const deposit = /^https:\/\//.test(formBlock.props.depositLink || "") ? { link: formBlock.props.depositLink, text: formBlock.props.depositText } : null;
+      const copy = visitorEmail({ kind, siteName: site.name, lines, deposit });
       mailer.send({ to: visitor, subject: copy.subject, text: copy.body, replyTo: owner, fromName: site.name }).catch((err) => console.warn("Visitor copy not sent:", err.message));
     }
   }

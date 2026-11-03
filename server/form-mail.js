@@ -17,10 +17,11 @@ export function ownerEmail({ kind, siteName, lines, page }) {
 }
 
 /** The copy sent to the visitor who filled in the form. */
-export function visitorEmail({ kind, siteName, lines }) {
+export function visitorEmail({ kind, siteName, lines, deposit = null }) {
   const w = formWords(kind);
+  const pay = deposit?.link ? `\n\n${deposit.text || "Pay the deposit"}: ${deposit.link}` : "";
   return {
     subject: `We've received your ${w.noun}: ${siteName}`,
-    body: `Thanks for getting in touch with ${siteName}. This is a copy of your ${w.noun}; we'll reply as soon as we can.${kind === "booking" ? " Your booking isn't confirmed until we get back to you." : ""}\n\n${lines.map(([l, v]) => `${l}:\n${v}\n`).join("\n")}\n--\n${siteName}`,
+    body: `Thanks for getting in touch with ${siteName}. This is a copy of your ${w.noun}; we'll reply as soon as we can.${kind === "booking" ? " Your booking isn't confirmed until we get back to you." : ""}${pay}\n\n${lines.map(([l, v]) => `${l}:\n${v}\n`).join("\n")}\n--\n${siteName}`,
   };
 }

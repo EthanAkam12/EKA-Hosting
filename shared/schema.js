@@ -274,6 +274,8 @@ export const BLOCKS = {
       submitText: "Send message",
       successMessage: "Thanks! We'll be in touch soon.",
       confirmEmail: false,
+      depositLink: "",
+      depositText: "Pay the deposit",
     }),
     fields: [
       { key: "kind", label: "What it's for", type: "select", options: FORM_KINDS, labels: ["Contact message", "Enquiry / quote request", "Booking request"] },
@@ -286,6 +288,8 @@ export const BLOCKS = {
       { key: "submitText", label: "Button text", type: "text" },
       { key: "successMessage", label: "Thank-you message", type: "text" },
       { key: "confirmEmail", label: "Email the visitor a copy (needs an Email field)", type: "checkbox" },
+      { key: "depositLink", label: "Deposit / payment link (optional: a Stripe or PayPal payment link shown after they send it, and in their email)", type: "url" },
+      { key: "depositText", label: "Deposit button text", type: "text" },
     ],
   },
   products: {
@@ -324,6 +328,119 @@ export const BLOCKS = {
       { key: "showDate", label: "Show the date", type: "checkbox" },
       { key: "showExcerpt", label: "Show the summary", type: "checkbox" },
       { key: "buttonText", label: "Link text", type: "text" },
+    ],
+  },
+  menu: {
+    label: "Menu / price list", icon: "🍽", group: "Business",
+    defaults: () => ({
+      items: [
+        { category: "Starters", name: "Soup of the day", description: "With fresh bread", price: "£6.50", tags: "V" },
+        { category: "Starters", name: "Garlic prawns", description: "Chilli, lemon, parsley", price: "£8.95", tags: "GF" },
+        { category: "Mains", name: "Fish & chips", description: "Beer batter, mushy peas, tartare sauce", price: "£15.50", tags: "" },
+        { category: "Mains", name: "Mushroom risotto", description: "Parmesan, truffle oil", price: "£13.95", tags: "V, GF" },
+      ],
+      columns: 1, showTags: true, note: "V vegetarian · VG vegan · GF gluten free. Please tell us about any allergies.",
+    }),
+    fields: [
+      { key: "items", label: "Items", type: "list", itemLabel: "name", itemDefaults: () => ({ category: "", name: "New item", description: "", price: "", tags: "" }), itemFields: [
+        { key: "category", label: "Heading it goes under (e.g. Starters)", type: "text" },
+        { key: "name", label: "Name", type: "text" },
+        { key: "description", label: "Description", type: "text" },
+        { key: "price", label: "Price", type: "text" },
+        { key: "tags", label: "Labels (e.g. V, VG, GF, New)", type: "text" },
+      ] },
+      { key: "columns", label: "Columns (desktop)", type: "select", options: [1, 2], labels: ["1", "2"] },
+      { key: "showTags", label: "Show the labels", type: "checkbox" },
+      { key: "note", label: "Note underneath (allergies, service charge…)", type: "text" },
+    ],
+  },
+  hours: {
+    label: "Opening hours", icon: "🕒", group: "Business",
+    defaults: () => ({ title: "Opening hours", useBusiness: true, lines: ["Monday – Friday: 9am – 5pm", "Saturday: 10am – 4pm", "Sunday: Closed"], note: "" }),
+    fields: [
+      { key: "title", label: "Title", type: "text" },
+      { key: "useBusiness", label: "Use the hours in Site → Business details", type: "checkbox" },
+      { key: "lines", label: "Hours (one line each, e.g. Monday: 9am – 5pm)", type: "lines" },
+      { key: "note", label: "Note (e.g. bank holidays)", type: "text" },
+    ],
+  },
+  team: {
+    label: "Team", icon: "👥", group: "Business",
+    defaults: () => ({
+      items: [
+        { image: "", name: "Alex Morgan", role: "Founder", bio: "Started the business in 2012 and still loves every job." },
+        { image: "", name: "Sam Patel", role: "Manager", bio: "Keeps everything running smoothly." },
+        { image: "", name: "Jo Evans", role: "Specialist", bio: "Ten years of experience and a great eye for detail." },
+      ],
+      columns: 3, shape: "round", align: "center",
+    }),
+    fields: [
+      { key: "items", label: "People", type: "list", itemLabel: "name", itemDefaults: () => ({ image: "", name: "Name", role: "", bio: "" }), itemFields: [
+        { key: "image", label: "Photo", type: "image" },
+        { key: "name", label: "Name", type: "text" },
+        { key: "role", label: "Role", type: "text" },
+        { key: "bio", label: "A line about them", type: "textarea" },
+      ] },
+      { key: "columns", label: "Columns (desktop)", type: "slider", min: 1, max: 5, placeholder: 3, unit: "" },
+      { key: "shape", label: "Photo shape", type: "select", options: ["round", "square", "portrait"], labels: ["Round", "Square", "Portrait"] },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  beforeafter: {
+    label: "Before / after", icon: "◐", group: "Business",
+    defaults: () => ({ before: "", after: "", beforeLabel: "Before", afterLabel: "After", alt: "", ratio: "4:3" }),
+    fields: [
+      { key: "before", label: "Before photo", type: "image" },
+      { key: "after", label: "After photo", type: "image" },
+      { key: "beforeLabel", label: "Before label", type: "text" },
+      { key: "afterLabel", label: "After label", type: "text" },
+      { key: "alt", label: "What the photos show (for accessibility)", type: "text" },
+      { key: "ratio", label: "Shape", type: "select", options: ["16:9", "4:3", "1:1", "3:4"] },
+    ],
+  },
+  timeline: {
+    label: "Timeline", icon: "⋮", group: "Business",
+    defaults: () => ({
+      items: [
+        { date: "2012", title: "Where it started", text: "Opened our first shop on the high street." },
+        { date: "2018", title: "Growing", text: "Moved to bigger premises and doubled the team." },
+        { date: "Today", title: "Still going strong", text: "Hundreds of happy customers and counting." },
+      ],
+    }),
+    fields: [
+      { key: "items", label: "Steps", type: "list", itemLabel: "title", itemDefaults: () => ({ date: "", title: "New step", text: "" }), itemFields: [
+        { key: "date", label: "Date or step (e.g. 2018, Step 1)", type: "text" },
+        { key: "title", label: "Title", type: "text" },
+        { key: "text", label: "Text", type: "textarea" },
+      ] },
+    ],
+  },
+  offer: {
+    label: "Offer banner", icon: "🏷", group: "Business",
+    defaults: () => ({ badge: "Limited time", title: "20% off all bookings this month", text: "Mention this offer when you book.", buttonText: "Book now", href: "#contact", ends: "", countdown: true, style: "accent", align: "center" }),
+    fields: [
+      { key: "badge", label: "Small label", type: "text" },
+      { key: "title", label: "Offer", type: "text" },
+      { key: "text", label: "Details", type: "text" },
+      { key: "buttonText", label: "Button", type: "text" },
+      { key: "href", label: "Button link", type: "url" },
+      { key: "ends", label: "Ends on (it disappears after this day; empty = no end)", type: "date" },
+      { key: "countdown", label: "Show a countdown to the end", type: "checkbox" },
+      { key: "style", label: "Colour", type: "select", options: ["accent", "primary", "dark", "light"], labels: ["Accent colour", "Main colour", "Dark", "Light"] },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  newsletter: {
+    label: "Newsletter signup", icon: "📨", group: "Business",
+    defaults: () => ({ title: "Get our news and offers", text: "Once a month, no spam. Unsubscribe any time.", buttonText: "Sign up", placeholder: "Your email address", successMessage: "Thanks! You're on the list.", mailchimp: "", align: "center" }),
+    fields: [
+      { key: "title", label: "Title", type: "text" },
+      { key: "text", label: "Text", type: "text" },
+      { key: "placeholder", label: "Box hint", type: "text" },
+      { key: "buttonText", label: "Button", type: "text" },
+      { key: "successMessage", label: "Thank-you message", type: "text" },
+      { key: "mailchimp", label: "Mailchimp signup address (optional: from Mailchimp's embedded form, the https://….list-manage.com/subscribe/post?… link). Empty = sign-ups are kept in Site → Messages", type: "url" },
+      { key: "align", label: "Align", ...ALIGN },
     ],
   },
   spacer: {
