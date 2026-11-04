@@ -66,9 +66,9 @@ function contactHref(brief) {
 }
 
 const cards = () => [
-  [b("card", { icon: "⚡", title: "Fast & reliable", text: "We turn up when we say we will and get the job done properly." })],
-  [b("card", { icon: "★", title: "Quality first", text: "Experienced people, great materials and real attention to detail." })],
-  [b("card", { icon: "✓", title: "Fair pricing", text: "Clear prices up front with no hidden extras." })],
+  [b("card", { icon: "i:zap", title: "Fast & reliable", text: "We turn up when we say we will and get the job done properly." })],
+  [b("card", { icon: "i:star", title: "Quality first", text: "Experienced people, great materials and real attention to detail." })],
+  [b("card", { icon: "i:check", title: "Fair pricing", text: "Clear prices up front with no hidden extras." })],
 ];
 
 // The site's contact form: an enquiry form if the owner asked for one.
@@ -198,7 +198,7 @@ const LAYOUTS = [
     ]]),
     s({ layout: "2-1", anchor: "services", valign: "top" }, [
       [b("heading", { text: "What we offer", level: 2 }), b("list", { icon: "dot", items: ["A personal, friendly service", "Experience you can rely on", "Clear prices, no surprises", "Happy to answer any questions"] })],
-      [b("card", { icon: "☎", title: "Talk to us", text: "Not sure what you need? Get in touch and we'll help.", linkText: "Contact", href: contactHref(brief), style: "outline" })],
+      [b("card", { icon: "i:phone", title: "Talk to us", text: "Not sure what you need? Get in touch and we'll help.", linkText: "Contact", href: contactHref(brief), style: "outline" })],
     ]),
     s({ anchor: "about" }, [[b("heading", { text: "A look at our work", level: 2 }), b("gallery", { columns: 3 })]]),
     s({ width: "narrow", background: "surface" }, [[b("heading", { text: "Questions", level: 2 }), b("faq")]]),
@@ -305,9 +305,9 @@ const PAGE_BODIES = {
   contact: [
     (brief) => [contactSection(brief), ...(brief.address ? [s({ padding: "sm" }, [[b("map", { address: brief.address })]])] : [])],
     (brief) => [s({ layout: "1-1-1", padding: "md" }, [
-      [b("card", { icon: "📞", title: "Call", text: brief.phone || "Phone number coming soon", style: "outline", align: "center" })],
-      [b("card", { icon: "✉️", title: "Email", text: brief.email || "Email address coming soon", style: "outline", align: "center" })],
-      [b("card", { icon: "📍", title: "Visit", text: brief.address || "Visits by appointment", style: "outline", align: "center" })],
+      [b("card", { icon: "i:phone", title: "Call", text: brief.phone || "Phone number coming soon", style: "outline", align: "center" })],
+      [b("card", { icon: "i:mail", title: "Email", text: brief.email || "Email address coming soon", style: "outline", align: "center" })],
+      [b("card", { icon: "i:map-pin", title: "Visit", text: brief.address || "Visits by appointment", style: "outline", align: "center" })],
     ]), s({ width: "narrow" }, [[contactForm(brief)]])],
     (brief) => [contactSection(brief, { background: "dark" })],
   ],
@@ -334,9 +334,9 @@ const PAGE_BODIES = {
   book: [
     (brief) => [bookingSection(brief)],
     (brief) => [s({ layout: "1-1-1", padding: "md" }, [
-      [b("card", { icon: "📅", title: "1. Pick a time", text: "Choose the day and time that suits you best.", style: "outline", align: "center" })],
-      [b("card", { icon: "✉️", title: "2. We confirm", text: "We'll confirm by email or phone, or suggest another time.", style: "outline", align: "center" })],
-      [b("card", { icon: "✓", title: "3. See you then", text: "Nothing to pay now. Need to change it? Just let us know.", style: "outline", align: "center" })],
+      [b("card", { icon: "i:calendar-check", title: "1. Pick a time", text: "Choose the day and time that suits you best.", style: "outline", align: "center" })],
+      [b("card", { icon: "i:mail", title: "2. We confirm", text: "We'll confirm by email or phone, or suggest another time.", style: "outline", align: "center" })],
+      [b("card", { icon: "i:check", title: "3. See you then", text: "Nothing to pay now. Need to change it? Just let us know.", style: "outline", align: "center" })],
     ]), s({ width: "narrow" }, [[bookingForm(brief)]])],
     (brief) => [bookingSection(brief, { background: "dark" })],
   ],

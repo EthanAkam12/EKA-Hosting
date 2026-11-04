@@ -135,3 +135,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .advice { display: flex; gap: 8px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
 .advice:first-of-type { margin-top: 8px; }
 .advice-acts { display: flex; gap: 2px; align-items: center; flex: none; }
+
+/* Icon picker */
+.ic-current { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; }
+.ic-prev { width: 20px; height: 20px; display: block; }
+.ic-emoji { font-size: 18px; }
+.ic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; max-height: 56vh; overflow-y: auto; margin-top: 10px; padding: 2px; }
+.ic-pick { display: grid; place-items: center; height: 46px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; color: var(--text); }
+.ic-pick:hover, .ic-pick:focus-visible { border-color: var(--brand); color: var(--brand); }

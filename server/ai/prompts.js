@@ -3,6 +3,7 @@
 
 import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, HOVER_EFFECTS, ENTRANCE_EFFECTS, slugify } from "../../shared/schema.js";
 import { LANGUAGES } from "../../shared/i18n.js";
+import { ICONS } from "../../shared/icons.js";
 
 // "Write every word … in French." when the site isn't in English.
 const languageRule = (lang) => (lang && !/^en/.test(lang) && LANGUAGES[lang] ? `LANGUAGE: write every word of the website (headings, text, buttons, form labels and choices, SEO titles and descriptions, alt text) in ${LANGUAGES[lang].ai}, natural and idiomatic. Only "bgPhoto", "coverPhoto" and business.keywords stay in English (they're photo searches).` : "");
@@ -16,6 +17,7 @@ function describeField(f) {
     case "lines": return `${f.key}: string[]`;
     case "richtext": return `${f.key}: HTML string (only p, br, strong, em, a, ul, ol, li)`;
     case "image": return `${f.key}: image URL or ""`;
+    case "icon": return `${f.key}: ICON`;
     case "list": return `${f.key}: [{ ${f.itemFields.map(describeField).join(", ")} }]`;
     default: return `${f.key}: string`;
   }
@@ -61,8 +63,10 @@ STYLE (optional on any SECTION or BLOCK, like Elementor's Style/Advanced tabs; l
   "bgFixed": true, "bgRepeat": true, "tint": hex, "tint2": hex (gradient tint), "tintDir": "up"|"right"|"left"|"diagonal"|"radial", "tintOpacity": 0-100 (sections default to props.overlay),
   "bgEffect": "fade"|"zoom"|"zoom-out"|"pan"|"parallax", "bgBlur": px, "bgGray": %, "bgBright": %,
   "bgVideo": YouTube/Vimeo/.mp4 URL (only if the owner gives one), "bgVideoPhones": true,
-  "textEffect": "words-blur"|"words-up"|"underline" (headings only)|"shine"|"gradient", "bgAnimate": true (moves a bg→bg2 gradient) }
+  "textEffect": "words-blur"|"words-up"|"underline" (headings only)|"shine"|"gradient", "bgAnimate": true (moves a bg→bg2 gradient),
+  sections only: "shapeTop"|"shapeBottom": "wave"|"waves"|"curve"|"slant"|"triangle"|"arrow"|"zigzag"|"cloud" (a shaped edge that blends into the next/previous section's colour; lovely between contrasting backgrounds, use on 1-3 sections, not all), "shapeH": px (default 70), "shapeFlip": true }
 Effects are pure CSS and cheap, but use them sparingly: one text effect on the hero heading reads as polish; on every heading it's noise.
+ICON is "i:<name>" with a name from this line-icon set (preferred: it looks professional), or an emoji, or "" for none (buttons: "none"): ${Object.keys(ICONS).join(" ")}.
 HOVER is one of ${HOVER_EFFECTS.join("|")}. ANIMATION is one of ${ENTRANCE_EFFECTS.join("|")}.
 Prefer the section/block props and theme settings first; use STYLE for specific tweaks the owner asks for (spacing, borders, animations, hiding on mobile…).
 PHOTO BACKGROUNDS deserve finishing touches, so set these in STYLE whenever a section uses background "image" (or a block uses a background photo):

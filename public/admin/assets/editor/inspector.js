@@ -1,6 +1,6 @@
 // Right-hand property panel for whatever is selected.
 
-import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
+import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, SHAPES, SHAPE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
 import { h, api } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { readabilityIssues } from "/admin/shared/checks.js";
@@ -65,6 +65,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (tab === "style") return styleControls(block, "block");
     if (tab === "advanced") return advancedControls(block, "block");
     for (const f of def.fields) {
+      if (f.showIf && !Object.entries(f.showIf).every(([k, v]) => block.props[k] === v)) continue;
       root.append(fieldControl(f, block.props[f.key], (v, opts) => set(`prop:${block.id}:${f.key}`, (site) => {
         const n = findNode(site, block.id);
         if (n) n.node.props[f.key] = v;
@@ -167,6 +168,15 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (isSection) {
       group("Columns");
       styleField(node, "gap", { label: "Space between columns", type: "slider", min: 0, max: 120, placeholder: 40 });
+      group("Shaped edges");
+      const shapes = { type: "select", options: ["default", ...SHAPES], labels: ["Straight", ...SHAPE_LABELS] };
+      styleField(node, "shapeTop", { label: "Top edge", ...shapes });
+      styleField(node, "shapeBottom", { label: "Bottom edge", ...shapes });
+      if (node.style?.shapeTop || node.style?.shapeBottom) {
+        styleField(node, "shapeH", { label: "Height", type: "slider", min: 10, max: 240, placeholder: 70 });
+        styleField(node, "shapeFlip", { label: "Flip left to right", type: "checkbox" });
+        root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "The shape takes the colour of the section above or below, so the edge blends into it."));
+      }
     }
   }
 

@@ -31,7 +31,7 @@ export const SITE_DESIGNS = [
     keywords: "tradesman at work tools",
     pages: [
       ["Home", [...lib("hero-photo-left"), ...lib("trust"), ...lib("svc-3"), ...lib("steps-3"), ...lib("rev-3"), ...lib("cta-phone")]],
-      ["Services", [pageHead("Our services", "Everything we do, done properly."), ...lib("svc-zigzag"), ...lib("price-list")]],
+      ["Services", [pageHead("Our services", "Everything we do, done properly."), ...lib("svc-tabs"), ...lib("svc-zigzag"), ...lib("price-list")]],
       ["Our work", [pageHead("Our work", "A few recent jobs we're proud of."), ...lib("beforeafter"), ...lib("gal-grid")]],
       ["Contact", [pageHead("Get a free quote", "Tell us about the job and we'll get back to you the same day."), ...lib("quote-photo")]],
     ],
@@ -41,7 +41,7 @@ export const SITE_DESIGNS = [
     colors: { primary: "#be185d", accent: "#a16207", background: "#fffafb", surface: "#fbf0f4", text: "#2b1420", muted: "#8a6b78", dark: "#2b1420" }, fonts: ["cormorant", "dmsans"], radius: 16,
     keywords: "beauty salon interior",
     pages: [
-      ["Home", [heroPhoto("Look good, feel amazing", "Relaxing treatments by a friendly, experienced team.", [["Book now", "/book"]], "calm beauty salon", { tint: "#2b1420", tintOpacity: 45 }), ...lib("svc-photos"), ...lib("offer"), ...lib("team-3"), ...lib("rev-one")]],
+      ["Home", [heroPhoto("Look good, feel amazing", "Relaxing treatments by a friendly, experienced team.", [["Book now", "/book"]], "calm beauty salon", { tint: "#2b1420", tintOpacity: 45, shapeBottom: "curve", shapeH: 60 }), ...lib("svc-photos"), ...lib("offer"), ...lib("team-3"), ...lib("rev-slider")]],
       ["Treatments", [pageHead("Treatments & prices", "Something for everyone; ask us for advice."), ...lib("svc-pricecards"), ...lib("faq-narrow")]],
       ["Book", [pageHead("Book an appointment", "Choose a treatment and a time; we'll confirm by email."), ...lib("book-steps")]],
       ["Contact", [pageHead("Visit us", "We look forward to seeing you."), ...lib("contact-map")]],
@@ -96,7 +96,7 @@ export const SITE_DESIGNS = [
     colors: { primary: "#0e7490", accent: "#ea580c", background: "#fdfcfa", surface: "#eef6f7", text: "#0f2a30", muted: "#5b7277", dark: "#0b2a30" }, fonts: ["lora", "nunito"], radius: 12,
     keywords: "cosy holiday cottage",
     pages: [
-      ["Home", [heroPhoto("Your peaceful escape", "A warm welcome, comfy beds and the best breakfast for miles.", [["Check availability", "/book"]], "cosy holiday cottage exterior", { bgEffect: "pan" }), ...lib("svc-photos"), ...lib("gal-text"), ...lib("rev-3"), ...lib("hours-map")]],
+      ["Home", [heroPhoto("Your peaceful escape", "A warm welcome, comfy beds and the best breakfast for miles.", [["Check availability", "/book"]], "cosy holiday cottage exterior", { bgEffect: "pan", shapeBottom: "cloud", shapeH: 70 }), ...lib("svc-photos"), ...lib("gal-slider"), ...lib("rev-slider"), ...lib("hours-map")]],
       ["Rooms", [pageHead("Rooms & prices", "All rooms are en suite, with breakfast included."), ...lib("price-2"), ...lib("faq-side")]],
       ["The area", [pageHead("Things to do nearby", "Our favourite walks, beaches and places to eat."), ...lib("svc-zigzag")]],
       ["Book", [pageHead("Check availability", "Send us your dates and we'll reply within a few hours."), ...lib("book-dark")]],
@@ -107,7 +107,7 @@ export const SITE_DESIGNS = [
     colors: { primary: "#7c3aed", accent: "#f59e0b", background: "#ffffff", surface: "#f6f3fd", text: "#1b1530", muted: "#6c6684", dark: "#1e1530" }, fonts: ["poppins", "poppins"], radius: 14,
     keywords: "community volunteers",
     pages: [
-      ["Home", [...lib("hero-gradient"), ...lib("stats-light"), ...lib("svc-icons-primary"), ...lib("blog-3"), ...lib("cta-accent")]],
+      ["Home", [...lib("hero-gradient"), ...lib("stats-light"), ...lib("stats-waves"), ...lib("blog-3"), ...lib("cta-accent")]],
       ["About", [pageHead("Who we are", "Our mission and the people who make it happen."), ...lib("about-values"), ...lib("team-3")]],
       ["News", [pageHead("News & events", "What's coming up and what we've been doing."), ...lib("blog-list")]],
       ["Get involved", [pageHead("Get involved", "Volunteer, donate or just come along."), ...lib("steps-3"), ...lib("contact-narrow")]],

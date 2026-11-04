@@ -11,6 +11,7 @@
 import { BLOCKS, FONT_CHOICES, LAYOUT_COLUMNS, listPosts } from "./schema.js";
 import { escapeHtml as esc, safeUrl, sanitizeRichText } from "./sanitize.js";
 import { words, formatDate as formatDateIn } from "./i18n.js";
+import { iconSvg, isIconRef } from "./icons.js";
 
 // ---------------------------------------------------------------------------
 // Links & media
@@ -99,7 +100,7 @@ const renderers = {
     if (!items.length) return ctx.editor ? `<div class="eka-hint">Add buttons in the panel</div>` : "";
     return `<div class="eka-btns j-${p.align}">${items
       .map((b) => {
-        const icon = BUTTON_ICONS[b.icon] ? `<svg class="bi-${b.icon}" viewBox="0 0 24 24" aria-hidden="true">${BUTTON_ICONS[b.icon]}</svg>` : "";
+        const icon = BUTTON_ICONS[b.icon] ? `<svg class="bi-${b.icon}" viewBox="0 0 24 24" aria-hidden="true">${BUTTON_ICONS[b.icon]}</svg>` : isIconRef(b.icon) ? iconSvg(b.icon.slice(2), "bi-lib") : "";
         const label = `<span>${esc(b.text)}</span>`;
         return `<a class="eka-btn btn-${b.style}" ${attrHref(b.href, ctx)}>${b.icon === "arrow" ? label + icon : icon + label}</a>`;
       })
@@ -127,13 +128,15 @@ const renderers = {
 
   list(p) {
     const tag = p.icon === "number" ? "ol" : "ul";
-    return `<${tag} class="eka-list li-${p.icon}">${p.items.map((i) => `<li>${esc(i)}</li>`).join("")}</${tag}>`;
+    // An icon of the owner's choice as the bullet (from the icon set, or an emoji).
+    const mark = p.icon === "symbol" && p.symbol ? `<span class="li-mark" aria-hidden="true">${isIconRef(p.symbol) ? iconSvg(p.symbol.slice(2)) : esc(p.symbol)}</span>` : "";
+    return `<${tag} class="eka-list li-${p.icon === "symbol" && !p.symbol ? "check" : p.icon}">${p.items.map((i) => `<li>${mark}${esc(i)}</li>`).join("")}</${tag}>`;
   },
 
   card(p, ctx) {
     const media = p.image
       ? `<div class="eka-card-img">${img(p.image, p.title, ctx, { sizes: "(max-width: 760px) 100vw, 33vw" })}</div>`
-      : p.icon ? `<div class="eka-card-icon" aria-hidden="true">${esc(p.icon)}</div>` : "";
+      : p.icon ? `<div class="eka-card-icon${isIconRef(p.icon) ? " is-svg" : ""}" aria-hidden="true">${isIconRef(p.icon) ? iconSvg(p.icon.slice(2)) : esc(p.icon)}</div>` : "";
     const link = p.linkText ? `<a class="eka-card-link" ${attrHref(p.href, ctx)}>${esc(p.linkText)} →</a>` : "";
     return `<div class="eka-card c-${p.style} t-${p.align}">${media}<div class="eka-card-body">${p.title ? `<h3>${esc(p.title)}</h3>` : ""}${p.text ? `<p>${esc(p.text)}</p>` : ""}${link}</div></div>`;
   },
@@ -237,6 +240,40 @@ const renderers = {
     const action = ctx.editor ? "#" : esc(mc || ctx.formAction || "#");
     const hidden = mc ? "" : `<input type="hidden" name="_block" value="${esc(block.id)}"><input type="hidden" name="_page" value="${esc(ctx.page.post ? `blog/${ctx.page.slug}` : ctx.page.slug)}"><div class="eka-hp" aria-hidden="true"><label>Leave empty<input name="website" tabindex="-1" autocomplete="off"></label></div>`;
     return `<div class="eka-news t-${p.align}"><div id="sent-${block.id}" class="eka-form-ok" role="status">${esc(p.successMessage)}</div>${p.title ? `<h3>${esc(p.title)}</h3>` : ""}${p.text ? `<p>${esc(p.text)}</p>` : ""}<form method="post" action="${action}"${mc ? ' target="_blank"' : ""}>${hidden}<input type="email" name="${mc ? "EMAIL" : "field_0"}" required autocomplete="email" placeholder="${esc(p.placeholder)}" aria-label="${esc(p.placeholder || "Email")}"><button class="eka-btn btn-primary" type="submit">${esc(p.buttonText)}</button></form></div>`;
+  },
+
+  slider(p, ctx, block) {
+    const slides = p.slides.filter((x) => x.title || x.image || x.text);
+    if (!slides.length) return ctx.editor ? `<div class="eka-hint">Add slides in the panel</div>` : "";
+    const hgt = Math.max(200, Math.min(900, Number(p.height) || 520));
+    const one = (x, i) => {
+      if (p.kind === "reviews") return `<figure class="eka-slide sl-review">${x.image ? img(x.image, x.name, ctx, { sizes: "64px", cls: "eka-avatar" }) : ""}<blockquote>${esc(x.title)}</blockquote>${x.name || x.text ? `<figcaption><strong>${esc(x.name)}</strong>${x.text ? ` <span>${esc(x.text)}</span>` : ""}</figcaption>` : ""}</figure>`;
+      const pic = x.image ? img(x.image, x.title, ctx, { cls: "sl-img", eager: i === 0 && ctx.sectionIndex === 0 }) : ctx.editor ? placeholderImage("Slide photo") : "";
+      if (p.kind === "photos") return `<div class="eka-slide sl-photo" style="height:${hgt}px">${pic}</div>`;
+      return `<div class="eka-slide sl-banner t-${p.align}" style="min-height:${hgt}px">${pic}<div class="sl-text">${x.title ? `<h2>${esc(x.title)}</h2>` : ""}${x.text ? `<p>${esc(x.text)}</p>` : ""}${x.buttonText ? `<a class="eka-btn btn-primary" ${attrHref(x.href, ctx)}>${esc(x.buttonText)}</a>` : ""}</div></div>`;
+    };
+    // Swipe or scroll between slides without JavaScript; one small shared
+    // script adds the arrows, dots and autoplay.
+    let script = "";
+    if (!ctx.editor && !ctx.sliderScript) {
+      ctx.sliderScript = true;
+      script = `<script>document.querySelectorAll(".eka-slider").forEach(function(s){var t=s.querySelector(".eka-slides"),n=t.children.length,i=0,d=s.querySelectorAll(".sl-dots button"),a=+s.dataset.autoplay||0,still=matchMedia("(prefers-reduced-motion:reduce)").matches,timer,hold=false;s.classList.add("js");function go(k){i=(k+n)%n;t.scrollTo({left:t.children[i].offsetLeft,behavior:still?"auto":"smooth"});d.forEach(function(b,j){b.setAttribute("aria-current",j===i)})}s.querySelector(".sl-prev")&&s.querySelector(".sl-prev").addEventListener("click",function(){go(i-1)});s.querySelector(".sl-next")&&s.querySelector(".sl-next").addEventListener("click",function(){go(i+1)});d.forEach(function(b,j){b.addEventListener("click",function(){go(j)})});t.addEventListener("scroll",function(){var k=Math.round(t.scrollLeft/t.clientWidth);if(k!==i){i=k;d.forEach(function(b,j){b.setAttribute("aria-current",j===i)})}},{passive:true});["mouseenter","focusin","touchstart"].forEach(function(e){s.addEventListener(e,function(){hold=true})});["mouseleave","focusout"].forEach(function(e){s.addEventListener(e,function(){hold=false})});if(a&&!still&&n>1)timer=setInterval(function(){if(!hold&&!document.hidden)go(i+1)},a*1000)})</script>`;
+    }
+    const arrows = p.arrows && slides.length > 1 ? `<button type="button" class="sl-prev" aria-label="Previous slide">‹</button><button type="button" class="sl-next" aria-label="Next slide">›</button>` : "";
+    const dots = p.dots && slides.length > 1 ? `<div class="sl-dots">${slides.map((_, i) => `<button type="button" aria-label="Slide ${i + 1}" aria-current="${i === 0}"></button>`).join("")}</div>` : "";
+    return `<div class="eka-slider sk-${p.kind}" data-autoplay="${Math.max(0, Math.min(15, Number(p.autoplay) || 0))}" role="region" aria-roledescription="carousel" aria-label="${esc(p.kind === "reviews" ? "Customer reviews" : "Slides")}"><div class="eka-slides" tabindex="0">${slides.map(one).join("")}</div>${arrows}${dots}</div>${script}`;
+  },
+
+  tabs(p, ctx, block) {
+    const items = p.items.filter((x) => x.title);
+    if (!items.length) return ctx.editor ? `<div class="eka-hint">Add tabs in the panel</div>` : "";
+    const group = `t-${block.id}`;
+    if (p.style === "accordion") return `<div class="eka-acc">${items.map((x, i) => `<details name="${esc(group)}"${i === 0 ? " open" : ""}><summary>${esc(x.title)}</summary><div class="eka-text">${sanitizeRichText(x.html)}</div></details>`).join("")}</div>`;
+    // Pure-CSS tabs: one radio button per tab; the checked one shows its panel.
+    const inputs = items.map((x, i) => `<input type="radio" class="tab-r" name="${esc(group)}" id="${esc(group)}-${i}"${i === 0 ? " checked" : ""}>`).join("");
+    const labels = items.map((x, i) => `<label for="${esc(group)}-${i}">${esc(x.title)}</label>`).join("");
+    const panels = items.map((x) => `<div class="tab-p eka-text">${sanitizeRichText(x.html)}</div>`).join("");
+    return `<div class="eka-tabs tb-${p.style} j-${p.align}">${inputs}<div class="tab-l" role="tablist">${labels}</div><div class="tab-ps">${panels}</div></div>`;
   },
 
   faq(p) {
@@ -612,8 +649,42 @@ export function renderSection(section, ctx) {
     })
     .join("");
   const id = p.anchor ? ` id="${esc(p.anchor)}"` : "";
+  const shapes = shapeDividers(section, ctx);
+  if (shapes) cls.push("has-shape");
   const bgTag = p.background === "image" && isPlaceholder(p.image) ? phTag(ctx, "Placeholder background · change it in the section settings") : "";
-  return `<section${id} class="${cls.join(" ")}"${style}${editorAttrs(ctx, "section", section.id)}>${layers}${bgTag}<div class="eka-wrap"><div class="eka-cols l-${layout}">${cols}</div></div></section>`;
+  return `<section${id} class="${cls.join(" ")}"${style}${editorAttrs(ctx, "section", section.id)}>${layers}${bgTag}${shapes}<div class="eka-wrap"><div class="eka-cols l-${layout}">${cols}</div></div></section>`;
+}
+
+// ---- shape dividers ------------------------------------------------------------
+
+// Each shape fills the bottom of a 1200×100 box; the part it covers takes the
+// colour of the neighbouring section, so this section's edge looks shaped.
+const SHAPE_PATHS = {
+  wave: '<path d="M0 60C200 100 400 100 600 60S1000 20 1200 60V100H0Z"/>',
+  waves: '<path opacity=".35" d="M0 40C220 90 420 90 620 50S1000 10 1200 50V100H0Z"/><path opacity=".6" d="M0 60C200 100 420 100 640 66S1000 34 1200 70V100H0Z"/><path d="M0 78C240 100 460 100 680 84S1020 66 1200 84V100H0Z"/>',
+  curve: '<path d="M0 100Q600 0 1200 100Z"/>',
+  slant: '<path d="M0 100L1200 0V100Z"/>',
+  triangle: '<path d="M0 100L600 0L1200 100Z"/>',
+  arrow: '<path d="M0 100V70H560L600 30L640 70H1200V100Z"/>',
+  zigzag: `<path d="M0 100${Array.from({ length: 25 }, (_, i) => `L${i * 50} ${i % 2 ? 60 : 100}`).join("")}L1200 100Z"/>`,
+  cloud: '<path d="M0 100V70C80 30 180 30 260 60C330 20 450 20 520 58C600 18 720 22 790 60C860 26 980 26 1050 62C1110 36 1170 40 1200 56V100Z"/>',
+};
+
+// The colour a section's background shows (for its neighbours' shapes).
+function sectionColor(section) {
+  if (!section) return "var(--c-bg)";
+  if (section.style?.bg) return section.style.bg;
+  return { default: "var(--c-bg)", surface: "var(--c-surface)", primary: "var(--c-primary)", dark: "var(--c-dark)", image: "var(--c-dark)" }[section.props.background] || "var(--c-bg)";
+}
+
+function shapeDividers(section, ctx) {
+  const st = section.style || {};
+  if (!st.shapeTop && !st.shapeBottom) return "";
+  const list = ctx.page?.sections || [];
+  const i = list.indexOf(section);
+  const hgt = st.shapeH || 70;
+  const svg = (shape, where, color) => `<div class="eka-shape sh-${where}${st.shapeFlip ? " sh-flip" : ""}" style="height:${hgt}px;color:${color}" aria-hidden="true"><svg viewBox="0 0 1200 100" preserveAspectRatio="none" fill="currentColor">${SHAPE_PATHS[shape]}</svg></div>`;
+  return (st.shapeTop ? svg(st.shapeTop, "top", sectionColor(list[i - 1])) : "") + (st.shapeBottom ? svg(st.shapeBottom, "bottom", sectionColor(list[i + 1])) : "");
 }
 
 // ---------------------------------------------------------------------------
@@ -816,6 +887,9 @@ p{margin:0 0 1em}
 .eka-ann.an-dark{background:var(--c-dark);color:var(--c-on-dark)}.eka-ann.an-primary{background:var(--c-primary);color:var(--c-on-primary)}.eka-ann.an-accent{background:var(--c-accent);color:#111}
 .eka-ann-x{position:absolute;opacity:0;pointer-events:none}.eka-ann-close{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:28px;height:28px;display:grid;place-items:center;cursor:pointer;font-size:20px;line-height:1;opacity:.75}.eka-ann-x:checked~p,.eka-ann:has(.eka-ann-x:checked){display:none}
 .eka-s{position:relative;background-size:cover;background-position:center}
+.eka-shape{position:absolute;left:0;right:0;z-index:1;line-height:0;pointer-events:none}.eka-shape svg{width:100%;height:100%;display:block}
+.sh-bottom{bottom:-1px}.sh-top{top:-1px;transform:rotate(180deg)}.sh-bottom.sh-flip{transform:scaleX(-1)}.sh-top.sh-flip{transform:rotate(180deg) scaleX(-1)}
+.has-shape>.eka-wrap{position:relative;z-index:2}
 .eka-s>.eka-wrap{position:relative}
 .pad-none{padding:0}.pad-sm{padding:calc(32px*var(--sp,1)) 0}.pad-md{padding:calc(56px*var(--sp,1)) 0}.pad-lg{padding:calc(88px*var(--sp,1)) 0}.pad-xl{padding:calc(128px*var(--sp,1)) 0}
 @media (max-width:760px){.pad-md{padding:calc(44px*var(--sp,1)) 0}.pad-lg{padding:calc(60px*var(--sp,1)) 0}.pad-xl{padding:calc(84px*var(--sp,1)) 0}}
@@ -880,6 +954,9 @@ p{margin:0 0 1em}
 .eka-ph{display:flex;align-items:center;justify-content:center;min-height:220px;aspect-ratio:4/3;background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--c-primary) 10%,transparent) 0 12px,color-mix(in srgb,var(--c-primary) 16%,transparent) 12px 24px);color:var(--c-primary);font-weight:600;font-size:.9rem}
 .eka-list{list-style:none;padding:0;margin:0}.eka-list li{position:relative;padding-left:1.9em;margin-bottom:.55em}
 .eka-list.li-check li::before{content:"✓";position:absolute;left:0;top:0;width:1.35em;height:1.35em;margin-top:.15em;border-radius:50%;background:color-mix(in srgb,var(--c-primary) 15%,transparent);color:var(--c-primary);font-size:.8em;font-weight:700;display:flex;align-items:center;justify-content:center}
+.eka-list.li-symbol li{padding-left:2em}.li-mark{position:absolute;left:0;top:.1em;width:1.4em;height:1.4em;display:flex;align-items:center;justify-content:center;color:var(--c-primary)}.bg-dark .li-mark,.bg-primary .li-mark{color:inherit}.li-mark .eka-ic{width:1.15em;height:1.15em}
+.eka-card-icon.is-svg{color:var(--c-primary)}.eka-card-icon .eka-ic{width:28px;height:28px}.bg-dark .eka-card-icon.is-svg,.bg-primary .eka-card-icon.is-svg{color:inherit}
+.eka-btn .bi-lib{width:1.1em;height:1.1em;flex:none}
 .eka-list.li-dot li::before{content:"";position:absolute;left:.4em;top:.65em;width:.45em;height:.45em;border-radius:50%;background:var(--c-primary)}
 ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::before{content:counter(n);position:absolute;left:0;font-weight:700;color:var(--c-primary)}
 .eka-list.li-none li{padding-left:0}
@@ -987,6 +1064,33 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-news{max-width:560px}.eka-news.t-center{margin-inline:auto}.eka-news h3{font-size:1.4rem}
 .eka-news form{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.t-center .eka-news form{justify-content:center}
 .eka-news input[type=email]{flex:1 1 220px;font:inherit;padding:12px 14px;border-radius:var(--r);border:1px solid color-mix(in srgb,var(--c-text) 22%,transparent);background:var(--c-bg);color:var(--c-text)}
+.eka-slider{position:relative}.eka-slides{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:var(--r);overscroll-behavior-x:contain}.eka-slides::-webkit-scrollbar{display:none}
+.eka-slide{flex:0 0 100%;scroll-snap-align:start;position:relative;overflow:hidden}
+.sl-banner{display:flex;align-items:center;justify-content:center;padding:48px clamp(20px,6vw,80px);background:var(--c-dark);color:#fff}.sl-banner.t-left{justify-content:flex-start}.sl-banner.t-right{justify-content:flex-end}
+.sl-banner .sl-img,.sl-banner>.eka-ph{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;min-height:0}.sl-banner:has(.sl-img)::before{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(0,0,0,.15),rgba(0,0,0,.55))}
+.sl-text{position:relative;z-index:2;max-width:640px}.sl-text h2{font-size:clamp(1.8rem,4.5vw,3.2rem);margin-bottom:.3em}.sl-text p{font-size:1.1rem;opacity:.92;margin-bottom:1.2em}
+.sl-photo .sl-img,.sl-photo>.eka-ph{width:100%;height:100%;object-fit:cover}
+.sl-review{margin:0;padding:clamp(28px,5vw,56px) clamp(24px,8vw,120px);text-align:center;background:var(--c-surface);color:var(--c-text)}.bg-surface .sl-review{background:var(--c-bg)}
+.sl-review blockquote{margin:0 0 18px;font-size:clamp(1.15rem,2.4vw,1.5rem);font-family:var(--f-head);line-height:1.4}.sl-review blockquote::before{content:"“";display:block;font-size:3em;line-height:.6;color:var(--c-primary)}
+.sl-review figcaption span{color:var(--c-muted)}.sl-review .eka-avatar{margin:0 auto 14px}
+.sl-prev,.sl-next,.sl-dots{display:none}
+.eka-slider.js .sl-prev,.eka-slider.js .sl-next{display:grid;place-items:center;position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:44px;height:44px;border:0;border-radius:50%;background:rgba(255,255,255,.9);color:#111;font-size:28px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.2)}.sl-prev{left:12px}.sl-next{right:12px}
+.eka-slider.js .sl-dots{display:flex;justify-content:center;gap:8px;margin-top:14px}.sl-dots button{width:10px;height:10px;border-radius:50%;border:0;padding:0;background:color-mix(in srgb,currentColor 25%,transparent);cursor:pointer}.sl-dots button[aria-current=true]{background:var(--c-primary);width:26px;border-radius:99px}
+.eka-tabs{display:flex;flex-direction:column}.tab-r{position:absolute;opacity:0;pointer-events:none}
+.tab-l{display:flex;gap:4px;flex-wrap:wrap;border-bottom:2px solid color-mix(in srgb,currentColor 12%,transparent);margin-bottom:20px}.j-center .tab-l{justify-content:center}.j-right .tab-l{justify-content:flex-end}
+.tab-l label{padding:10px 18px;cursor:pointer;font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px;opacity:.7}
+.tb-pills .tab-l{border:0;gap:8px}.tb-pills .tab-l label{border:1.5px solid color-mix(in srgb,currentColor 18%,transparent);border-radius:99px;margin:0}
+.tab-p{display:none}
+.tab-r:nth-of-type(1):checked~.tab-l label:nth-child(1){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(1):checked~.tab-ps .tab-p:nth-child(1){display:block}.tb-pills .tab-r:nth-of-type(1):checked~.tab-l label:nth-child(1){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(1):focus-visible~.tab-l label:nth-child(1){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(2):checked~.tab-l label:nth-child(2){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(2):checked~.tab-ps .tab-p:nth-child(2){display:block}.tb-pills .tab-r:nth-of-type(2):checked~.tab-l label:nth-child(2){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(2):focus-visible~.tab-l label:nth-child(2){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(3):checked~.tab-l label:nth-child(3){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(3):checked~.tab-ps .tab-p:nth-child(3){display:block}.tb-pills .tab-r:nth-of-type(3):checked~.tab-l label:nth-child(3){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(3):focus-visible~.tab-l label:nth-child(3){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(4):checked~.tab-l label:nth-child(4){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(4):checked~.tab-ps .tab-p:nth-child(4){display:block}.tb-pills .tab-r:nth-of-type(4):checked~.tab-l label:nth-child(4){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(4):focus-visible~.tab-l label:nth-child(4){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(5):checked~.tab-l label:nth-child(5){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(5):checked~.tab-ps .tab-p:nth-child(5){display:block}.tb-pills .tab-r:nth-of-type(5):checked~.tab-l label:nth-child(5){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(5):focus-visible~.tab-l label:nth-child(5){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(6):checked~.tab-l label:nth-child(6){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(6):checked~.tab-ps .tab-p:nth-child(6){display:block}.tb-pills .tab-r:nth-of-type(6):checked~.tab-l label:nth-child(6){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(6):focus-visible~.tab-l label:nth-child(6){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(7):checked~.tab-l label:nth-child(7){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(7):checked~.tab-ps .tab-p:nth-child(7){display:block}.tb-pills .tab-r:nth-of-type(7):checked~.tab-l label:nth-child(7){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(7):focus-visible~.tab-l label:nth-child(7){outline:2px solid var(--c-primary)}
+.tab-r:nth-of-type(8):checked~.tab-l label:nth-child(8){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(8):checked~.tab-ps .tab-p:nth-child(8){display:block}.tb-pills .tab-r:nth-of-type(8):checked~.tab-l label:nth-child(8){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(8):focus-visible~.tab-l label:nth-child(8){outline:2px solid var(--c-primary)}
+.bg-dark .tab-r:checked~.tab-l label,.bg-primary .tab-r:checked~.tab-l label{color:inherit}
+.eka-acc details{border:1px solid color-mix(in srgb,currentColor 14%,transparent);border-radius:var(--r);margin-bottom:10px;padding:0 18px}.eka-acc summary{padding:14px 0;font-weight:600;cursor:pointer}.eka-acc details[open] summary{color:var(--c-primary)}.eka-acc .eka-text{padding-bottom:14px}
 .eka-lead{font-size:1.2rem;color:var(--c-muted);max-width:60ch}
 .eka-post-head h1{font-size:clamp(2rem,4.5vw,3rem);margin:.2em 0 .3em}.eka-post-head .eka-post-meta{font-size:.95rem}
 .eka-post-cover{max-width:1000px;margin:0 auto calc(20px*var(--sp));padding:0 20px}.eka-post-cover img{width:100%;border-radius:var(--r);aspect-ratio:16/9;object-fit:cover}

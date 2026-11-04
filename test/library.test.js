@@ -6,9 +6,9 @@ import { renderPage } from "../shared/render.js";
 import { createAi } from "../server/ai/index.js";
 import { sectionPrompt } from "../server/ai/prompts.js";
 
-test("the section library: 100 designs, every category filled, all valid and renderable", () => {
-  assert.equal(SECTION_LIBRARY.length, 100);
-  assert.equal(new Set(SECTION_LIBRARY.map((e) => e.id)).size, 100, "unique ids");
+test("the section library: 100+ designs, every category filled, all valid and renderable", () => {
+  assert.ok(SECTION_LIBRARY.length >= 100);
+  assert.equal(new Set(SECTION_LIBRARY.map((e) => e.id)).size, SECTION_LIBRARY.length, "unique ids");
   for (const [cat] of LIBRARY_CATEGORIES) assert.ok(SECTION_LIBRARY.some((e) => e.cat === cat), cat);
   const site = createEmptySite("Test");
   for (const entry of SECTION_LIBRARY) {

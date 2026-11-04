@@ -131,6 +131,9 @@ export function pictureSlots(site, base) {
           }
           // A card set up for a photo (no icon) gets one about its title.
           if (block.type === "card" && !block.props.image && !block.props.icon) slots.push({ query: describes(block.props.title) || base, orientation: "landscape", set: (url) => { block.props.image = url; } });
+          if (block.type === "slider" && block.props.kind !== "reviews") {
+            for (const slide of block.props.slides) if (!slide.image) slots.push({ query: describes(slide.title) || base, orientation: "landscape", set: (url) => { slide.image = url; } });
+          }
           if (block.type === "team") {
             for (const item of block.props.items) if (!item.image && item.name) slots.push({ query: `${item.role || "friendly professional"} portrait`, orientation: "portrait", set: (url) => { item.image = url; } });
           }

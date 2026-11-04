@@ -76,6 +76,9 @@ export const ENTRANCE_LABELS = ["None", "Fade in", "Fade up", "Fade down", "Slid
 export const SHADOWS = ["none", "sm", "md", "lg", "xl"];
 export const BG_POSITIONS = ["center", "top", "bottom", "left", "right", "top left", "top right", "bottom left", "bottom right"];
 export const BG_EFFECTS = ["fade", "zoom", "zoom-out", "pan", "parallax"];
+// Shapes for section edges (shape dividers).
+export const SHAPES = ["wave", "waves", "curve", "slant", "triangle", "arrow", "zigzag", "cloud"];
+export const SHAPE_LABELS = ["Wave", "Layered waves", "Curve", "Slant", "Peak", "Arrow", "Zig-zag", "Soft hills"];
 export const BG_EFFECT_LABELS = ["Fade in", "Slow zoom (Ken Burns)", "Zoom out as it appears", "Slow pan", "Parallax (moves as you scroll)"];
 
 // ---------------------------------------------------------------------------
@@ -113,7 +116,7 @@ export const BLOCKS = {
         { key: "text", label: "Label", type: "text" },
         { key: "href", label: "Link", type: "url" },
         { key: "style", label: "Style", type: "select", options: ["primary", "secondary", "outline", "light", "dark", "link"], labels: ["Main colour", "Accent colour", "Outline", "White", "Dark", "Text link"] },
-        { key: "icon", label: "Icon", type: "select", options: ["none", "arrow", "phone", "email", "download", "play", "cart", "check"], labels: ["None", "→ Arrow", "☎ Phone", "✉ Email", "↓ Download", "▶ Play", "🛒 Basket", "✓ Tick"] },
+        { key: "icon", label: "Icon", type: "icon", allowEmoji: false },
       ] },
       { key: "align", label: "Align", ...ALIGN },
     ],
@@ -141,17 +144,18 @@ export const BLOCKS = {
   },
   list: {
     label: "List", icon: "☰", group: "Basic",
-    defaults: () => ({ items: ["First point", "Second point", "Third point"], icon: "check" }),
+    defaults: () => ({ items: ["First point", "Second point", "Third point"], icon: "check", symbol: "i:check" }),
     fields: [
       { key: "items", label: "Items", type: "lines" },
-      { key: "icon", label: "Bullet", type: "select", options: ["check", "dot", "number", "none"] },
+      { key: "icon", label: "Bullet", type: "select", options: ["check", "dot", "number", "none", "symbol"], labels: ["Tick", "Dot", "Numbers", "None", "An icon of your choice"] },
+      { key: "symbol", label: "Bullet icon", type: "icon", showIf: { icon: "symbol" } },
     ],
   },
   card: {
     label: "Card", icon: "▤", group: "Content",
     defaults: () => ({ icon: "★", image: "", title: "Feature title", text: "A short description of this feature or service.", linkText: "", href: "", style: "surface", align: "left" }),
     fields: [
-      { key: "icon", label: "Icon (emoji)", type: "text" },
+      { key: "icon", label: "Icon", type: "icon" },
       { key: "image", label: "Image", type: "image" },
       { key: "title", label: "Title", type: "text" },
       { key: "text", label: "Text", type: "textarea" },
@@ -443,6 +447,53 @@ export const BLOCKS = {
       { key: "align", label: "Align", ...ALIGN },
     ],
   },
+  slider: {
+    label: "Slider", icon: "⇿", group: "Media",
+    defaults: () => ({
+      kind: "banner",
+      slides: [
+        { image: "", title: "Beautifully made, built to last", text: "A short line about what makes you special.", buttonText: "Find out more", href: "#contact", name: "" },
+        { image: "", title: "Friendly, local and reliable", text: "Hundreds of happy customers and counting.", buttonText: "Get in touch", href: "#contact", name: "" },
+        { image: "", title: "Book in minutes", text: "Choose a time that suits you.", buttonText: "Book now", href: "#contact", name: "" },
+      ],
+      autoplay: 6, height: 520, arrows: true, dots: true, align: "center",
+    }),
+    fields: [
+      { key: "kind", label: "Kind", type: "select", options: ["banner", "reviews", "photos"], labels: ["Banner (photo, heading, button)", "Customer reviews", "Photos only"] },
+      { key: "slides", label: "Slides", type: "list", itemLabel: "title", itemDefaults: () => ({ image: "", title: "New slide", text: "", buttonText: "", href: "", name: "" }), itemFields: [
+        { key: "image", label: "Photo", type: "image" },
+        { key: "title", label: "Heading (reviews: the review)", type: "textarea" },
+        { key: "text", label: "Text", type: "text" },
+        { key: "name", label: "Name (reviews)", type: "text" },
+        { key: "buttonText", label: "Button", type: "text" },
+        { key: "href", label: "Button link", type: "url" },
+      ] },
+      { key: "autoplay", label: "Seconds per slide (0 = only when clicked)", type: "slider", min: 0, max: 15, placeholder: 6, unit: "s" },
+      { key: "height", label: "Height (banners and photos)", type: "slider", min: 200, max: 900, placeholder: 520 },
+      { key: "arrows", label: "Arrows", type: "checkbox" },
+      { key: "dots", label: "Dots", type: "checkbox" },
+      { key: "align", label: "Align", ...ALIGN },
+    ],
+  },
+  tabs: {
+    label: "Tabs", icon: "⊟", group: "Content",
+    defaults: () => ({
+      items: [
+        { title: "Residential", html: "<p>What you offer homeowners: the services, how it works and what it costs.</p>" },
+        { title: "Commercial", html: "<p>What you offer businesses: contracts, response times and references.</p>" },
+        { title: "Emergency", html: "<p>When and how to reach you in an emergency.</p>" },
+      ],
+      style: "tabs", align: "left",
+    }),
+    fields: [
+      { key: "items", label: "Tabs", type: "list", itemLabel: "title", itemDefaults: () => ({ title: "New tab", html: "<p>Write something here.</p>" }), itemFields: [
+        { key: "title", label: "Tab name", type: "text" },
+        { key: "html", label: "Content", type: "richtext" },
+      ] },
+      { key: "style", label: "Look", type: "select", options: ["tabs", "pills", "accordion"], labels: ["Tabs", "Pill buttons", "Accordion (open one at a time)"] },
+      { key: "align", label: "Tab position", ...ALIGN },
+    ],
+  },
   spacer: {
     label: "Spacer", icon: "↕", group: "Layout",
     defaults: () => ({ size: 32 }),
@@ -702,6 +753,9 @@ export function normalizeStyle(style) {
   for (const k of ["tint", "tint2"]) if (typeof style[k] === "string" && HEX.test(style[k].trim())) out[k] = style[k].trim();
   one("tintDir", ["up", "right", "left", "diagonal", "radial"]);
   one("bgEffect", BG_EFFECTS);
+  one("shapeTop", SHAPES); one("shapeBottom", SHAPES);
+  num("shapeH", 10, 240);
+  if (style.shapeFlip === true) out.shapeFlip = true;
   num("tintOpacity", 0, 100); num("bgBlur", 0, 30); num("bgGray", 0, 100); num("bgBright", 20, 200); num("minHeight", 0, 1400);
   one("textEffect", TEXT_EFFECTS);
   if (style.bgAnimate === true) out.bgAnimate = true;

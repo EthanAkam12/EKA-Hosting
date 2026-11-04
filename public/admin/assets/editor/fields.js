@@ -1,6 +1,7 @@
 // Builds property-panel controls from the field definitions in shared/schema.js.
 
-import { h } from "../ui.js";
+import { h, modal } from "../ui.js";
+import { ICONS, ICON_GROUPS, iconSvg } from "/admin/shared/icons.js";
 
 let uidCounter = 0;
 const nextId = () => `f${++uidCounter}`;
@@ -17,6 +18,17 @@ export function fieldControl(field, value, onChange, ctx) {
 
     case "date":
       return wrap(h("input", { id, class: "input", type: "date", value: value ?? "", onchange: (e) => e.target.value && onChange(e.target.value) }));
+
+    case "icon": {
+      // An icon from the set ("i:name"), an emoji (cards, lists), or none. Old
+      // button icons ("arrow", "phone"…) still show as they are.
+      const LEGACY = { arrow: "arrow-right", phone: "phone", email: "mail", download: "download", play: "play", cart: "shopping-cart", check: "check" };
+      const show = (v) => (v?.startsWith("i:") ? h("span", { html: iconSvg(v.slice(2), "ic-prev") }) : LEGACY[v] ? h("span", { html: iconSvg(LEGACY[v], "ic-prev") }) : v && v !== "none" ? h("span", { class: "ic-emoji" }, v) : h("span", { class: "muted small" }, "None"));
+      const current = h("span", { class: "ic-current" }, show(value));
+      const pick = () => iconPicker({ allowEmoji: field.allowEmoji !== false, onPick: (v) => { current.replaceChildren(show(v)); onChange(v, { rebuild: true }); } });
+      return wrap(h("div", { class: "row", style: { gap: "8px" } }, current, h("button", { id, class: "btn btn-sm", type: "button", onclick: pick }, "Choose icon…"),
+        value && value !== "none" ? h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => { current.replaceChildren(show("")); onChange(field.allowEmoji === false ? "none" : "", { rebuild: true }); } }, "Remove") : null));
+    }
 
     case "textarea":
       return wrap(h("textarea", { id, class: "textarea", rows: "4", oninput: (e) => onChange(e.target.value) }, value ?? ""));
@@ -244,4 +256,29 @@ function listControl(field, items, onChange, ctx) {
 
 function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// The icon picker: search, groups, and (for cards and lists) your own emoji.
+export function iconPicker({ allowEmoji = true, onPick }) {
+  const search = h("input", { class: "input", placeholder: "Search icons (e.g. phone, scissors, coffee)…" });
+  const grid = h("div", { class: "ic-grid" });
+  const paint = () => {
+    const q = search.value.trim().toLowerCase();
+    const groups = ICON_GROUPS.map((g) => [g, Object.entries(ICONS).filter(([n, [gr, tags]]) => (q ? n.includes(q) || tags.includes(q) : gr === g))]).filter(([, list]) => list.length);
+    const seen = new Set();
+    grid.replaceChildren(...(q ? [["Results", groups.flatMap(([, l]) => l).filter(([n]) => !seen.has(n) && seen.add(n))]] : groups).flatMap(([g, list]) => [
+      h("div", { class: "group-title", style: { gridColumn: "1/-1", margin: "8px 0 2px" } }, g),
+      ...list.map(([name]) => h("button", { class: "ic-pick", type: "button", title: name.replace(/-/g, " "), html: iconSvg(name, "ic-prev"), onclick: () => { m.close(); onPick(`i:${name}`); } })),
+    ]));
+    if (!grid.children.length) grid.append(h("p", { class: "muted small", style: { gridColumn: "1/-1" } }, "No icons match. Try another word."));
+  };
+  search.addEventListener("input", paint);
+  const emoji = h("input", { class: "input", maxlength: "4", placeholder: "e.g. ☕", style: { width: "90px" } });
+  const m = modal({
+    title: "Choose an icon",
+    wide: true,
+    body: h("div", {}, search, allowEmoji ? h("div", { class: "row small", style: { margin: "8px 0", gap: "8px" } }, "Or use an emoji:", emoji, h("button", { class: "btn btn-sm", type: "button", onclick: () => { if (emoji.value.trim()) { m.close(); onPick(emoji.value.trim()); } } }, "Use emoji")) : null, grid),
+  });
+  paint();
+  search.focus();
 }

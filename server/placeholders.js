@@ -110,6 +110,7 @@ export async function fillPlaceholders(site, { dir, urlPrefix }) {
         for (const block of column.blocks) {
           if (block.type === "image" && !block.props.src) block.props.src = await next();
           if (block.type === "products") for (const item of block.props.items) if (!item.image) item.image = await next();
+          if (block.type === "slider" && block.props.kind !== "reviews") for (const slide of block.props.slides) if (!slide.image) slide.image = await next(true);
           if (block.type === "gallery" && !block.props.images.some((i) => i.src)) {
             block.props.images = [];
             for (let i = 0; i < 6; i++) block.props.images.push({ src: await next(), alt: "" });

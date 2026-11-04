@@ -4,7 +4,7 @@ import { createBlock as b, createSection as s, FORM_PRESETS } from "/admin/share
 
 export const SECTION_TEMPLATES = [
   {
-    id: "hero", name: "Hero", desc: "Big headline with buttons", icon: "★",
+    id: "hero", name: "Hero", desc: "Big headline with buttons", icon: "i:star",
     make: () => s({ background: "dark", padding: "xl", minHeight: true, width: "narrow", align: "center" }, [[
       b("heading", { text: "A bold headline that says what you do", level: 1, align: "center" }),
       b("text", { html: "<p>One or two sentences on why customers should choose you.</p>", align: "center" }),
@@ -30,9 +30,9 @@ export const SECTION_TEMPLATES = [
         b("text", { html: "<p>A short introduction to your services.</p>", align: "center" }),
       ]]),
       s({ layout: "1-1-1", padding: "sm" }, [
-        [b("card", { icon: "⚡", title: "Service one" })],
-        [b("card", { icon: "★", title: "Service two" })],
-        [b("card", { icon: "✓", title: "Service three" })],
+        [b("card", { icon: "i:zap", title: "Service one" })],
+        [b("card", { icon: "i:star", title: "Service two" })],
+        [b("card", { icon: "i:check", title: "Service three" })],
       ]),
     ],
   },
@@ -88,7 +88,7 @@ export const SECTION_TEMPLATES = [
     ]),
   },
   {
-    id: "booking", name: "Booking form", desc: "Date, time, service + details", icon: "📅",
+    id: "booking", name: "Booking form", desc: "Date, time, service + details", icon: "i:calendar-check",
     make: () => s({ layout: "1-1", anchor: "book", background: "surface", valign: "top" }, [
       [
         b("heading", { text: "Book an appointment", level: 2 }),
