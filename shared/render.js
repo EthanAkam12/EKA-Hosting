@@ -620,9 +620,22 @@ export function renderSection(section, ctx) {
 // Header / footer
 // ---------------------------------------------------------------------------
 
+// The menu as a tree: [{ text, href, children: [] }]. From the pages (a page
+// can sit under another with menuParent) or the owner's own list (items
+// marked `sub` go in a drop-down under the item above).
 function navLinks(site) {
-  if (site.header.links) return site.header.links;
-  return site.pages.filter((p) => !p.post && !p.hidden).map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
+  if (site.header.links) {
+    const out = [];
+    for (const l of site.header.links) {
+      if (l.sub && out.length) out[out.length - 1].children.push({ text: l.text, href: l.href, children: [] });
+      else out.push({ text: l.text, href: l.href, children: [] });
+    }
+    return out;
+  }
+  const pages = site.pages.filter((p) => !p.post && !p.hidden);
+  const item = (p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}`, children: [] });
+  const top = pages.filter((p) => !p.menuParent || !pages.some((q) => q.slug === p.menuParent && !q.menuParent) || p.slug === "index");
+  return top.map((p) => ({ ...item(p), children: pages.filter((c) => c !== p && c.menuParent === p.slug && !top.includes(c)).map(item) }));
 }
 
 function renderHeader(site, ctx) {
@@ -636,19 +649,38 @@ function renderHeader(site, ctx) {
   const logoVars = lh !== 40 || lt !== 20 || h.logoHeightMobile ? ` style="--lh:${lh}px;--lhm:${lhm}px;--lt:${lt}px"` : "";
   const links = navLinks(site);
   const current = pageUrl(ctx.page, ctx.base);
-  const nav = links
-    .map((l) => {
-      const href = resolveHref(l.href, ctx);
-      return `<a ${attrHref(l.href, ctx)}${href === current ? ' aria-current="page"' : ""}>${esc(l.text)}</a>`;
-    })
-    .join("");
+  const link = (l) => `<a ${attrHref(l.href, ctx)}${resolveHref(l.href, ctx) === current ? ' aria-current="page"' : ""}>${esc(l.text)}</a>`;
+  // Drop-downs open on hover or keyboard focus (no JavaScript); on phones the sub-items are listed indented.
+  const one = (l) => (l.children.length
+    ? `<div class="eka-dd${l.children.some((c) => resolveHref(c.href, ctx) === current) ? " on" : ""}">${link(l).replace("</a>", '<svg class="eka-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg></a>')}<div class="eka-dd-menu">${l.children.map(link).join("")}</div></div>`
+    : link(l));
+  const items = links.map(one);
   const cta = h.ctaText ? `<a class="eka-btn btn-${h.ctaStyle || "primary"}" ${attrHref(h.ctaHref, ctx)}>${esc(h.ctaText)}</a>` : "";
+  // Split layout: on wide screens, the menu's two halves sit either side of
+  // a copy of the logo (the usual logo shows on phones).
+  const half = Math.ceil(items.length / 2);
+  const nav = h.layout === "split"
+    ? `<div class="eka-nav-half l">${items.slice(0, half).join("")}</div><a class="eka-logo eka-logo-mid"${logoVars} ${attrHref("/", ctx)} tabindex="-1" aria-hidden="true">${logo}</a><div class="eka-nav-half r">${items.slice(half).join("")}${cta}</div>`
+    : items.join("") + cta;
   if (h.menu && ctx.css) ctx.css.push(...menuCss(h));
   const burger = links.length || cta
     ? `<input type="checkbox" id="eka-nav-t" class="eka-nav-t"><label for="eka-nav-t" class="eka-burger" aria-label="${esc(words(site.lang).openMenu)}"><span></span></label>`
     : "";
   const extra = ctx.css ? styleNode({ id: "header", type: "header", style: h.style }, ctx, { kind: "header" }) : [];
-  return `<header class="eka-header${h.sticky ? " sticky" : ""}${extra.length ? " " + extra.join(" ") : ""}"${ctx.editor ? ' data-eka-kind="header" data-eka-id="header"' : ""}><div class="eka-wrap eka-header-in"><a class="eka-logo"${logoVars} ${attrHref("/", ctx)}>${logo}</a>${burger}<nav class="eka-nav" aria-label="Main">${nav}${cta}</nav></div></header>`;
+  // The announcement bar goes inside the header, so they stay together.
+  const bar = announceBar(site, ctx);
+  const layout = [h.layout && h.layout !== "standard" ? ` hl-${h.layout}` : "", h.overlay ? " over" : "", bar ? " has-ann" : ""].join("");
+  return `<header class="eka-header${h.sticky ? " sticky" : ""}${layout}${extra.length ? " " + extra.join(" ") : ""}"${ctx.editor ? ' data-eka-kind="header" data-eka-id="header"' : ""}>${bar}<div class="eka-wrap eka-header-in"><a class="eka-logo"${logoVars} ${attrHref("/", ctx)}>${logo}</a>${burger}<nav class="eka-nav" aria-label="Main">${nav}</nav></div></header>`;
+}
+
+// The announcement bar above the header. Visitors can close it (until they
+// reload) with a pure-CSS checkbox.
+function announceBar(site, ctx) {
+  const a = site.announce;
+  if (!a?.show || !a.text) return "";
+  const link = a.linkText && a.href ? ` <a ${attrHref(a.href, ctx)}>${esc(a.linkText)} →</a>` : "";
+  const close = a.close ? `<input type="checkbox" id="eka-ann-x" class="eka-ann-x"><label for="eka-ann-x" class="eka-ann-close" aria-label="Close">×</label>` : "";
+  return `<div class="eka-ann an-${a.style}">${close}<p>${esc(a.text)}${link}</p></div>`;
 }
 
 // Menu link styles. Pushed after the header's own rules, and more specific,
@@ -757,6 +789,32 @@ p{margin:0 0 1em}
 .eka-burger span{top:21px}.eka-burger span::before{top:-7px;left:0}.eka-burger span::after{top:7px;left:0}
 .eka-nav-t:focus-visible+.eka-burger{outline:2px solid var(--c-primary)}
 @media (max-width:860px){.eka-burger{display:block}.eka-nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:stretch;gap:0;padding:8px 20px 20px;background:var(--c-bg);border-bottom:1px solid color-mix(in srgb,var(--c-text) 10%,transparent)}.eka-nav a:not(.eka-btn){padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--c-text) 8%,transparent)}.eka-nav .eka-btn{margin-top:14px}.eka-nav-t:checked~.eka-nav{display:flex}.eka-nav-t:checked+.eka-burger span{background:transparent}.eka-nav-t:checked+.eka-burger span::before{transform:translateY(7px) rotate(45deg)}.eka-nav-t:checked+.eka-burger span::after{transform:translateY(-7px) rotate(-45deg)}}
+.eka-dd{position:relative;display:flex;align-items:center}
+.eka-caret{width:12px;height:12px;margin-left:4px;vertical-align:-1px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.eka-dd-menu{display:flex;flex-direction:column}
+.eka-dd.on>a{color:var(--c-primary)}
+@media (min-width:861px){.eka-dd-menu{position:absolute;top:100%;left:-14px;min-width:200px;padding:8px;margin-top:8px;background:var(--c-bg);border-radius:calc(var(--r) * .8);box-shadow:0 14px 40px -12px rgba(0,0,0,.28);border:1px solid color-mix(in srgb,var(--c-text) 8%,transparent);opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .15s,transform .15s,visibility .15s;z-index:60}
+.eka-dd-menu::before{content:"";position:absolute;left:0;right:0;top:-12px;height:12px}
+.eka-dd:hover>.eka-dd-menu,.eka-dd:focus-within>.eka-dd-menu{opacity:1;visibility:visible;transform:none}
+.eka-dd-menu a:not(.eka-btn){padding:8px 12px;border-radius:6px;color:var(--c-text)!important}.eka-dd-menu a:hover{background:color-mix(in srgb,var(--c-primary) 9%,transparent)}}
+@media (max-width:860px){.eka-dd{flex-direction:column;align-items:stretch}.eka-caret{display:none}.eka-dd-menu a:not(.eka-btn){padding-left:18px!important;font-size:.93rem}}
+.eka-nav-half{display:contents}.eka-logo-mid{display:none}
+@media (min-width:861px){
+.hl-centered .eka-header-in{flex-direction:column;gap:10px;padding:14px 20px}.hl-centered .eka-logo{margin:0}.hl-centered .eka-nav{justify-content:center;flex-wrap:wrap}
+.hl-split .eka-header-in>.eka-logo{display:none}.hl-split .eka-nav{flex:1;display:grid;grid-template-columns:1fr auto 1fr;gap:32px}
+.hl-split .eka-nav-half{display:flex;align-items:center;gap:inherit;column-gap:22px}.hl-split .eka-nav-half.l{justify-content:flex-end}.hl-split .eka-nav-half.r{justify-content:flex-start}.hl-split .eka-logo-mid{display:flex;margin:0}.eka-nav a.eka-logo-mid{font-family:var(--f-head);font-weight:700;font-size:var(--lt,1.25rem);color:var(--c-text)}.eka-header.over .eka-nav a.eka-logo-mid{color:var(--hd-ink)}}
+.eka-header.over{position:absolute;top:auto;left:0;right:0;background:transparent;border-bottom-color:transparent;--hd-ink:#fff}
+.eka-header.over .eka-logo,.eka-header.over .eka-nav>a:not(.eka-btn),.eka-header.over .eka-dd>a{color:var(--hd-ink)}
+.eka-header.over .eka-burger span,.eka-header.over .eka-burger span::before,.eka-header.over .eka-burger span::after{background:var(--hd-ink)}
+.eka-header.over.has-ann~main>.eka-s:first-child{padding-top:calc(88px + 108px)}.eka-header.over.has-ann~main>.eka-s.pad-xl:first-child{padding-top:calc(128px*var(--sp,1) + 108px)}.eka-header.over.has-ann~main>.eka-s.pad-md:first-child{padding-top:calc(56px*var(--sp,1) + 108px)}.eka-header.over.has-ann~main>.eka-s.pad-sm:first-child,.eka-header.over.has-ann~main>.eka-s.pad-none:first-child{padding-top:calc(32px*var(--sp,1) + 108px)}
+.eka-header.over~main>.eka-s:first-child{padding-top:calc(88px + 68px)}.eka-header.over~main>.eka-s.pad-xl:first-child{padding-top:calc(128px*var(--sp,1) + 68px)}.eka-header.over~main>.eka-s.pad-md:first-child{padding-top:calc(56px*var(--sp,1) + 68px)}.eka-header.over~main>.eka-s.pad-sm:first-child,.eka-header.over~main>.eka-s.pad-none:first-child{padding-top:calc(32px*var(--sp,1) + 68px)}
+@property --hd-ink{syntax:"<color>";inherits:true;initial-value:#fff}
+@keyframes eka-hd-solid{to{background:var(--c-bg);border-bottom-color:color-mix(in srgb,var(--c-text) 10%,transparent);box-shadow:0 6px 20px -12px rgba(0,0,0,.35);--hd-ink:var(--c-text)}}
+@supports (animation-timeline:scroll()){.eka-header.over.sticky{position:fixed;top:0;animation:eka-hd-solid linear both;animation-timeline:scroll();animation-range:0 160px}}
+@media (max-width:860px){.eka-header.over .eka-nav a:not(.eka-btn),.eka-header.over .eka-dd>a{color:var(--c-text)}}
+.eka-ann{position:relative;padding:9px 44px;text-align:center;font-size:.92rem;line-height:1.4}.eka-ann p{margin:0}.eka-ann a{color:inherit;font-weight:700}
+.eka-ann.an-dark{background:var(--c-dark);color:var(--c-on-dark)}.eka-ann.an-primary{background:var(--c-primary);color:var(--c-on-primary)}.eka-ann.an-accent{background:var(--c-accent);color:#111}
+.eka-ann-x{position:absolute;opacity:0;pointer-events:none}.eka-ann-close{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:28px;height:28px;display:grid;place-items:center;cursor:pointer;font-size:20px;line-height:1;opacity:.75}.eka-ann-x:checked~p,.eka-ann:has(.eka-ann-x:checked){display:none}
 .eka-s{position:relative;background-size:cover;background-position:center}
 .eka-s>.eka-wrap{position:relative}
 .pad-none{padding:0}.pad-sm{padding:calc(32px*var(--sp,1)) 0}.pad-md{padding:calc(56px*var(--sp,1)) 0}.pad-lg{padding:calc(88px*var(--sp,1)) 0}.pad-xl{padding:calc(128px*var(--sp,1)) 0}

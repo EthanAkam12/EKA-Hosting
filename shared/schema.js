@@ -828,6 +828,8 @@ export function normalizePage(page, index = 0) {
   };
   // Pages can be left out of the menu (e.g. the privacy policy, linked from the footer).
   if (index > 0 && page.hidden === true) out.hidden = true;
+  // …or shown in a drop-down under another page (its slug).
+  if (index > 0 && typeof page.menuParent === "string" && /^[a-z0-9-]{1,60}$/.test(page.menuParent)) out.menuParent = page.menuParent;
   // Blog posts are pages with post details. They live at /blog/<slug>/, stay
   // out of the menu and are listed by "Blog posts" blocks.
   if (index > 0 && isObj(page.post)) out.post = normalizePost(page.post);
@@ -876,7 +878,9 @@ export function normalizeSite(site) {
     p.slug = slug;
     seen.add(slug);
   }
-  const navLinks = Array.isArray(header.links) ? header.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : null;
+  // `sub`: shown in a drop-down under the item above it.
+  const navLinks = Array.isArray(header.links) ? header.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href), ...(l.sub === true ? { sub: true } : {}) })).filter((l) => l.text) : null;
+  if (navLinks?.[0]?.sub) delete navLinks[0].sub;
   return {
     schemaVersion: SCHEMA_VERSION,
     name,
@@ -895,7 +899,13 @@ export function normalizeSite(site) {
       ...(normalizeStyle(header.style) ? { style: normalizeStyle(header.style) } : {}),
       ...(normalizeMenu(header.menu) ? { menu: normalizeMenu(header.menu) } : {}),
       ctaStyle: ["primary", "secondary", "outline", "light", "dark"].includes(header.ctaStyle) ? header.ctaStyle : "primary",
+      // standard: logo left, menu right · centered: logo above the menu · split: logo between two halves of the menu
+      layout: ["standard", "centered", "split"].includes(header.layout) ? header.layout : "standard",
+      // See-through over the first section (turns solid when scrolling where browsers allow).
+      overlay: header.overlay === true,
     },
+    // The thin bar above the header ("Free delivery this week").
+    announce: normalizeAnnounce(s.announce),
     footer: {
       text: str(footer.text, `© ${new Date().getFullYear()} ${name}`),
       links: Array.isArray(footer.links) ? footer.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : [],
@@ -908,6 +918,18 @@ export function normalizeSite(site) {
     business: normalizeBusiness(s.business),
     lang: LANGUAGES[s.lang] ? s.lang : "en-GB",
     legal: normalizeLegal(s.legal),
+  };
+}
+
+function normalizeAnnounce(a) {
+  const x = isObj(a) ? a : {};
+  return {
+    show: x.show === true,
+    text: str(x.text).slice(0, 200),
+    linkText: str(x.linkText).slice(0, 40),
+    href: str(x.href).slice(0, 300),
+    style: ["primary", "accent", "dark"].includes(x.style) ? x.style : "dark",
+    close: x.close !== false,
   };
 }
 

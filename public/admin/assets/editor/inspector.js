@@ -268,13 +268,33 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     field({ key: "ctaStyle", label: "Button style", type: "select", options: ["primary", "secondary", "outline", "light", "dark"], labels: ["Main colour", "Accent colour", "Outline", "White", "Dark"] });
     field({ key: "ctaHref", label: "Button link", type: "url" });
     field({ key: "sticky", label: "Stick to top when scrolling", type: "checkbox" });
+    field({ key: "layout", label: "Layout", type: "select", options: ["standard", "centered", "split"], labels: ["Logo left, menu right", "Logo centred above the menu", "Logo in the middle of the menu"] });
+    field({ key: "overlay", label: "See-through over the first section (for a photo or dark banner)", type: "checkbox" });
+    if (hd.overlay) root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "The menu turns white over the banner and, if it sticks to the top, turns solid as visitors scroll (in browsers that support it; elsewhere it scrolls away with the page). Works best when each page starts with a photo or dark section."));
+    root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Announcement bar"));
+    const ann = state.get().site.announce;
+    const af = (f) => root.append(fieldControl(f, ann[f.key], (v, opts) => set(`announce:${f.key}`, (site) => { site.announce[f.key] = v; }, opts), ctx()));
+    af({ key: "show", label: "Show a bar above the header", type: "checkbox" });
+    if (ann.show) {
+      af({ key: "text", label: "Text", type: "text" });
+      af({ key: "linkText", label: "Link text (optional)", type: "text" });
+      af({ key: "href", label: "Link", type: "url" });
+      af({ key: "style", label: "Colour", type: "select", options: ["dark", "primary", "accent"], labels: ["Dark", "Main colour", "Accent colour"] });
+      af({ key: "close", label: "Visitors can close it", type: "checkbox" });
+    }
     root.append(h("hr", { class: "sep" }));
     const auto = hd.links === null;
     root.append(fieldControl({ key: "auto", label: "Build the menu from my pages automatically", type: "checkbox" }, auto, (v) => set("header:links", (site) => {
-      site.header.links = v ? null : site.pages.filter((p) => !p.post).map((p) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}` }));
+      // Switching to a hand-made menu keeps the drop-downs.
+      const pages = site.pages.filter((p) => !p.post && !p.hidden);
+      const link = (p, sub) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}`, ...(sub ? { sub: true } : {}) });
+      site.header.links = v ? null : pages.filter((p) => !p.menuParent).flatMap((p) => [link(p), ...pages.filter((c) => c.menuParent === p.slug).map((c) => link(c, true))]);
     }, { rebuild: true }), ctx()));
     if (!auto) {
       root.append(fieldControl(menuField, hd.links, (v, opts) => set("header:links", (site) => { site.header.links = v.length ? v : null; }, opts), ctx()));
+      root.append(h("p", { class: "field-hint" }, "Tick \"In a drop-down under the item above\" on a link to tuck it under the one before it."));
+    } else {
+      root.append(h("p", { class: "field-hint" }, "For a drop-down menu, open a page's settings (click an empty part of the page) and choose \"Show in the menu under\"."));
     }
   }
 
@@ -350,6 +370,10 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     pf({ key: "title", label: "Page name (shown in the menu)", type: "text" }, () => page.title, (p, v) => { p.title = v; });
     if (page.slug !== "index") pf({ key: "slug", label: "Web address", type: "text" }, () => page.slug, (p, v) => { p.slug = slugify(v); });
     if (page.slug !== "index") pf({ key: "inMenu", label: "Show in the menu", type: "checkbox" }, () => !page.hidden, (p, v) => { if (v) delete p.hidden; else p.hidden = true; });
+    if (page.slug !== "index" && !page.hidden) {
+      const parents = state.get().site.pages.filter((p) => !p.post && !p.hidden && p.id !== page.id && p.slug !== "index" && !p.menuParent);
+      pf({ key: "menuParent", label: "Show in the menu under (a drop-down)", type: "select", options: ["", ...parents.map((p) => p.slug)], labels: ["(its own menu item)", ...parents.map((p) => p.title)] }, () => page.menuParent || "", (p, v) => { if (v) p.menuParent = v; else delete p.menuParent; });
+    }
     pf({ key: "seoTitle", label: "Google title (optional)", type: "text" }, () => page.seo.title, (p, v) => { p.seo.title = v; });
     pf({ key: "seoDesc", label: "Google description", type: "textarea" }, () => page.seo.description, (p, v) => { p.seo.description = v; });
     root.append(h("p", { class: "field-hint" }, "The description shows under your link in search results. Aim for 120–155 characters."));
@@ -360,9 +384,10 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
 
 const menuField = {
   key: "links", label: "Menu links", type: "list", itemLabel: "text",
-  itemDefaults: () => ({ text: "Link", href: "/" }),
+  itemDefaults: () => ({ text: "Link", href: "/", sub: false }),
   itemFields: [
     { key: "text", label: "Text", type: "text" },
     { key: "href", label: "Link", type: "url" },
+    { key: "sub", label: "In a drop-down under the item above", type: "checkbox" },
   ],
 };
