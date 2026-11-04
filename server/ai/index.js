@@ -139,6 +139,12 @@ export function createAi({ provider = pickProvider() } = {}) {
       return { site: applyBrief(normalizeSite(site), brief) };
     },
 
+    // General writing for EKA HQ's AI staff: returns the JSON object asked for.
+    async ask({ kind, system, prompt, onProgress }) {
+      if (!this.enabled) throw new Error("This needs AI. Add your Anthropic API key in settings.txt.");
+      return parseJson(await provider.complete({ kind, system, prompt, model: editModel, onProgress }));
+    },
+
     // A blog post in the site's style, saved as a draft for the owner to check.
     async writePost({ site, topic, onProgress }) {
       if (provider.writePost) return { page: normalizePage(await provider.writePost({ site, topic }), 1) };

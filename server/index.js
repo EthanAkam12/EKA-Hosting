@@ -1271,12 +1271,18 @@ api.post("/sites/from-design", async (req, res) => {
   const brief = cleanBrief(req.body?.brief);
   const fill = !!req.body?.fill && ai.enabled;
   if (fill && demoAiBlocked(req, res)) return;
+  const { meta, job } = await buildFromDesign({ user: req.user, ...ownerOf(req), design: req.body.design, brief, fill });
+  res.json({ site: withUrl(store.getMeta(meta.id)), jobId: job.id });
+});
+
+// Creates a site from a ready-made design (and, with AI, writes every page
+// for the business). Used by the wizard and by EKA HQ's Website builder.
+async function buildFromDesign({ user, owner, demo, design, brief, fill }) {
   const name = brief.name || "New website";
-  const { owner, demo } = ownerOf(req);
   const meta = await store.create({ name, prompt: brief.description, owner, demo });
-  const job = usageContext.run({ user: req.user, siteId: meta.id }, () => startJob("design", meta.id, async (progress) => {
+  const job = usageContext.run({ user, siteId: meta.id }, () => startJob("design", meta.id, async (progress) => {
     try {
-      let site = siteFromDesign(req.body.design, { name, phone: brief.phone, email: brief.email, address: brief.address, hours: brief.hours });
+      let site = siteFromDesign(design, { name, phone: brief.phone, email: brief.email, address: brief.address, hours: brief.hours });
       site.lang = brief.lang;
       if (brief.logoUrl) site.header.logoImage = brief.logoUrl;
       if (fill) {
@@ -1294,18 +1300,19 @@ api.post("/sites/from-design", async (req, res) => {
       }
       ensurePrivacyPage(site);
       await fillImages(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });
-      const adopted = await applyBrandKit(req, await adoptTmpMedia(site, meta.id), meta.id, brief.brandKit);
+      const adopted = await applyBrandKit({ user }, await adoptTmpMedia(site, meta.id), meta.id, brief.brandKit);
       await store.saveDraft(meta.id, adopted, { version: "Started from a ready-made design" });
       await store.updateMeta(meta.id, { status: "ready", error: null, formEmail: brief.email || "" });
-      return { ok: true };
+      return { ok: true, siteId: meta.id };
     } catch (err) {
       await store.updateMeta(meta.id, { status: "error", error: err.message });
       throw err;
     }
   }));
   await store.updateMeta(meta.id, { jobId: job.id });
-  res.json({ site: withUrl(store.getMeta(meta.id)), jobId: job.id });
-});
+  return { meta, job };
+}
+
 
 api.post("/sites/:id/regenerate", async (req, res) => {
   const meta = siteOr404(req, res);
