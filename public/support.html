@@ -27,6 +27,20 @@
   pre { background: #f1f2f5; border-radius: 8px; padding: 12px 14px; font: 13.5px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; margin: 0 0 12px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  label { display: block; font-weight: 600; font-size: 14px; margin: 0 0 10px; }
+  input, select, textarea { display: block; width: 100%; margin-top: 4px; font: inherit; font-weight: 400; padding: 9px 11px; border: 1px solid #cfd4dd; border-radius: 8px; background: #fff; color: inherit; }
+  textarea { min-height: 120px; resize: vertical; }
+  .ticket { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .ticket summary { cursor: pointer; padding: 12px 14px; display: flex; gap: 10px; align-items: center; font-weight: 600; }
+  .ticket summary .when { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 13px; white-space: nowrap; }
+  .tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #fef3c7; color: #92400e; white-space: nowrap; }
+  .tag.answered { background: #dcfce7; color: #166534; }
+  .msgs { padding: 0 14px 14px; }
+  .msg { padding: 10px 12px; border-radius: 10px; margin-bottom: 8px; white-space: pre-wrap; font-size: 15px; }
+  .msg.customer { background: #f1f2f5; margin-right: 12%; }
+  .msg.support { background: var(--soft); margin-left: 12%; }
+  .msg small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  .err { color: #b91c1c; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -50,6 +64,11 @@
       <p class="muted" id="contact-text">Loading…</p>
       <a class="btn" id="mail" href="#" hidden>Email support</a>
     </div>
+  </div>
+
+  <div class="card" id="ask" hidden>
+    <h2>Send us a message</h2>
+    <div id="ask-body"></div>
   </div>
 
   <div class="card">
@@ -86,6 +105,7 @@
     } else {
       details = `EKA Builder version: ${version}`;
     }
+    setupAsk(me);
     if (info.supportEmail) {
       $("contact-text").textContent = `Email us at ${info.supportEmail}.`;
       const body = `\n\nWhat I was doing:\n\nWhat happened:\n\n---\n${details}`;
@@ -95,6 +115,50 @@
       $("contact-text").textContent = "Contact the company that provides your builder. (Server owners: set SUPPORT_EMAIL in the settings to show your support address here.)";
     }
   }).catch(() => { $("contact-text").textContent = "Couldn't load the support details. Please try again."; });
+  // Messages to support (customers who are logged in).
+  const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v); } e.append(...kids.filter((k) => k != null && k !== false)); return e; };
+  const post = (body) => fetch("/api/support/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "That didn't send. Please try again."); return j; });
+  const when = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  function showTickets(list, open) {
+    const box = $("tickets");
+    box.replaceChildren(...(list.length ? [el("h2", { style: "margin-top:18px" }, "Your messages")] : []), ...list.slice().reverse().map((t) => {
+      const text = el("textarea", { "aria-label": "Your reply", placeholder: "Write a reply…", style: "min-height:80px" });
+      const err = el("p", { class: "err" });
+      const send = el("button", { class: "btn alt", type: "button", onclick: async () => {
+        send.disabled = true; err.textContent = "";
+        try { showTickets((await post({ ticketId: t.id, body: text.value })).tickets, t.id); } catch (e) { err.textContent = e.message; send.disabled = false; }
+      } }, "Send reply");
+      return el("details", { class: "ticket", open: t.id === open || (open === undefined && t === list[list.length - 1]) },
+        el("summary", {}, el("span", {}, t.subject), el("span", { class: `tag ${t.status}` }, t.status === "answered" ? "Answered" : "We're on it"), el("span", { class: "when" }, when(t.createdAt))),
+        el("div", { class: "msgs" }, ...t.thread.map((m) => el("div", { class: `msg ${m.who}` }, el("small", {}, `${m.who === "support" ? "Support" : "You"} · ${when(m.at)}`), m.text)), text, err, send),
+      );
+    }));
+  }
+  async function setupAsk(me) {
+    $("ask").hidden = false;
+    if (!me) return $("ask-body").replaceChildren(el("p", { class: "muted" }, "Log in to the builder to send us a message and see our replies here. "), el("a", { class: "btn alt", href: "/admin/login" }, "Log in"));
+    if (me.role !== "user") return $("ask-body").replaceChildren(el("p", { class: "muted" }, me.role === "admin" ? "Your customers can message you from here. Their messages arrive in HQ, where Sam drafts a reply for you to check." : "Messages are for customers with an account."), me.role === "admin" ? el("a", { class: "btn alt", href: "/admin/hq" }, "Open HQ") : "");
+    const sites = await fetch("/api/sites").then((r) => r.json()).then((j) => j.sites || []).catch(() => []);
+    const subject = el("input", { maxlength: 140, required: true, placeholder: "e.g. How do I add my own domain?" });
+    const site = el("select", {}, el("option", { value: "" }, "Not about a particular website"), ...sites.map((s) => el("option", { value: s.name }, s.name)));
+    const body = el("textarea", { required: true, maxlength: 5000, placeholder: "What you were trying to do, and what happened" });
+    const err = el("p", { class: "err" });
+    const go = el("button", { class: "btn", type: "submit" }, "Send message");
+    const form = el("form", { onsubmit: async (e) => {
+      e.preventDefault(); go.disabled = true; err.textContent = "";
+      try {
+        const out = await post({ subject: subject.value, site: site.value, body: `${body.value}${details ? `\n\n---\n${details}` : ""}` });
+        form.reset();
+        err.textContent = "Thanks, we've got it. We'll reply here and by email.";
+        err.style.color = "#166534";
+        showTickets(out.tickets);
+      } catch (e2) { err.textContent = e2.message; err.style.color = ""; }
+      go.disabled = false;
+    } }, el("label", {}, "Subject", subject), el("label", {}, "Which website", site), el("label", {}, "Your message", body), el("p", { class: "muted", style: "font-size:14px" }, "Your system details are added automatically."), err, go);
+    $("ask-body").replaceChildren(form, el("div", { id: "tickets" }));
+    const { tickets } = await fetch("/api/support/tickets").then((r) => r.json()).catch(() => ({ tickets: [] }));
+    showTickets(tickets || []);
+  }
   $("copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(details); $("copy").textContent = "Copied ✓"; } catch { $("copy").textContent = "Select the text above and copy it"; }
   });

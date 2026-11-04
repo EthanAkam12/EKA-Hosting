@@ -113,6 +113,10 @@ From then on **Publish** uploads the site straight to the host. Only changed fil
 - **For Google and sharing**: every page gets an icon and share picture, the home page carries the business details (LocalBusiness), and live sites serve a sitemap.
 - **Phone contact button**: an optional floating Call / WhatsApp button on phones.
 
+## EKA HQ (AI staff, for the administrator)
+
+`/admin/hq` is a pixel-art office with five AI staff who do the groundwork and bring it to you for approval: **Sam** drafts replies to customers' support messages (sent from `/support`), **Bea** builds done-for-you websites from a short brief and returns a review link, **Alex** writes monthly check-in emails, **Otto** checks backups, disk, licence, email, failed builds, unanswered form messages and domains every hour, and **Mia** writes weekly social posts, a blog post for your own site and replies to its enquiries. Nothing is sent until you approve it. Work is kept in `DATA_DIR/hq/`. AI work is charged to the administrator, not to customers' allowances. HQ's rounds run only while the builder is running.
+
 ## Help, support and the public demo
 
 - **Help pages** are at `/help` and a **Support** page at `/support` (both public). Set `SUPPORT_EMAIL` to show your support address; the Support page fills in a ready-made email with the user's system details.

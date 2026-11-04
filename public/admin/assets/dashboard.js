@@ -51,7 +51,10 @@ function setupHeader() {
   if (top.dataset.ready) return;
   top.dataset.ready = "1";
   const logout = document.getElementById("logout");
-  if (me.role === "admin") logout.before(h("a", { class: "btn btn-ghost", href: "/admin/customers" }, "Customers"));
+  if (me.role === "admin") {
+    logout.before(h("a", { class: "btn btn-ghost", href: "/admin/hq", title: "EKA HQ: your AI staff" }, "HQ", me.hqWaiting ? h("span", { class: "hq-count", title: `${me.hqWaiting} waiting for you` }, String(me.hqWaiting)) : null));
+    logout.before(h("a", { class: "btn btn-ghost", href: "/admin/customers" }, "Customers"));
+  }
   if (me.account) {
     logout.before(h("button", { class: "btn btn-ghost", onclick: changePassword, title: me.account.email }, "My account"));
     document.querySelector(".head p").textContent = "Create, edit and publish your websites.";

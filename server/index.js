@@ -41,6 +41,8 @@ import { createEmptySite, normalizeSite, normalizePage, normalizeSection, findNo
 import { ensurePrivacyPage } from "../shared/legal.js";
 import { siteFromDesign, SITE_DESIGNS } from "../shared/site-designs.js";
 import { LANGUAGES } from "../shared/i18n.js";
+import { siteAdvice } from "../shared/advice.js";
+import { createHQ } from "./hq.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -487,6 +489,7 @@ app.get("/support", (req, res) => res.sendFile(path.join(ROOT, "public/support.h
 app.get("/api/public-info", (req, res) => res.json({ demo: DEMO, supportEmail: SUPPORT_EMAIL, version: VERSION }));
 app.get("/admin", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/dashboard.html")));
 app.get("/admin/customers", auth.requirePage, (req, res) => (req.user.role === "admin" ? res.sendFile(path.join(ROOT, "public/admin/customers.html")) : res.redirect("/admin")));
+app.get("/admin/hq", auth.requirePage, (req, res) => (req.user.role === "admin" ? res.sendFile(path.join(ROOT, "public/admin/hq.html")) : res.redirect("/admin")));
 app.get("/admin/new", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/new.html")));
 app.get("/admin/sites/:id", auth.requirePage, (req, res) => res.sendFile(path.join(ROOT, "public/admin/editor.html")));
 app.get(["/admin/preview/:id", "/admin/preview/:id/*"], auth.requirePage, (req, res, next) => {
@@ -823,6 +826,7 @@ api.get("/me", (req, res) => {
     mail: mailer.enabled,
     version: VERSION,
     supportEmail: SUPPORT_EMAIL,
+    hqWaiting: isAdmin(req) ? hq.waitingCount() : undefined,
     demo: isDemo(req) ? { hours: DEMO_HOURS, sites: DEMO_SITES, aiLeft: ai.enabled ? Math.max(0, DEMO_AI - (demoAiUse.get(req.user.id) || 0)) : null } : null,
     role: req.user.role,
     licence: (() => {
@@ -1813,6 +1817,83 @@ api.patch("/sites/:id/submissions/:sid", async (req, res) => {
   if (!/^[a-f0-9]{12}$/.test(req.params.sid)) return res.status(404).json({ error: "Message not found." });
   await store.setSubmissionDone(meta.id, req.params.sid, !!req.body?.done);
   res.json({ ok: true });
+});
+
+// ---- EKA HQ: AI staff that help run the business ---------------------------------
+
+let helpCache = "";
+let hqOrigin = ""; // the address the administrator uses, for links in emails when BUILDER_URL isn't set
+const helpText = () => helpCache;
+fs.readFile(path.join(ROOT, "public/help.html"), "utf8").then((html) => {
+  helpCache = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, 60000);
+}).catch(() => {});
+const hq = createHQ({
+  dataDir: DATA_DIR, ai, mailer, store, users, stats, licence, backups, siteAdvice, buildFromDesign, cleanBrief, helpText, usageContext, checkDomains,
+  baseDomain: BASE_DOMAIN, serverIp: process.env.SERVER_IP || "",
+  publicBase: () => BUILDER_URL || hqOrigin,
+  async createReviewLink(siteId) {
+    const review = { token: crypto.randomBytes(12).toString("base64url"), createdAt: new Date().toISOString() };
+    await store.updateMeta(siteId, { review, approval: null });
+    return review.token;
+  },
+});
+await hq.init();
+setTimeout(() => hq.tick(), 90_000).unref();
+setInterval(() => hq.tick(), 3600_000).unref();
+
+const hqTask = (req, res, fn) => {
+  if (adminOnly(req, res)) return;
+  if (!/^[a-f0-9]{12}$/.test(req.params.tid)) return res.status(404).json({ error: "Not found." });
+  return Promise.resolve().then(fn).then((task) => res.json({ task, hq: hq.overview() })).catch((err) => res.status(400).json({ error: err.message }));
+};
+api.get("/hq", (req, res) => { if (adminOnly(req, res)) return; hqOrigin = `${req.protocol}://${req.get("host")}`; res.json({ ...hq.overview(), ai: ai.enabled, mail: mailer.enabled, sites: store.list().filter((m) => !m.demo).map((m) => ({ id: m.id, name: m.name })), customers: users.list().map((u) => ({ id: u.id, email: u.email, name: u.name })) }); });
+api.post("/hq/tasks/:tid/approve", (req, res) => hqTask(req, res, () => hq.approve(req.params.tid, { draft: cleanDraft(req.body?.draft), manual: req.body?.manual === true })));
+api.post("/hq/tasks/:tid/dismiss", (req, res) => hqTask(req, res, () => hq.dismiss(req.params.tid)));
+api.post("/hq/tasks/:tid/draft", (req, res) => hqTask(req, res, () => hq.saveDraft(req.params.tid, cleanDraft(req.body?.draft))));
+api.post("/hq/tasks/:tid/retry", (req, res) => hqTask(req, res, () => hq.retry(req.params.tid)));
+api.post("/hq/settings", (req, res) => { if (adminOnly(req, res)) return; res.json({ settings: hq.setSettings(req.body) }); });
+api.post("/hq/missions", async (req, res) => {
+  if (adminOnly(req, res) || licenceBlocked(req, res)) return;
+  const b = req.body || {};
+  if (!String(b.name || "").trim()) return res.status(400).json({ error: "Give the business a name." });
+  if (b.design && b.design !== "auto" && !SITE_DESIGNS.some((d) => d.id === b.design)) return res.status(400).json({ error: "Unknown design." });
+  if (b.customerId && !users.get(String(b.customerId))) return res.status(400).json({ error: "Customer not found." });
+  const task = await hq.newMission({ ...b, customerId: b.customerId ? String(b.customerId) : null, sendTo: String(b.sendTo || "").slice(0, 200) });
+  res.json({ task });
+});
+api.post("/hq/run/:agent", async (req, res) => {
+  if (adminOnly(req, res)) return;
+  const a = req.params.agent;
+  if (a === "ops") { await hq.opsCheck({ domains: true }); return res.json({ ok: true, hq: hq.overview() }); }
+  if (a === "account") { hq.accountCheckins(); return res.json({ ok: true }); }
+  if (a === "marketing") { if (licenceBlocked(req, res)) return; hq.marketingRound(); return res.json({ ok: true }); }
+  res.status(404).json({ error: "That one doesn't have a round to run." });
+});
+function cleanDraft(d) {
+  if (!d || typeof d !== "object") return undefined;
+  const out = {};
+  if (typeof d.to === "string") out.to = d.to.trim().slice(0, 200);
+  if (typeof d.subject === "string") out.subject = d.subject.replace(/[\r\n]+/g, " ").slice(0, 200);
+  if (typeof d.text === "string") out.text = d.text.slice(0, 20000);
+  return out;
+}
+
+// Customers' help messages (answered by HQ's Support, with your approval).
+const ticketHits = new Map();
+api.get("/support/tickets", (req, res) => res.json({ tickets: isCustomer(req) ? hq.ticketsFor(req.user) : [] }));
+api.post("/support/tickets", async (req, res) => {
+  if (!isCustomer(req)) return res.status(403).json({ error: isAdmin(req) ? "This form is for your customers." : "Log in to send a message." });
+  const n = (ticketHits.get(req.user.id) || []).filter((t) => Date.now() - t < 3600_000);
+  if (n.length >= 10) return res.status(429).json({ error: "That's a lot of messages. Please wait a little before sending another." });
+  ticketHits.set(req.user.id, [...n, Date.now()]);
+  const body = String(req.body?.body || "").trim();
+  if (body.length < 5) return res.status(400).json({ error: "Tell us a little more." });
+  const user = users.get(req.user.id);
+  const ticket = req.body?.ticketId
+    ? await hq.addToTicket(String(req.body.ticketId), user, body).catch(() => null)
+    : await hq.newTicket({ user: { ...user, role: "user" }, subject: req.body?.subject, body, site: req.body?.site });
+  if (!ticket) return res.status(404).json({ error: "Message not found." });
+  res.json({ tickets: hq.ticketsFor(user) });
 });
 
 app.use("/api", api);

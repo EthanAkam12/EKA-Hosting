@@ -101,3 +101,69 @@ test("host API: sign-in links, plans, suspension and privacy between customers",
   assert.match(csv, /^Month,Email,Name,Plan/);
   assert.match(csv, /carol@x\.test/);
 });
+
+test("EKA HQ: customer messages, a build mission, checks and approvals", async () => {
+  const admin = client();
+  await admin("POST", "/api/login", { password: "admin-pass-1" });
+  const made = await admin("POST", "/api/customers", { email: "dan@hq.test", plan: "business" });
+  const dan = client();
+  await dan("POST", "/api/login", { email: "dan@hq.test", password: made.body.password });
+
+  // Only the administrator sees HQ.
+  assert.equal((await dan("GET", "/api/hq")).status, 403);
+  assert.equal((await admin("POST", "/api/support/tickets", { subject: "x", body: "hello there" })).status, 403);
+
+  // A customer's message becomes a reply for the administrator to approve.
+  const sent = await dan("POST", "/api/support/tickets", { subject: "Domain help", body: "How do I connect my domain?" });
+  assert.equal(sent.status, 200);
+  const ticket = sent.body.tickets[0];
+  assert.equal(ticket.status, "open");
+  let hq = (await admin("GET", "/api/hq")).body;
+  const reply = hq.open.find((t) => t.agent === "support" && t.data.ticketId === ticket.id);
+  assert.equal(reply.status, "waiting");
+  assert.equal(hq.openTickets, 1);
+  const ok = await admin("POST", `/api/hq/tasks/${reply.id}/approve`, { draft: { text: "Open your website, then Settings, then Domain." } });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.task.status, "done");
+  const mine = (await dan("GET", "/api/support/tickets")).body.tickets[0];
+  assert.equal(mine.status, "answered");
+  assert.equal(mine.thread.at(-1).who, "support");
+  assert.match(mine.thread.at(-1).text, /Settings, then Domain/);
+  assert.equal((await admin("POST", `/api/hq/tasks/${reply.id}/approve`, {})).status, 400, "only once");
+
+  // Writing again opens the conversation again.
+  await dan("POST", "/api/support/tickets", { ticketId: ticket.id, body: "Thanks! And email?" });
+  assert.equal((await dan("GET", "/api/support/tickets")).body.tickets[0].status, "open");
+
+  // Bea builds a website for Dan and brings back a review link.
+  const mission = await admin("POST", "/api/hq/missions", { name: "Dan's Plumbing", description: "Emergency plumber in Leeds", customerId: made.body.customer?.id || "", sendTo: "dan@hq.test" });
+  assert.equal(mission.status, 200, mission.text);
+  let build;
+  for (let i = 0; i < 60; i++) {
+    hq = (await admin("GET", "/api/hq")).body;
+    build = hq.open.find((t) => t.id === mission.body.task.id) || hq.recent.find((t) => t.id === mission.body.task.id);
+    if (build.status !== "working") break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  assert.equal(build.status, "waiting", build.summary);
+  assert.equal(build.data.design, "trades");
+  assert.match(build.data.review, /\/review\/[\w-]+$/);
+  assert.equal(build.draft.to, "dan@hq.test");
+  assert.equal((await fetch(BASE + new URL(build.data.review, BASE).pathname)).status, 200, "the review link works");
+  // The test's mail program doesn't exist, so sending fails clearly; "sent by hand" works.
+  assert.equal((await admin("POST", `/api/hq/tasks/${build.id}/approve`, {})).status, 400);
+  assert.equal((await admin("POST", `/api/hq/tasks/${build.id}/approve`, { manual: true })).body.task.summary, "Sent by hand.");
+
+  // Otto's checks raise alerts (no backups yet) and they can be sorted.
+  const ops = await admin("POST", "/api/hq/run/ops", {});
+  const alerts = ops.body.hq.open.filter((t) => t.status === "alert");
+  assert.ok(alerts.some((t) => t.key === "ops:backup"));
+  await admin("POST", `/api/hq/tasks/${alerts[0].id}/dismiss`, {});
+
+  // Settings
+  const set = await admin("POST", "/api/hq/settings", { support: { on: false, autoSend: true }, marketing: { about: "EKA Hosting" } });
+  assert.equal(set.body.settings.support.on, false);
+  assert.equal(set.body.settings.support.autoSend, true);
+  assert.equal(set.body.settings.marketing.about, "EKA Hosting");
+  assert.equal((await admin("GET", "/api/me")).body.hqWaiting > 0, true);
+});
