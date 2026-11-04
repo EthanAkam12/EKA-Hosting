@@ -603,6 +603,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(fieldControl({ key: "favicon", label: "Browser tab icon (optional; the logo is used if empty)", type: "image" }, s.site.favicon, (v) => state.mutate((site) => { site.favicon = v || ""; }, { key: "site:favicon" }), { pickImage }));
 
     renderPrivacy(s);
+    renderPopup(s);
 
     const slug = h("input", { class: "input", value: meta.slug });
     const domains = h("textarea", { class: "textarea", rows: "2", placeholder: "www.customer.com" }, (meta.domains || []).join("\n"));
@@ -695,6 +696,32 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     const d0 = (r) => r.domains[0]?.domain || "yourdomain.co.uk";
     check();
     return m;
+  }
+
+  // The pop-up: an offer or newsletter signup.
+  function renderPopup(s) {
+    const pop = s.site.popup;
+    const pf = (key, field) => root.append(fieldControl({ key, ...field }, pop[key], (v, opts) => state.mutate((site) => { site.popup[key] = v ?? (field.type === "slider" ? field.placeholder : ""); }, { key: `popup:${key}`, source: opts?.rebuild ? null : "panel" }), { pickImage }));
+    root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Pop-up"));
+    pf("show", { label: "Show a pop-up (an offer or newsletter signup)", type: "checkbox" });
+    if (!pop.show) return;
+    pf("title", { label: "Heading", type: "text", placeholder: "10% off your first order" });
+    pf("text", { label: "Text", type: "textarea" });
+    pf("image", { label: "Picture (optional)", type: "image" });
+    const hasNews = s.site.pages.some((p) => p.sections.some((sec) => sec.columns.some((c) => c.blocks.some((b) => b.type === "newsletter"))));
+    pf("newsletter", { label: hasNews ? "Include the newsletter signup" : "Include a newsletter signup (add a Newsletter block somewhere first)", type: "checkbox" });
+    pf("buttonText", { label: "Button text", type: "text" });
+    if (!pop.newsletter) pf("href", { label: "Button link", type: "url" });
+    pf("trigger", { label: "When it appears", type: "select", options: ["delay", "exit", "scroll"], labels: ["After a few seconds", "When they're about to leave (mouse heads for the tabs)", "Halfway down the page"] });
+    if (pop.trigger === "delay") pf("delay", { label: "Seconds to wait", type: "slider", min: 0, max: 60, placeholder: 8, unit: "s" });
+    pf("days", { label: "Show it again to the same visitor after (days)", type: "slider", min: 0, max: 90, placeholder: 7, unit: "" });
+    pf("homeOnly", { label: "Only on the home page", type: "checkbox" });
+    root.append(h("button", { class: "btn btn-sm", onclick: () => {
+      const site = structuredClone(state.get().site);
+      const html = renderPage(site, site.pages[0], {}).replace(/<script>\(function\(\)\{var d=document\.getElementById\("eka-pop"\)[\s\S]*?<\/script>/, "<script>document.getElementById('eka-pop').showModal()</script>");
+      modal({ title: "Pop-up preview", wide: true, body: h("iframe", { srcdoc: html, style: { width: "100%", height: "520px", border: "1px solid var(--line)", borderRadius: "8px" }, sandbox: "allow-scripts" }) });
+    } }, "Preview the pop-up"));
+    root.append(h("p", { class: "field-hint" }, "Pop-ups work best used sparingly: one clear offer, shown once. Visitors close it with ×, by clicking outside it, or with Esc."));
   }
 
   // Language, privacy policy, tracking code and the cookie notice.

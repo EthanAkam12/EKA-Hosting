@@ -1,7 +1,7 @@
 // Right-hand property panel for whatever is selected.
 
 import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, SHAPES, SHAPE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
-import { h, api } from "../ui.js";
+import { h, api, modal } from "../ui.js";
 import { fieldControl } from "./fields.js";
 import { readabilityIssues } from "/admin/shared/checks.js";
 import { reworkSections, restyleDialog } from "./section-ai.js";
@@ -44,6 +44,46 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     );
   }
 
+  // Crop without changing the photo: pick the part to keep (click), zoom, and the shape.
+  function cropDialog(block) {
+    const p = block.props;
+    let x = p.focusX ?? 50, y = p.focusY ?? 50, zoom = p.zoom || 100, ratio = p.ratio === "auto" ? "4:3" : p.ratio;
+    const pic = h("img", { src: p.src, alt: "", draggable: "false" });
+    const dot = h("span", { class: "crop-dot" });
+    const frame = h("div", { class: "crop-frame" }, pic);
+    const whole = h("div", { class: "crop-whole", onpointerdown: (e) => { setFrom(e); whole.onpointermove = (ev) => ev.buttons && setFrom(ev); } }, h("img", { src: p.src, alt: "", draggable: "false" }), dot);
+    const zoomIn = h("input", { type: "range", min: "100", max: "300", value: zoom, oninput: (e) => { zoom = +e.target.value; paint(); } });
+    const ratios = ["16:9", "3:2", "4:3", "1:1", "3:4", "2:3"];
+    const ratioSel = h("select", { class: "select", onchange: (e) => { ratio = e.target.value; paint(); } }, ratios.map((r) => h("option", { value: r, selected: r === ratio }, r)));
+    function setFrom(e) {
+      const r = whole.getBoundingClientRect();
+      x = Math.round(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)));
+      y = Math.round(Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100)));
+      paint();
+    }
+    function paint() {
+      dot.style.left = `${x}%`; dot.style.top = `${y}%`;
+      frame.style.aspectRatio = ratio.replace(":", "/");
+      Object.assign(pic.style, { objectPosition: `${x}% ${y}%`, transformOrigin: `${x}% ${y}%`, transform: `scale(${zoom / 100})` });
+    }
+    paint();
+    const m = modal({
+      title: "Crop, zoom & focus point",
+      wide: true,
+      body: h("div", { class: "crop" },
+        h("div", {}, h("div", { class: "small muted", style: { marginBottom: "6px" } }, "Click (or drag) on the part of the photo that matters most."), whole),
+        h("div", {}, h("div", { class: "small muted", style: { marginBottom: "6px" } }, "What visitors will see"), frame,
+          h("div", { class: "field", style: { marginTop: "12px" } }, h("label", {}, "Shape"), ratioSel),
+          h("div", { class: "field" }, h("label", {}, "Zoom"), zoomIn))),
+      footer: [
+        h("button", { class: "btn", onclick: () => { x = 50; y = 50; zoom = 100; zoomIn.value = 100; paint(); } }, "Reset"),
+        h("button", { class: "btn btn-primary", onclick: () => {
+          set(`crop:${block.id}`, (site) => { const n = findNode(site, block.id); if (n) Object.assign(n.node.props, { focusX: x, focusY: y, zoom, ratio }); }, { rebuild: true });
+          m.close();
+        } }, "Done")],
+    });
+  }
+
   function tabs(labels) {
     root.append(h("div", { class: "insp-tabs", role: "tablist" }, Object.entries(labels).map(([key, label]) =>
       h("button", { class: tab === key ? "active" : "", role: "tab", onclick: () => { tab = key; render(); } }, label))));
@@ -65,7 +105,7 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (tab === "style") return styleControls(block, "block");
     if (tab === "advanced") return advancedControls(block, "block");
     for (const f of def.fields) {
-      if (f.showIf && !Object.entries(f.showIf).every(([k, v]) => block.props[k] === v)) continue;
+      if (f.hidden || (f.showIf && !Object.entries(f.showIf).every(([k, v]) => block.props[k] === v))) continue;
       root.append(fieldControl(f, block.props[f.key], (v, opts) => set(`prop:${block.id}:${f.key}`, (site) => {
         const n = findNode(site, block.id);
         if (n) n.node.props[f.key] = v;
@@ -73,6 +113,10 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     }
     if (block.type === "form") {
       root.append(h("p", { class: "field-hint" }, "Messages sent through this form appear under Site → Form messages."));
+    }
+    if (block.type === "image" && block.props.src) {
+      const crop = h("button", { class: "btn btn-sm btn-block", onclick: () => cropDialog(block) }, "✂ Crop, zoom & focus point…");
+      root.querySelector(".field")?.after(crop);
     }
   }
 
@@ -131,6 +175,10 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
       if (isSection) root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Changes all the text in this section."));
       if (!isSection) {
         styleField(node, "fontSize", { label: "Font size", type: "slider", min: 10, max: 120 });
+        if (node.style?.fontSize) {
+          styleField(node, "fontSizeT", { label: "Font size on tablets", type: "slider", min: 8, max: 120, placeholder: "auto" });
+          styleField(node, "fontSizeM", { label: "Font size on phones", type: "slider", min: 8, max: 100, placeholder: "auto" });
+        }
         styleField(node, "fontWeight", { label: "Weight", type: "select", options: ["default", 300, 400, 500, 600, 700, 800, 900], labels: ["Default", "Light", "Normal", "Medium", "Semi-bold", "Bold", "Extra bold", "Black"] });
         styleField(node, "textTransform", { label: "Capitals", type: "select", options: ["default", "uppercase", "lowercase", "capitalize", "none"], labels: ["Default", "ALL CAPITALS", "all lower case", "Capital Each Word", "As typed"] });
         styleField(node, "italic", { label: "Italic", type: "checkbox" });
@@ -168,6 +216,8 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
     if (isSection) {
       group("Columns");
       styleField(node, "gap", { label: "Space between columns", type: "slider", min: 0, max: 120, placeholder: 40 });
+      if (node.columns.length === 2) styleField(node, "col1", { label: "First column's width", type: "slider", min: 15, max: 85, step: 5, unit: "%", placeholder: { "2-1": 67, "1-2": 33 }[node.props.layout] || 50 });
+      if (node.columns.length > 1) styleField(node, "mobileReverse", { label: "On phones, show the columns in reverse order (e.g. the picture first)", type: "checkbox" });
       group("Shaped edges");
       const shapes = { type: "select", options: ["default", ...SHAPES], labels: ["Straight", ...SHAPE_LABELS] };
       styleField(node, "shapeTop", { label: "Top edge", ...shapes });

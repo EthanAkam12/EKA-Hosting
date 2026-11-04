@@ -118,12 +118,18 @@ const renderers = {
   },
 
   image(p, ctx) {
-    const ratio = p.ratio === "auto" ? "" : ` r-${p.ratio.replace(":", "-")}`;
-    const inner = p.src ? img(p.src, p.alt, ctx, { sizes: "(max-width: 760px) 100vw, 50vw" }) : ctx.editor ? placeholderImage() : "";
+    // A shaped mask needs a fixed shape to crop to: square unless one is chosen.
+    const r = ["circle", "hexagon"].includes(p.mask) || (p.mask !== "none" && p.ratio === "auto") ? "1:1" : p.ratio;
+    const ratio = r === "auto" ? "" : ` r-${r.replace(":", "-")}`;
+    let inner = p.src ? img(p.src, p.alt, ctx, { sizes: "(max-width: 760px) 100vw, 50vw" }) : ctx.editor ? placeholderImage() : "";
     if (!inner) return "";
+    // Crop without editing the photo: a focus point and zoom inside the frame.
+    const fx = Number(p.focusX ?? 50), fy = Number(p.focusY ?? 50), zoom = Math.max(100, Math.min(300, Number(p.zoom) || 100));
+    if (p.src && (fx !== 50 || fy !== 50 || zoom !== 100)) inner = inner.replace("<img ", `<img style="object-position:${fx}% ${fy}%;transform-origin:${fx}% ${fy}%${zoom !== 100 ? `;transform:scale(${zoom / 100})` : ""}" `);
     const cap = p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : "";
     const tag = isPlaceholder(p.src) ? phTag(ctx, "Placeholder · double-click to replace") : "";
-    return `<figure class="eka-img${ratio}${p.rounded ? " rounded" : ""}">${tag}${inner}${cap}</figure>`;
+    const cls = [ratio, p.rounded ? " rounded" : "", p.mask !== "none" ? ` m-${p.mask}` : "", p.filter !== "none" ? ` f-${p.filter}` : "", p.frame !== "none" ? ` fr-${p.frame}` : ""].join("");
+    return `<figure class="eka-img${cls}">${tag}<div class="eka-img-in">${inner}</div>${cap}</figure>`;
   },
 
   list(p) {
@@ -509,9 +515,14 @@ function styleNode(node, ctx, { kind, first }) {
     if (st.bg) rules.push(`${sel} .eka-nav{background:${st.bg}}`);
   }
   if (st.fontSize) {
-    const fs = st.fontSize > 24 ? `clamp(${Math.round(st.fontSize * 0.6)}px,${(st.fontSize / 12.8).toFixed(2)}vw,${st.fontSize}px)` : `${st.fontSize}px`;
+    const fs = st.fontSize > 24 && !st.fontSizeM ? `clamp(${Math.round(st.fontSize * 0.6)}px,${(st.fontSize / 12.8).toFixed(2)}vw,${st.fontSize}px)` : `${st.fontSize}px`;
     rules.push(`${sel},${sel} :is(h1,h2,h3,h4,blockquote,.eka-btn){font-size:${fs}}`);
   }
+  // Text size on tablets and phones, when set.
+  if (st.fontSizeT) rules.push(`${MEDIA.t}{${sel},${sel} :is(h1,h2,h3,h4,blockquote,.eka-btn){font-size:${st.fontSizeT}px}}`);
+  if (st.fontSizeM) rules.push(`${MEDIA.m}{${sel},${sel} :is(h1,h2,h3,h4,blockquote,.eka-btn){font-size:${st.fontSizeM}px}}`);
+  if (kind === "section" && st.col1 && node.columns?.length === 2) rules.push(`@media (min-width:761px){${sel}>.eka-wrap>.eka-cols{grid-template-columns:${st.col1}fr ${100 - st.col1}fr}}`);
+  if (kind === "section" && st.mobileReverse) rules.push(`${MEDIA.m}{${sel}>.eka-wrap>.eka-cols{display:flex;flex-direction:column-reverse}}`);
   // Typography: on the element and on headings/buttons inside, which
   // otherwise use the site's heading and button settings.
   const type = [];
@@ -947,9 +958,18 @@ p{margin:0 0 1em}
 .btn-dark{background:var(--c-dark);color:var(--c-on-dark)}
 .btn-link{background:none;color:inherit;padding-left:0;padding-right:0;min-height:0;box-shadow:none;text-decoration:underline;text-underline-offset:4px}.btn-link::after{display:none}
 .bg-primary .btn-primary{background:var(--c-on-primary);color:var(--c-primary)}
-.eka-img{margin:0}.eka-img img{width:100%}.eka-img.rounded img,.eka-img.rounded .eka-ph{border-radius:var(--r)}
+.eka-img{margin:0}.eka-img img{width:100%}.eka-img-in{overflow:hidden;border-radius:inherit}
+.eka-img.rounded .eka-img-in{border-radius:var(--r)}
+.eka-img[class*=" r-"] .eka-img-in img{height:100%;object-fit:cover}
+.m-circle .eka-img-in{border-radius:50%!important}.m-arch .eka-img-in{border-radius:999px 999px var(--r) var(--r)!important}
+.m-blob .eka-img-in{border-radius:42% 58% 63% 37% / 41% 44% 56% 59%!important}.m-leaf .eka-img-in{border-radius:0 60% 0 60%!important}
+.m-hexagon .eka-img-in{border-radius:0!important;clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0 50%)}
+.f-bw img{filter:grayscale(1)}.f-sepia img{filter:sepia(.75)}.f-warm img{filter:sepia(.25) saturate(1.25) hue-rotate(-8deg)}.f-cool img{filter:saturate(.9) hue-rotate(12deg) brightness(1.03)}.f-vivid img{filter:saturate(1.45) contrast(1.06)}.f-fade img{filter:contrast(.85) brightness(1.08) saturate(.8)}
+.fr-border .eka-img-in{border:1px solid color-mix(in srgb,currentColor 18%,transparent)}.fr-shadow .eka-img-in{box-shadow:0 18px 40px -18px rgba(0,0,0,.45)}
+.fr-polaroid .eka-img-in{background:#fff;padding:12px 12px 44px;box-shadow:0 10px 30px -12px rgba(0,0,0,.4);border-radius:4px!important}
+.fr-offset{position:relative;isolation:isolate}.fr-offset::before{content:"";position:absolute;inset:16px -16px -16px 16px;background:var(--c-primary);opacity:.18;border-radius:var(--r);z-index:-1}.eka-img.rounded img,.eka-img.rounded .eka-ph{border-radius:var(--r)}
 .eka-img[class*=" r-"] img{height:100%;object-fit:cover}
-.r-16-9 img,.r-16-9 .eka-ph{aspect-ratio:16/9}.r-4-3 img,.r-4-3 .eka-ph{aspect-ratio:4/3}.r-1-1 img,.r-1-1 .eka-ph{aspect-ratio:1/1}.r-3-4 img,.r-3-4 .eka-ph{aspect-ratio:3/4}
+.r-16-9 img,.r-16-9 .eka-ph{aspect-ratio:16/9}.r-4-3 img,.r-4-3 .eka-ph{aspect-ratio:4/3}.r-1-1 img,.r-1-1 .eka-ph{aspect-ratio:1/1}.r-3-4 img,.r-3-4 .eka-ph{aspect-ratio:3/4}.r-3-2 img,.r-3-2 .eka-ph{aspect-ratio:3/2}.r-2-3 img,.r-2-3 .eka-ph{aspect-ratio:2/3}
 .eka-img figcaption{font-size:.875rem;color:var(--c-muted);margin-top:8px}
 .eka-ph{display:flex;align-items:center;justify-content:center;min-height:220px;aspect-ratio:4/3;background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--c-primary) 10%,transparent) 0 12px,color-mix(in srgb,var(--c-primary) 16%,transparent) 12px 24px);color:var(--c-primary);font-weight:600;font-size:.9rem}
 .eka-list{list-style:none;padding:0;margin:0}.eka-list li{position:relative;padding-left:1.9em;margin-bottom:.55em}
@@ -1091,6 +1111,12 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .tab-r:nth-of-type(8):checked~.tab-l label:nth-child(8){opacity:1;border-bottom-color:var(--c-primary);color:var(--c-primary)}.tab-r:nth-of-type(8):checked~.tab-ps .tab-p:nth-child(8){display:block}.tb-pills .tab-r:nth-of-type(8):checked~.tab-l label:nth-child(8){background:var(--c-primary);border-color:var(--c-primary);color:var(--c-on-primary)}.tab-r:nth-of-type(8):focus-visible~.tab-l label:nth-child(8){outline:2px solid var(--c-primary)}
 .bg-dark .tab-r:checked~.tab-l label,.bg-primary .tab-r:checked~.tab-l label{color:inherit}
 .eka-acc details{border:1px solid color-mix(in srgb,currentColor 14%,transparent);border-radius:var(--r);margin-bottom:10px;padding:0 18px}.eka-acc summary{padding:14px 0;font-weight:600;cursor:pointer}.eka-acc details[open] summary{color:var(--c-primary)}.eka-acc .eka-text{padding-bottom:14px}
+.eka-pop{border:0;padding:0;border-radius:calc(var(--r) + 6px);max-width:min(560px,calc(100vw - 32px));width:100%;background:var(--c-bg);color:var(--c-text);box-shadow:0 30px 80px -20px rgba(0,0,0,.5);overflow:hidden}
+.eka-pop::backdrop{background:rgba(10,12,20,.55)}.eka-pop[open]{animation:eka-pop-in .3s ease-out}
+@keyframes eka-pop-in{from{opacity:0;transform:translateY(16px) scale(.98)}}
+.pop-img img{width:100%;aspect-ratio:16/8;object-fit:cover;display:block}.pop-body{position:relative;padding:28px 28px 30px;text-align:center}.pop-body h2{font-size:1.6rem;margin-bottom:.4em}.pop-body p{color:var(--c-muted)}
+.pop-x{position:absolute;top:8px;right:10px;border:0;background:none;font-size:26px;line-height:1;cursor:pointer;color:inherit;opacity:.6}
+.pop-form{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.pop-form input[type=email]{flex:1 1 200px;font:inherit;padding:12px 14px;border-radius:var(--r);border:1px solid color-mix(in srgb,var(--c-text) 22%,transparent);background:var(--c-bg);color:var(--c-text)}
 .eka-lead{font-size:1.2rem;color:var(--c-muted);max-width:60ch}
 .eka-post-head h1{font-size:clamp(2rem,4.5vw,3rem);margin:.2em 0 .3em}.eka-post-head .eka-post-meta{font-size:.95rem}
 .eka-post-cover{max-width:1000px;margin:0 auto calc(20px*var(--sp));padding:0 20px}.eka-post-cover img{width:100%;border-radius:var(--r);aspect-ratio:16/9;object-fit:cover}
@@ -1194,7 +1220,25 @@ export function renderBody(site, page, opts = {}) {
   const header = renderHeader(site, ctx), footer = renderFooter(site, ctx);
   const nodeCss = ctx.css.length ? `<style id="eka-node-css">${ctx.css.join("\n")}</style>` : "";
   const empty = ctx.editor && !page.sections.length ? `<div class="eka-page-empty">This page is empty. Drag a section or block here, or ask the AI to build it.</div>` : "";
-  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}${contactButtons(site, ctx)}${ctx.editor ? "" : cookieNotice(site, ctx)}`;
+  return `${nodeCss}${header}<main id="main">${sections}${empty}</main>${footer}${contactButtons(site, ctx)}${ctx.editor ? "" : cookieNotice(site, ctx) + popup(site, ctx)}`;
+}
+
+// The pop-up (live pages only): a native <dialog>, opened by a small script
+// after a delay, when the mouse leaves towards the tabs, or halfway down the
+// page, and not again for that visitor for `days` days.
+function popup(site, ctx) {
+  const x = site.popup;
+  if (!x?.show || !x.title || (x.homeOnly && ctx.page.slug !== "index")) return "";
+  const pic = x.image ? `<div class="pop-img">${img(x.image, "", ctx)}</div>` : "";
+  let action = x.buttonText ? `<a class="eka-btn btn-primary" ${attrHref(x.href, ctx)} data-pop-close>${esc(x.buttonText)}</a>` : "";
+  if (x.newsletter) {
+    // Uses the first newsletter block on the site for where sign-ups go.
+    const nb = site.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.columns.flatMap((c) => c.blocks))).find((b) => b.type === "newsletter");
+    const mc = nb && /^https:\/\/[\w.-]+\.list-manage\.com\/subscribe\/post\?/.test(nb.props.mailchimp || "") ? nb.props.mailchimp : "";
+    action = nb ? `<form method="post" action="${esc(mc || ctx.formAction || "#")}" class="pop-form"${mc ? ' target="_blank"' : ""}>${mc ? "" : `<input type="hidden" name="_block" value="${esc(nb.id)}"><input type="hidden" name="_page" value="${esc(ctx.page.slug)}"><div class="eka-hp" aria-hidden="true"><input name="website" tabindex="-1" autocomplete="off"></div>`}<input type="email" name="${mc ? "EMAIL" : "field_0"}" required placeholder="${esc(nb.props.placeholder)}" aria-label="Email"><button class="eka-btn btn-primary" type="submit">${esc(x.buttonText || nb.props.buttonText)}</button></form>` : action;
+  }
+  const script = `<script>(function(){var d=document.getElementById("eka-pop"),k="eka-pop-${(x.title + x.text).length}",days=${x.days},t;try{var last=+localStorage.getItem(k)||0;if(last&&Date.now()-last<days*864e5)return}catch(e){}if(!d.showModal)return;function open(){if(d.open)return;d.showModal();try{localStorage.setItem(k,Date.now())}catch(e){}off()}function off(){clearTimeout(t);removeEventListener("scroll",sc);document.removeEventListener("mouseout",ex)}function sc(){if(scrollY>(document.body.scrollHeight-innerHeight)/2)open()}function ex(e){if(!e.relatedTarget&&e.clientY<10)open()}${x.trigger === "exit" ? 'document.addEventListener("mouseout",ex);if(matchMedia("(pointer:coarse)").matches)t=setTimeout(open,' + (x.delay || 20) * 1000 + ")" : x.trigger === "scroll" ? 'addEventListener("scroll",sc,{passive:true})' : `t=setTimeout(open,${x.delay * 1000})`};d.addEventListener("click",function(e){if(e.target===d||e.target.closest("[data-pop-close]"))d.close()})})();</script>`;
+  return `<dialog class="eka-pop" id="eka-pop" aria-label="${esc(x.title)}">${pic}<div class="pop-body"><button type="button" class="pop-x" aria-label="Close" data-pop-close>×</button><h2>${esc(x.title)}</h2>${x.text ? `<p>${esc(x.text)}</p>` : ""}${action}</div></dialog>${script}`;
 }
 
 // The cookie notice, only when it's needed: the site has tracking code or

@@ -133,11 +133,17 @@ export const BLOCKS = {
   },
   image: {
     label: "Image", icon: "▣", group: "Basic",
-    defaults: () => ({ src: "", alt: "", ratio: "auto", rounded: true, caption: "" }),
+    defaults: () => ({ src: "", alt: "", ratio: "auto", rounded: true, caption: "", focusX: 50, focusY: 50, zoom: 100, mask: "none", filter: "none", frame: "none" }),
     fields: [
       { key: "src", label: "Image", type: "image" },
       { key: "alt", label: "Alt text (describe the image)", type: "text" },
-      { key: "ratio", label: "Shape", type: "select", options: ["auto", "16:9", "4:3", "1:1", "3:4"] },
+      { key: "ratio", label: "Crop to", type: "select", options: ["auto", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3"], labels: ["Original shape", "Wide 16:9", "3:2", "4:3", "Square", "Portrait 3:4", "Tall 2:3"] },
+      { key: "focusX", label: "Focus point across (%)", type: "number", hidden: true },
+      { key: "focusY", label: "Focus point down (%)", type: "number", hidden: true },
+      { key: "zoom", label: "Zoom (%)", type: "number", hidden: true },
+      { key: "mask", label: "Shape", type: "select", options: ["none", "circle", "arch", "blob", "leaf", "hexagon"], labels: ["Rectangle", "Circle", "Arch", "Soft blob", "Leaf", "Hexagon"] },
+      { key: "filter", label: "Filter", type: "select", options: ["none", "bw", "sepia", "warm", "cool", "vivid", "fade"], labels: ["None", "Black & white", "Sepia", "Warm", "Cool", "Vivid", "Faded"] },
+      { key: "frame", label: "Frame", type: "select", options: ["none", "border", "shadow", "polaroid", "offset"], labels: ["None", "Thin border", "Soft shadow", "Polaroid", "Offset colour block"] },
       { key: "rounded", label: "Rounded corners", type: "checkbox" },
       { key: "caption", label: "Caption", type: "text" },
     ],
@@ -756,6 +762,10 @@ export function normalizeStyle(style) {
   one("shapeTop", SHAPES); one("shapeBottom", SHAPES);
   num("shapeH", 10, 240);
   if (style.shapeFlip === true) out.shapeFlip = true;
+  num("fontSizeT", 8, 160); num("fontSizeM", 8, 120);
+  // Sections: the first column's share of a two-column layout (%), and phones show the columns in reverse.
+  num("col1", 15, 85);
+  if (style.mobileReverse === true) out.mobileReverse = true;
   num("tintOpacity", 0, 100); num("bgBlur", 0, 30); num("bgGray", 0, 100); num("bgBright", 20, 200); num("minHeight", 0, 1400);
   one("textEffect", TEXT_EFFECTS);
   if (style.bgAnimate === true) out.bgAnimate = true;
@@ -960,6 +970,7 @@ export function normalizeSite(site) {
     },
     // The thin bar above the header ("Free delivery this week").
     announce: normalizeAnnounce(s.announce),
+    popup: normalizePopup(s.popup),
     footer: {
       text: str(footer.text, `© ${new Date().getFullYear()} ${name}`),
       links: Array.isArray(footer.links) ? footer.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : [],
@@ -972,6 +983,24 @@ export function normalizeSite(site) {
     business: normalizeBusiness(s.business),
     lang: LANGUAGES[s.lang] ? s.lang : "en-GB",
     legal: normalizeLegal(s.legal),
+  };
+}
+
+// A pop-up: an offer or newsletter signup, shown once per visitor (every `days` days).
+function normalizePopup(x0) {
+  const x = isObj(x0) ? x0 : {};
+  return {
+    show: x.show === true,
+    title: str(x.title).slice(0, 120),
+    text: str(x.text).slice(0, 500),
+    image: str(x.image),
+    buttonText: str(x.buttonText).slice(0, 40),
+    href: str(x.href).slice(0, 300),
+    newsletter: x.newsletter === true,
+    trigger: ["delay", "exit", "scroll"].includes(x.trigger) ? x.trigger : "delay",
+    delay: clampNum(x.delay, 0, 120, 8),
+    days: clampNum(x.days, 0, 365, 7),
+    homeOnly: x.homeOnly === true,
   };
 }
 
