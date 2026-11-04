@@ -4,6 +4,7 @@
 // AI-written copy and written change requests need a real provider.
 
 import { createBlock as b, createSection as s, createPage, createEmptySite, createPost, slugify, FORM_PRESETS } from "../../shared/schema.js";
+import { applyStyleKit } from "../../shared/style-kits.js";
 
 const PALETTES = [
   { primary: "#2563eb", accent: "#f59e0b", dark: "#0f172a", surface: "#f1f5fb" },
@@ -221,6 +222,9 @@ function baseSite(brief, variant) {
   const fonts = STYLE_FONTS[brief.style] || VARIANT_FONTS[variant % VARIANT_FONTS.length];
   site.theme.fonts = { heading: fonts[0], body: fonts[1] };
   site.theme.radius = [10, 16, 2][variant % 3];
+  // A chosen style gets its whole look (fonts, buttons, corners, spacing, motion), keeping the colours.
+  const kit = { Modern: "modern", Classic: "elegant", Bold: "bold", Minimal: "minimal", "Warm & friendly": "friendly", Luxury: "elegant", Playful: "playful" }[brief.style];
+  if (kit) applyStyleKit(site, kit, { keepColours: true });
   site.header.ctaText = brief.extras?.booking ? "Book now" : brief.siteType === "shop" ? "Shop now" : "Get in touch";
   site.header.ctaHref = brief.extras?.booking ? (hasPage(brief, "book") ? "/book" : "#book") : brief.siteType === "shop" && hasPage(brief, "shop") ? "/shop" : contactHref(brief);
   site.header.links = headerLinks(brief);

@@ -6,6 +6,7 @@ import { h, api, waitForJob, toast, demoBanner, modal } from "./ui.js";
 import { renderPage } from "/admin/shared/render.js";
 import { LANGUAGES } from "/admin/shared/i18n.js";
 import { SITE_DESIGNS, siteFromDesign } from "/admin/shared/site-designs.js";
+import { paletteFromPixels } from "/admin/shared/style-kits.js";
 
 const STYLES = ["Let the AI decide", "Modern", "Classic", "Bold", "Minimal", "Warm & friendly", "Luxury", "Playful"];
 const PAGE_CHOICES = ["About", "Services", "Gallery", "Pricing", "FAQ", "Contact"];
@@ -156,6 +157,21 @@ function renderBrief() {
   );
   paintPages();
 
+  // A saved brand kit (colours, fonts, buttons, logo) for the new site.
+  const kitField = h("div", { class: "field", hidden: true });
+  api("/brand-kits").then(({ kits }) => {
+    if (!kits.length) return;
+    const sel = h("select", { class: "select", style: { maxWidth: "320px" }, onchange: () => {
+      const k = kits.find((x) => x.id === sel.value);
+      b.brandKit = k ? k.id : "";
+      // The AI and templates design with the kit's colours; the rest of the kit is applied when the site is built.
+      if (k) { b.colors = { primary: k.theme.colors.primary, accent: k.theme.colors.accent }; useColors.checked = true; primary.value = k.theme.colors.primary; accent.value = k.theme.colors.accent; colorRow.hidden = false; }
+      save();
+    } }, h("option", { value: "" }, "None"), kits.map((k) => h("option", { value: k.id, selected: b.brandKit === k.id }, k.name)));
+    kitField.replaceChildren(h("label", {}, "Use a brand kit"), sel, h("div", { class: "field-hint" }, "Your saved colours, fonts, buttons and logo (saved from a site's Style tab)."));
+    kitField.hidden = false;
+  }).catch(() => {});
+
   // What kind of website: switching swaps the pages that type brings.
   const typePages = (id) => [...(SITE_TYPES.find((t) => t.id === id)?.pages || [])];
   const typeCards = h("div", { class: "type-cards", role: "radiogroup", "aria-label": "Type of website" });
@@ -210,7 +226,22 @@ function renderBrief() {
       h("div", { class: "field" }, h("label", {}, "Logo (optional)"),
         h("div", { class: "logo-box" }, logoPrev, h("div", {},
           h("button", { class: "btn btn-sm", type: "button", onclick: () => fileInput.click() }, b.logoUrl ? "Change logo" : "Upload logo"), " ", removeLogo, fileInput,
-          h("div", { class: "field-hint" }, me.ai.enabled ? "The AI will pick colours that go with it." : "Shown in the site's header.")))),
+          h("div", { class: "field-hint" }, me.ai.enabled ? "The AI will pick colours that go with it." : "Shown in the site's header."),
+          b.logoUrl ? h("button", { class: "btn btn-sm btn-ghost", type: "button", style: { paddingLeft: 0 }, onclick: () => {
+            const im = new Image();
+            im.onload = () => {
+              const c = document.createElement("canvas");
+              c.width = 120; c.height = Math.max(1, Math.round(120 * (im.naturalHeight / im.naturalWidth)));
+              c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+              const pal = paletteFromPixels(c.getContext("2d").getImageData(0, 0, c.width, c.height).data);
+              if (!pal) return toast("The logo is black, white or grey, so there are no colours to take from it.", { error: true });
+              b.colors = { primary: pal.primary, accent: pal.accent };
+              save();
+              render();
+              toast("Brand colours set from the logo (Look and feel, below).");
+            };
+            im.src = b.logoUrl;
+          } }, "🎨 Use the logo's colours") : null))),
       h("div", { class: "field" }, h("label", {}, "Photos of the business (optional)"),
         photoList,
         h("div", {}, h("button", { class: "btn btn-sm", type: "button", onclick: () => photoInput.click() }, "Add photos"), photoInput),
@@ -239,6 +270,7 @@ function renderBrief() {
       h("div", { class: "field" }, h("label", { class: "check" }, useColors, "Use our brand colours"), colorRow,
         h("div", { class: "field-hint" }, "Leave unticked to let the design choose.")),
       h("div", { class: "field" }, h("label", {}, "Style"), styleChips),
+      kitField,
       field("Website language", h("select", { class: "select", style: { maxWidth: "260px" }, onchange: (e) => { b.lang = e.target.value; save(); } },
         Object.entries(LANGUAGES).map(([code, l]) => h("option", { value: code, selected: b.lang === code }, l.name))),
         me.ai.enabled ? "The AI writes the whole site in this language." : "Templates are in English; with AI, the site is written in this language."),

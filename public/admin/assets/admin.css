@@ -143,3 +143,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; max-height: 56vh; overflow-y: auto; margin-top: 10px; padding: 2px; }
 .ic-pick { display: grid; place-items: center; height: 46px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; color: var(--text); }
 .ic-pick:hover, .ic-pick:focus-visible { border-color: var(--brand); color: var(--brand); }
+
+/* Style kits */
+.kit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kit { display: grid; gap: 4px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; color: inherit; }
+.kit-thumb { position: relative; height: 74px; overflow: hidden; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+.kit-thumb iframe { position: absolute; top: 0; left: 0; width: 1200px; height: 600px; border: 0; transform: scale(.105); transform-origin: 0 0; pointer-events: none; }
+.kit:hover .kit-thumb { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand); }

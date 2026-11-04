@@ -1030,6 +1030,7 @@ function cleanBrief(input = {}) {
     // Business website, online shop or blog, plus optional extras.
     siteType: ["business", "shop", "blog"].includes(input.siteType) ? input.siteType : "business",
     lang: LANGUAGES[input.lang] ? input.lang : "en-GB",
+    brandKit: /^[a-f0-9]{12}$/.test(input.brandKit || "") ? input.brandKit : "",
     extras: Object.fromEntries(["booking", "enquiry", "blog"].map((k) => [k, input.extras?.[k] === true])),
     pages: Array.isArray(input.pages) ? input.pages.map((p) => str(p, 40)).filter(Boolean).slice(0, 12) : [],
     // The owner's own photos (uploaded in the wizard), each with an optional note.
@@ -1216,7 +1217,7 @@ api.post("/sites", async (req, res) => {
         site.lang = brief.lang;
         ensurePrivacyPage(site);
         await fillImages(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });
-        const adopted = await adoptTmpMedia(site, meta.id);
+        const adopted = await applyBrandKit(req, await adoptTmpMedia(site, meta.id), meta.id, brief.brandKit);
         await store.saveDraft(meta.id, adopted, { version: "Built from the approved design" });
         const notes = ai.enabled ? {} : notesBySlug(pageNotes, adopted);
         await store.updateMeta(meta.id, { status: "ready", error: null, name: adopted.name, formEmail: brief.email || "", notes });
@@ -1288,7 +1289,7 @@ api.post("/sites/from-design", async (req, res) => {
       }
       ensurePrivacyPage(site);
       await fillImages(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });
-      const adopted = await adoptTmpMedia(site, meta.id);
+      const adopted = await applyBrandKit(req, await adoptTmpMedia(site, meta.id), meta.id, brief.brandKit);
       await store.saveDraft(meta.id, adopted, { version: "Started from a ready-made design" });
       await store.updateMeta(meta.id, { status: "ready", error: null, formEmail: brief.email || "" });
       return { ok: true };
@@ -1551,6 +1552,42 @@ api.delete("/saved-sections/:sid", async (req, res) => {
   await fs.writeFile(savedFile(req), JSON.stringify(list));
   res.json({ ok: true });
 });
+
+// ---- brand kits: a look (colours, fonts, buttons, logo) to reuse on any of your websites ----
+
+const KITS_DIR = path.join(DATA_DIR, "brand-kits");
+await fs.mkdir(KITS_DIR, { recursive: true });
+const kitsFile = (req) => path.join(KITS_DIR, `${isAdmin(req) ? "admin" : `${req.user.role}-${req.user.id}`}.json`);
+async function readKits(req) { try { return JSON.parse(await fs.readFile(kitsFile(req), "utf8")); } catch { return []; } }
+api.get("/brand-kits", async (req, res) => res.json({ kits: await readKits(req) }));
+api.post("/brand-kits", async (req, res) => {
+  const theme = normalizeSite({ theme: req.body?.theme }).theme;
+  const kits = await readKits(req);
+  if (kits.length >= 50) return res.status(400).json({ error: "You have 50 brand kits. Delete one first." });
+  const logo = /^\/_m\/[a-f0-9]{16}\/[\w.-]+$/.test(req.body?.logoImage || "") ? req.body.logoImage : "";
+  const kit = { id: crypto.randomBytes(6).toString("hex"), name: String(req.body?.name || "").trim().slice(0, 60) || "Brand kit", theme, logoImage: logo, savedAt: new Date().toISOString() };
+  kits.unshift(kit);
+  await fs.writeFile(kitsFile(req), JSON.stringify(kits));
+  res.json({ kit });
+});
+api.delete("/brand-kits/:kid", async (req, res) => {
+  await fs.writeFile(kitsFile(req), JSON.stringify((await readKits(req)).filter((k) => k.id !== req.params.kid)));
+  res.json({ ok: true });
+});
+
+// Puts a brand kit's look and logo on a new site (its logo copied into the site's images).
+async function applyBrandKit(req, site, siteId, kitId) {
+  const kit = kitId && (await readKits(req)).find((k) => k.id === kitId);
+  if (!kit) return site;
+  site.theme = { ...structuredClone(kit.theme), layout: { ...site.theme.layout, ...kit.theme.layout } };
+  const m = kit.logoImage.match(/^\/_m\/([a-f0-9]{16})\/([\w.-]+)$/);
+  const from = m && store.getMeta(m[1]);
+  if (from && canSee(req.user, from)) {
+    for (const name of new Set([m[2], m[2].replace(/-o\.webp$/, "-o-sm.webp")])) await fs.copyFile(path.join(store.mediaDir(from.id), name), path.join(store.mediaDir(siteId), name)).catch(() => {});
+    site.header.logoImage = `/_m/${siteId}/${m[2]}`;
+  }
+  return site;
+}
 
 // "Fill with AI" / "Restyle" for one or more sections of a page.
 api.post("/sites/:id/ai/sections", async (req, res) => {

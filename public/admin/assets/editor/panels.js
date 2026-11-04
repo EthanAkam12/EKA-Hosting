@@ -13,6 +13,7 @@ import { renderPage } from "/admin/shared/render.js";
 import { reworkSections } from "./section-ai.js";
 import { savedEntries, sharedEntries, importSavedMedia, deleteSaved } from "./my-sections.js";
 import { adviceCard } from "./advisor.js";
+import { STYLE_KITS, applyStyleKit, paletteFromPixels } from "/admin/shared/style-kits.js";
 import { ensurePrivacyPage } from "/admin/shared/legal.js";
 
 const PALETTES = [
@@ -443,6 +444,35 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     const theme = state.get().site.theme;
     const set = (key, apply, opts) => state.mutate(apply, { key, source: opts?.rebuild ? null : "panel" });
 
+    // Whole-site looks, previewed on this site's own home page.
+    root.append(h("div", { class: "group-title" }, "Style kits"));
+    const keep = h("input", { type: "checkbox" });
+    const kitGrid = h("div", { class: "kit-grid" }, STYLE_KITS.map((k) => {
+      const site = applyStyleKit(structuredClone(state.get().site), k.id);
+      const page = { ...site.pages[0], sections: site.pages[0].sections.slice(0, 2) };
+      const html = renderPage(site, page, { editor: true }).replace("</head>", "<style>body{overflow:hidden;pointer-events:none}.eka-ph-tag,.eka-fabs{display:none!important}</style></head>");
+      return h("button", { class: "kit", title: `Use the ${k.name} look`, onclick: () => {
+        state.mutate((s2) => { applyStyleKit(s2, k.id, { keepColours: keep.checked }); }, { label: `Style kit: ${k.name}` });
+        toast(`${k.name} look applied. Undo (Ctrl+Z) to go back.`);
+        render();
+      } }, h("div", { class: "kit-thumb" }, h("iframe", { srcdoc: html, loading: "lazy", tabindex: "-1", title: "", sandbox: "" })), h("span", {}, k.name));
+    }));
+    root.append(kitGrid, h("label", { class: "check small", style: { margin: "6px 0 4px" } }, keep, "Keep my colours (change fonts, buttons and spacing only)"));
+
+    // Colours from the logo, worked out in the browser (no AI needed).
+    const logo = state.get().site.header.logoImage;
+    if (logo) root.append(h("button", { class: "btn btn-sm btn-block", style: { margin: "8px 0" }, onclick: async () => {
+      try {
+        const pal = await logoPalette(logo);
+        if (!pal) return toast("The logo is black, white or grey, so there are no colours to take from it.", { error: true });
+        state.mutate((site) => { Object.assign(site.theme.colors, pal); }, { label: "Colours from the logo" });
+        toast("Colours taken from the logo. Undo (Ctrl+Z) to go back.");
+        render();
+      } catch { toast("Couldn't read the logo's colours.", { error: true }); }
+    } }, "🎨 Colours from my logo"));
+
+    brandKits();
+
     root.append(h("div", { class: "group-title" }, "Colour presets"));
     root.append(h("div", { class: "palette" }, PALETTES.map((p) =>
       h("button", { class: "pal-item", style: { cursor: "pointer" }, onclick: () => set("theme:preset", (site) => { site.theme.colors = { ...p.colors }; }, { rebuild: true }) },
@@ -493,6 +523,55 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Animation"));
     tf("layout", "motion", { label: "Sections animate in as you scroll", type: "select", options: ENTRANCE_EFFECTS, labels: ENTRANCE_LABELS });
     root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "Applies to every section unless a section picks its own (Advanced tab). Use Preview to see it. Pure CSS, so it doesn't slow the site down."));
+  }
+
+  // Reads a logo's pixels (same-site image) and makes a palette from them.
+  function logoPalette(url) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => {
+        const c = document.createElement("canvas");
+        const w = (c.width = Math.min(120, im.naturalWidth || 120)), hh = (c.height = Math.max(1, Math.round(w * ((im.naturalHeight || 1) / (im.naturalWidth || 1)))));
+        const g = c.getContext("2d");
+        g.drawImage(im, 0, 0, w, hh);
+        try { resolve(paletteFromPixels(g.getImageData(0, 0, w, hh).data)); } catch (e) { reject(e); }
+      };
+      im.onerror = reject;
+      im.src = url;
+    });
+  }
+
+  // Brand kits: this site's look (colours, fonts, buttons, logo) saved to use on other websites.
+  function brandKits() {
+    const box = h("div", {});
+    root.append(h("div", { class: "group-title" }, "Brand kits"), box);
+    const paint = (kits) => box.replaceChildren(
+      ...kits.map((k) => h("div", { class: "page-row" },
+        h("span", { class: "row", style: { gap: "3px" } }, ["primary", "accent", "dark"].map((c) => h("span", { style: { width: "10px", height: "16px", borderRadius: "3px", background: k.theme.colors[c] } }))),
+        h("span", { class: "name" }, k.name),
+        h("button", { class: "btn btn-sm", onclick: async () => {
+          let kit = k;
+          if (k.logoImage && !k.logoImage.startsWith(`/_m/${state.get().siteId}/`)) {
+            try { const { map } = await api(`/sites/${state.get().siteId}/media/import`, { method: "POST", body: { urls: [k.logoImage] } }); kit = { ...k, logoImage: map[k.logoImage] || "" }; } catch { kit = { ...k, logoImage: "" }; }
+          }
+          state.mutate((site) => {
+            site.theme = { ...structuredClone(kit.theme), layout: { ...site.theme.layout, ...kit.theme.layout } };
+            if (kit.logoImage) site.header.logoImage = kit.logoImage;
+          }, { label: `Brand kit: ${k.name}` });
+          toast(`"${k.name}" applied.`);
+          render();
+        } }, "Apply"),
+        h("button", { class: "icon-btn", title: "Delete this brand kit", onclick: async () => { await api(`/brand-kits/${k.id}`, { method: "DELETE" }); load(); } }, "🗑"))),
+      h("button", { class: "btn btn-sm btn-block", style: { marginTop: "6px" }, onclick: async () => {
+        const s2 = state.get().site;
+        try {
+          await api("/brand-kits", { method: "POST", body: { name: s2.name, theme: s2.theme, logoImage: s2.header.logoImage } });
+          toast("Saved. Apply it to any of your websites here, or choose it when making a new one.");
+          load();
+        } catch (e) { toast(e.message, { error: true }); }
+      } }, "★ Save this site's look as a brand kit"));
+    const load = () => api("/brand-kits").then(({ kits }) => paint(kits)).catch(() => paint([]));
+    load();
   }
 
   // ------------------------------------------------------------- Site -----
