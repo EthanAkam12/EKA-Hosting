@@ -3,7 +3,7 @@
 import { BLOCKS, SECTION_FIELDS, FONT_CHOICES, TEXT_EFFECTS, TEXT_EFFECT_LABELS, BG_POSITIONS, BG_EFFECTS, BG_EFFECT_LABELS, HOVER_EFFECTS, HOVER_LABELS, ENTRANCE_EFFECTS, ENTRANCE_LABELS, SHAPES, SHAPE_LABELS, findNode, slugify } from "/admin/shared/schema.js";
 import { h, api, modal } from "../ui.js";
 import { fieldControl } from "./fields.js";
-import { readabilityIssues } from "/admin/shared/checks.js";
+import { readabilityIssues, readableColor, textAndBackground } from "/admin/shared/checks.js";
 import { reworkSections, restyleDialog } from "./section-ai.js";
 import { saveSection, makeShared, stopSharing, sharedCount } from "./my-sections.js";
 
@@ -92,7 +92,14 @@ export function createInspector({ state, canvas, root, head, pickImage, askAi })
   // A warning when the text colour is hard to read on the background.
   function readability(section, block = null) {
     const issues = readabilityIssues(state.get().site, section, block);
-    if (issues.length) root.append(h("div", { class: "notice", style: { marginBottom: "12px", fontSize: "13px" } }, "⚠ ", issues[0], " Try a darker or lighter text colour (Style tab)."));
+    if (!issues.length) return;
+    const node = block || section;
+    root.append(h("div", { class: "notice", style: { marginBottom: "12px", fontSize: "13px" } }, "⚠ ", issues[0], " ",
+      h("button", { class: "btn btn-sm", onclick: () => {
+        const { fg, bg, big } = textAndBackground(state.get().site, section, block);
+        const fixed = readableColor(fg, bg, big ? 3 : 4.5);
+        set(`fix:${node.id}`, (site) => { const n = findNode(site, node.id); if (n) n.node.style = { ...n.node.style, color: fixed }; }, { rebuild: true });
+      } }, "Fix it")));
   }
 
   function renderBlock(sel) {

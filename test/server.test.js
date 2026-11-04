@@ -8,7 +8,8 @@ import os from "node:os";
 import path from "node:path";
 
 const PORT = 3900 + Math.floor(Math.random() * 500);
-const BASE = `http://127.0.0.1:${PORT}`;
+// The builder moves to the next port if this one is busy, so the real one comes from its output.
+let BASE = `http://127.0.0.1:${PORT}`;
 const KEY = "test-host-key-abc";
 let server, dir;
 
@@ -19,7 +20,10 @@ before(async () => {
     stdio: ["ignore", "pipe", "pipe"],
   });
   await new Promise((resolve, reject) => {
-    server.stdout.on("data", (d) => { if (String(d).includes("running on")) resolve(); });
+    server.stdout.on("data", (d) => {
+      const m = String(d).match(/running on http:\/\/localhost:(\d+)/);
+      if (m) { BASE = `http://127.0.0.1:${m[1]}`; resolve(); }
+    });
     server.on("exit", (code) => reject(new Error(`server exited ${code}`)));
     setTimeout(() => reject(new Error("server didn't start")), 15000);
   });

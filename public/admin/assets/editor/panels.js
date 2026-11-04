@@ -6,10 +6,10 @@ import { fieldControl } from "./fields.js";
 import { SECTION_TEMPLATES, EMPTY_LAYOUTS } from "./templates.js";
 import { followDeploy } from "./deploy-ui.js";
 import { showChecklist, siteIssues } from "./checklist.js";
-import { contrast } from "/admin/shared/checks.js";
+import { contrast, fixThemeContrast } from "/admin/shared/checks.js";
 import { LANGUAGES } from "/admin/shared/i18n.js";
 import { SECTION_LIBRARY, LIBRARY_CATEGORIES } from "/admin/shared/library.js";
-import { renderPage } from "/admin/shared/render.js";
+import { renderPage, renderSpecialPage } from "/admin/shared/render.js";
 import { reworkSections } from "./section-ai.js";
 import { savedEntries, sharedEntries, importSavedMedia, deleteSaved } from "./my-sections.js";
 import { adviceCard } from "./advisor.js";
@@ -493,7 +493,8 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
       ["#111111", c.accent, "Accent-coloured buttons (dark text)"],
       [c.primary, c.background, "Links in the main colour"],
     ].filter(([a, b]) => contrast(a, b) < 4.5);
-    if (pairs.length) root.append(h("div", { class: "notice", style: { fontSize: "13px", marginBottom: "14px" } }, h("strong", {}, "Hard to read: "), pairs.map(([, , what]) => what).join("; "), ". Make the colours more different from each other."));
+    if (pairs.length) root.append(h("div", { class: "notice", style: { fontSize: "13px", marginBottom: "14px" } }, h("strong", {}, "Hard to read: "), pairs.map(([, , what]) => what).join("; "), ". ",
+      h("button", { class: "btn btn-sm", onclick: () => { set("theme:fix", (site) => { site.theme.colors = fixThemeContrast(site.theme.colors); }, { rebuild: true }); toast("Colours adjusted so text is easy to read. Undo (Ctrl+Z) to go back."); render(); } }, "Fix the colours")));
     root.append(h("div", { class: "group-title", style: { marginTop: "8px" } }, "Fonts"));
     const fontField = (key, label) => ({ key, label, type: "select", options: Object.keys(FONT_CHOICES), labels: Object.values(FONT_CHOICES).map((f) => f.label) });
     root.append(fieldControl(fontField("heading", "Headings"), theme.fonts.heading, (v) => set("theme:fh", (site) => { site.theme.fonts.heading = v; }, { rebuild: true }), {}));
@@ -604,6 +605,7 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
 
     renderPrivacy(s);
     renderPopup(s);
+    renderSpecial(s);
 
     const slug = h("input", { class: "input", value: meta.slug });
     const domains = h("textarea", { class: "textarea", rows: "2", placeholder: "www.customer.com" }, (meta.domains || []).join("\n"));
@@ -696,6 +698,51 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
     const d0 = (r) => r.domains[0]?.domain || "yourdomain.co.uk";
     check();
     return m;
+  }
+
+  // The share picture, and the "page not found" and "coming soon" pages.
+  function renderSpecial(s) {
+    root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Share picture"));
+    root.append(h("p", { class: "field-hint", style: { marginTop: 0 } }, "Shown when someone shares the site on Facebook, WhatsApp, LinkedIn and so on."));
+    const preview = h("div", { class: "share-prev" }, s.site.shareImage ? h("img", { src: s.site.shareImage, alt: "" }) : h("span", { class: "small muted" }, "Automatic: the page's first photo, or the logo."));
+    root.append(preview);
+    const title = h("input", { class: "input", value: s.site.name });
+    const subtitle = h("input", { class: "input", value: s.site.business?.type || "", placeholder: "e.g. Fresh bread and cakes in York" });
+    const style = h("select", { class: "select" }, [["photo", "Text over a photo"], ["split", "Text beside a photo"], ["brand", "Your colours (no photo)"]].map(([v, l]) => h("option", { value: v }, l)));
+    let photo = "";
+    const photoField = fieldControl({ key: "sharePhoto", label: "Photo (optional)", type: "image" }, photo, (v) => { photo = v || ""; }, { pickImage });
+    root.append(h("div", { class: "field" }, h("label", {}, "Headline"), title), h("div", { class: "field" }, h("label", {}, "Line underneath"), subtitle), h("div", { class: "field" }, h("label", {}, "Look"), style), photoField,
+      h("div", { class: "row", style: { flexWrap: "wrap" } },
+        h("button", { class: "btn btn-sm", onclick: async (e) => {
+          e.target.disabled = true;
+          try {
+            const { url } = await api(`/sites/${s.siteId}/share-image`, { method: "POST", body: { site: state.get().site, title: title.value, subtitle: subtitle.value, photo, style: style.value } });
+            state.mutate((site) => { site.shareImage = url; }, { label: "Made a share picture" });
+            toast("Share picture made. It's used for every page (blog posts use their cover).");
+            render();
+          } catch (err) { toast(err.message, { error: true }); e.target.disabled = false; }
+        } }, "Make the picture"),
+        s.site.shareImage ? h("button", { class: "btn btn-sm btn-ghost", onclick: () => { state.mutate((site) => { site.shareImage = ""; }, { label: "Automatic share picture" }); render(); } }, "Use automatic") : null));
+
+    const sp = s.site.special;
+    const sf = (key, field) => root.append(fieldControl({ key, ...field }, sp[key], (v, opts) => state.mutate((site) => { site.special[key] = v ?? ""; }, { key: `special:${key}`, source: opts?.rebuild ? null : "panel" }), {}));
+    root.append(h("hr", { class: "sep" }), h("div", { class: "group-title" }, "Coming soon & page not found"));
+    sf("comingSoon", { label: "Coming-soon mode: visitors see only a \"coming soon\" page", type: "checkbox" });
+    if (sp.comingSoon) {
+      sf("comingSoonTitle", { label: "Heading", type: "text", placeholder: "Coming soon" });
+      sf("comingSoonText", { label: "Text", type: "textarea", placeholder: "We're putting the finishing touches to our new website…" });
+      sf("launch", { label: "Opening date (optional)", type: "date" });
+      root.append(h("p", { class: "field-hint", style: { marginTop: "-6px" } }, "It uses your logo and colours, and includes your newsletter signup if the site has one. Publish to put it live; untick and publish again to open the full site."));
+    }
+    sf("notFoundTitle", { label: "\"Page not found\" heading (optional)", type: "text", placeholder: "Sorry, we can't find that page" });
+    sf("notFoundText", { label: "\"Page not found\" text (optional)", type: "text", placeholder: "It may have moved, or the link might be wrong." });
+    root.append(h("button", { class: "btn btn-sm", onclick: () => {
+      const html = renderSpecialPage(state.get().site, "404", {}) ;
+      modal({ title: "Page not found: preview", wide: true, body: h("iframe", { srcdoc: html, style: { width: "100%", height: "480px", border: "1px solid var(--line)", borderRadius: "8px" }, sandbox: "" }) });
+    } }, "Preview the \"page not found\" page"),
+    sp.comingSoon ? h("button", { class: "btn btn-sm", style: { marginLeft: "6px" }, onclick: () => {
+      modal({ title: "Coming soon: preview", wide: true, body: h("iframe", { srcdoc: renderSpecialPage(state.get().site, "soon", {}), style: { width: "100%", height: "520px", border: "1px solid var(--line)", borderRadius: "8px" }, sandbox: "" }) });
+    } }, "Preview \"coming soon\"") : null);
   }
 
   // The pop-up: an offer or newsletter signup.

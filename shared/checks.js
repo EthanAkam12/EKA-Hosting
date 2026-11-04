@@ -24,6 +24,40 @@ export function contrast(a, b) {
 }
 const autoText = (bg) => (luminance(bg) > 0.4 ? "#111111" : "#ffffff");
 
+/**
+ * The nearest readable version of a colour on a background: it's darkened
+ * (on light backgrounds) or lightened (on dark ones) step by step until the
+ * contrast reaches `min`, so it keeps its colour where it can.
+ */
+export function readableColor(fg, bg, min = 4.5) {
+  if (contrast(fg, bg) >= min) return fg;
+  const target = luminance(bg) > 0.4 ? [0, 0, 0] : [255, 255, 255];
+  const from = rgb(fg).map((v) => v * 255);
+  for (let t = 0.05; t <= 1.001; t += 0.05) {
+    const c = "#" + from.map((v, i) => Math.round(v + (target[i] - v) * t).toString(16).padStart(2, "0")).join("");
+    if (contrast(c, bg) >= min) return c;
+  }
+  return autoText(bg);
+}
+
+/** The text colour and background a section or block's readability check uses. */
+export function textAndBackground(site, section, block = null) {
+  const c = site.theme.colors;
+  const bg = block?.style?.bg || sectionBackground(section, c);
+  const fg = block?.style?.color || sectionText(section, c);
+  return { fg, bg, big: block?.type === "heading" && Number(block.props.level) <= 2 };
+}
+
+/** Theme colours made readable against each other (text, soft text and links). */
+export function fixThemeContrast(colors) {
+  const out = { ...colors };
+  out.text = readableColor(out.text, out.surface, 4.5);
+  out.text = readableColor(out.text, out.background, 4.5);
+  out.muted = readableColor(out.muted, out.background, 4.5);
+  out.primary = readableColor(out.primary, out.background, 4.5);
+  return out;
+}
+
 // The background a section's text sits on (null for photos: the tint decides).
 function sectionBackground(section, colors) {
   if (section.style?.bg) return section.style.bg;

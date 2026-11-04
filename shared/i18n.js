@@ -18,6 +18,8 @@ const EN = {
   choose: "Choose…", readMore: "Read more", soldOut: "Sold out", backTo: "Back to", home: "Home", noPosts: "No posts yet. Check back soon!",
   openMenu: "Open menu", call: "Call", showMap: "Show map", mapNote: "Loads Google Maps", playVideo: "Play video",
   ends: "Ends",
+  notFound: "Sorry, we can't find that page", notFoundText: "It may have moved, or the link might be wrong. These might help:",
+  comingSoon: "Coming soon", comingSoonText: "We're putting the finishing touches to our new website. Please come back soon.", launching: "Opening",
   cookieText: "We'd like to use cookies to understand how visitors use this website.", accept: "Accept", reject: "Reject", privacy: "Privacy policy", cookieSettings: "Cookie settings",
 };
 

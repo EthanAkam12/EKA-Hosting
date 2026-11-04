@@ -20,6 +20,7 @@ import { createLicence } from "./licence.js";
 import { createBackups } from "./backup.js";
 import { createStats } from "./stats.js";
 import { checkDomains } from "./domains.js";
+import { makeShareImage } from "./share-image.js";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { createAi, applyBrief } from "./ai/index.js";
@@ -34,7 +35,7 @@ import { deploy, testConnection } from "./deploy.js";
 import { createMailer } from "./mailer.js";
 import { ownerEmail, visitorEmail } from "./form-mail.js";
 import yazl from "yazl";
-import { renderPage, pageUrl, pageAtPath, sitemapXml } from "../shared/render.js";
+import { renderPage, renderSpecialPage, pageUrl, pageAtPath, sitemapXml } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
 import { createEmptySite, normalizeSite, normalizePage, normalizeSection, findNode, slugify } from "../shared/schema.js";
 import { ensurePrivacyPage } from "../shared/legal.js";
@@ -209,13 +210,17 @@ async function serveSite(req, res, meta, { base, rest, draft = false, sandbox = 
     res.setHeader("Content-Security-Policy", "sandbox allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin");
   }
   if (!site) {
-    return res.status(404).type("html").send(simplePage("Coming soon", "This website hasn't been published yet."));
+    // Not published yet: a "coming soon" page in the site's own style, if there's a draft.
+    const drafted = await store.getDraft(meta.id);
+    return res.status(drafted ? 200 : 404).type("html").send(drafted ? renderSpecialPage(drafted, "soon", { base, origin }) : simplePage("Coming soon", "This website hasn't been published yet."));
+  }
+  // Coming-soon mode: visitors see only that page while the site is finished.
+  if (site.special?.comingSoon && !draft && !review) {
+    res.setHeader("Cache-Control", "no-store");
+    return res.type("html").send(renderSpecialPage(site, "soon", { base, origin, formAction: `/_forms/${meta.id}` }));
   }
   const page = findPage(site, rest, { drafts: draft });
-  if (!page) {
-    const home = site.pages[0];
-    return res.status(404).type("html").send(simplePage("Page not found", `<a href="${base}">Go to the ${escapeHtml(home.title)} page</a>`));
-  }
+  if (!page) return res.status(404).type("html").send(renderSpecialPage(site, "404", { base, origin }));
   const formAction = `/_forms/${meta.id}`;
   // Count real visits (not previews, the review page or the owner looking at it).
   if (!draft && !review && !auth.isAuthed(req)) stats.record({ siteId: meta.id, path: pageUrl(page, "/"), ip: req.ip, ua: req.get("user-agent"), referer: req.get("referer"), host: req.hostname });
@@ -1732,6 +1737,26 @@ api.delete("/sites/:id/media/:file", async (req, res) => {
   if (!meta) return;
   await deleteUpload(store.mediaDir(meta.id), req.params.file);
   res.json({ ok: true });
+});
+
+// The share picture: made from the site's photo or colours, logo and a headline.
+api.post("/sites/:id/share-image", async (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  const site = req.body?.site ? normalizeSite(req.body.site) : await store.getDraft(meta.id);
+  const own = (url) => { const m = String(url || "").match(new RegExp(`^/_m/${meta.id}/([\\w.-]+)$`)); return m && !m[1].startsWith(".") ? m[1] : null; };
+  try {
+    const name = await makeShareImage({
+      dir: store.mediaDir(meta.id),
+      title: String(req.body?.title || site.name).slice(0, 120),
+      subtitle: String(req.body?.subtitle || "").slice(0, 160),
+      photo: own(req.body?.photo),
+      logo: own(site.header.logoImage),
+      colors: site.theme.colors,
+      style: ["photo", "brand", "split"].includes(req.body?.style) ? req.body.style : "photo",
+    });
+    res.json({ url: `/_m/${meta.id}/${name}` });
+  } catch (err) { res.status(400).json({ error: `Couldn't make the picture: ${err.message}` }); }
 });
 
 // The domain helper: which DNS records each custom domain needs, and whether they're right yet.

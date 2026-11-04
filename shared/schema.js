@@ -971,6 +971,11 @@ export function normalizeSite(site) {
     // The thin bar above the header ("Free delivery this week").
     announce: normalizeAnnounce(s.announce),
     popup: normalizePopup(s.popup),
+    // The "page not found" and "coming soon" pages, and coming-soon mode
+    // (visitors see only the coming-soon page while the site is finished).
+    special: normalizeSpecial(s.special),
+    // The picture shown when the site is shared (designed in the Site tab); "" = the page's first photo.
+    shareImage: str(s.shareImage),
     footer: {
       text: str(footer.text, `© ${new Date().getFullYear()} ${name}`),
       links: Array.isArray(footer.links) ? footer.links.filter(isObj).map((l) => ({ text: str(l.text), href: str(l.href) })).filter((l) => l.text) : [],
@@ -983,6 +988,18 @@ export function normalizeSite(site) {
     business: normalizeBusiness(s.business),
     lang: LANGUAGES[s.lang] ? s.lang : "en-GB",
     legal: normalizeLegal(s.legal),
+  };
+}
+
+function normalizeSpecial(x0) {
+  const x = isObj(x0) ? x0 : {};
+  return {
+    notFoundTitle: str(x.notFoundTitle).slice(0, 120),
+    notFoundText: str(x.notFoundText).slice(0, 400),
+    comingSoon: x.comingSoon === true,
+    comingSoonTitle: str(x.comingSoonTitle).slice(0, 120),
+    comingSoonText: str(x.comingSoonText).slice(0, 400),
+    launch: /^\d{4}-\d{2}-\d{2}$/.test(str(x.launch)) ? x.launch : "",
   };
 }
 

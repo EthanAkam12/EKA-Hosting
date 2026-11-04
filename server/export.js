@@ -10,7 +10,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { renderPage, sitemapXml, pageUrl } from "../shared/render.js";
+import { renderPage, renderSpecialPage, sitemapXml, pageUrl } from "../shared/render.js";
 import { formWords } from "./form-mail.js";
 
 export async function buildStaticSite({ site, siteId, mediaDir, formEmail = "", domain = "" }) {
@@ -29,7 +29,8 @@ export async function buildStaticSite({ site, siteId, mediaDir, formEmail = "", 
 
   const hasForm = site.pages.some((p) => p.sections.some((s) => s.columns.some((c) => c.blocks.some((b) => b.type === "form" || (b.type === "newsletter" && !b.props.mailchimp)))));
 
-  for (const page of site.pages) {
+  // Coming-soon mode: only the coming-soon page goes up.
+  for (const page of site.special?.comingSoon ? [] : site.pages) {
     if (page.post?.draft) continue;
     const url = pageUrl(page, "/");
     const canonical = domain ? `https://${domain}${url}` : undefined;
@@ -51,7 +52,8 @@ export async function buildStaticSite({ site, siteId, mediaDir, formEmail = "", 
     }
   }
 
-  add("404.html", notFoundPage(site));
+  if (site.special?.comingSoon) add("index.html", fixMedia(renderSpecialPage(site, "soon", { base: "/", formAction: "/contact.php" })));
+  add("404.html", fixMedia(renderSpecialPage(site, site.special?.comingSoon ? "soon" : "404", { base: "/" })));
   if (domain) add("sitemap.xml", sitemapXml(site, `https://${domain}`));
   add("robots.txt", `User-agent: *\nAllow: /\n${domain ? `Sitemap: https://${domain}/sitemap.xml\n` : ""}`);
   add(".htaccess", HTACCESS);
@@ -70,10 +72,6 @@ function escapeRegExp(s) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-}
-
-function notFoundPage(site) {
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found | ${escapeHtml(site.name)}</title><style>body{font:16px/1.6 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#222;text-align:center;padding:20px}a{color:${site.theme.colors.primary}}</style><div><h1>Page not found</h1><p>Sorry, that page doesn't exist. <a href="/">Go to the home page</a></p></div></html>`;
 }
 
 // Apache settings most shared hosts honour: compression, caching and the 404

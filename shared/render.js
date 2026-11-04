@@ -1292,6 +1292,7 @@ function absolute(url, origin) {
 // first real photo, else the logo.
 export function shareImage(site, page) {
   if (page.post?.cover && !isPlaceholder(page.post.cover)) return page.post.cover;
+  if (site.shareImage) return site.shareImage;
   for (const s of page.sections) {
     if (s.props.background === "image" && s.props.image && !isPlaceholder(s.props.image)) return s.props.image;
     for (const c of s.columns) for (const b of c.blocks) {
@@ -1342,6 +1343,41 @@ export function sitemapXml(site, origin) {
   const o = origin.replace(/\/$/, "");
   const urls = site.pages.filter((p) => !p.post?.draft).map((p) => `<url><loc>${esc(o + pageUrl(p, "/"))}</loc>${p.post ? `<lastmod>${p.post.date}</lastmod>` : ""}</url>`).join("");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`;
+}
+
+/**
+ * The "page not found" and "coming soon" pages, in the site's own style.
+ * kind: "404" | "soon".
+ */
+export function renderSpecialPage(site, kind, opts = {}) {
+  const w = words(site.lang), sp = site.special || {};
+  const home = site.pages[0];
+  let sections;
+  if (kind === "soon") {
+    const news = site.pages.flatMap((p) => p.sections.flatMap((x) => x.columns.flatMap((c) => c.blocks))).find((b) => b.type === "newsletter");
+    sections = [{ id: "s_soon", type: "section", props: { layout: "1", background: "dark", padding: "xl", width: "narrow", align: "center", valign: "center", minHeight: true, overlay: 0, image: "", anchor: "" }, style: { bg: site.theme.colors.dark, bg2: site.theme.colors.primary, bgAnimate: true },
+      columns: [{ id: "c_soon", blocks: [
+        { id: "b_logo", type: "logo", props: { image: "", height: 90, align: "center", link: false } },
+        { id: "b_h", type: "heading", props: { text: sp.comingSoonTitle || w.comingSoon, level: 1, align: "center" } },
+        { id: "b_t", type: "text", props: { html: `<p>${esc(sp.comingSoonText || w.comingSoonText)}</p>`, align: "center" } },
+        ...(sp.launch ? [{ id: "b_l", type: "text", props: { html: `<p><strong>${esc(w.launching)} ${formatDate(sp.launch, site.lang)}</strong></p>`, align: "center" } }] : []),
+        ...(news ? [{ ...news, id: news.id }] : []),
+      ] }] }];
+    // Just the page: no menu or footer links to pages visitors can't see yet.
+    const bare = { ...site, header: { ...site.header, links: [], ctaText: "" }, footer: { ...site.footer, links: [] }, announce: { show: false }, popup: { show: false }, legal: { ...site.legal, cookieNotice: "off" } };
+    const page = { id: "p_soon", title: sp.comingSoonTitle || w.comingSoon, slug: "index", seo: { title: `${site.name}: ${sp.comingSoonTitle || w.comingSoon}`, description: sp.comingSoonText || w.comingSoonText }, sections };
+    return renderPage(bare, page, opts).replace(/<header[^]*?<\/header>/, "");
+  }
+  const links = site.pages.filter((p) => !p.post && !p.hidden).slice(0, 8);
+  sections = [{ id: "s_404", type: "section", props: { layout: "1", background: "default", padding: "xl", width: "narrow", align: "center", valign: "top", minHeight: false, overlay: 0, image: "", anchor: "" },
+    columns: [{ id: "c_404", blocks: [
+      { id: "b_404", type: "heading", props: { text: "404", level: 1, align: "center" }, style: { fontSize: 120, color: site.theme.colors.primary, fontWeight: 800, margin: { d: { b: 0 } } } },
+      { id: "b_h", type: "heading", props: { text: sp.notFoundTitle || w.notFound, level: 2, align: "center" } },
+      { id: "b_t", type: "text", props: { html: `<p>${esc(sp.notFoundText || w.notFoundText)}</p>`, align: "center" } },
+      { id: "b_b", type: "buttons", props: { align: "center", items: links.map((p, i) => ({ text: p.title, href: p.slug === "index" ? "/" : `/${p.slug}`, style: i === 0 ? "primary" : "outline", icon: i === 0 ? "none" : "none" })) } },
+    ] }] }];
+  const page = { id: "p_404", title: sp.notFoundTitle || w.notFound, slug: "__404", seo: { title: `${sp.notFoundTitle || w.notFound} | ${site.name}`, description: "" }, sections };
+  return renderPage(site, page, opts).replace("<head>", '<head><meta name="robots" content="noindex">');
 }
 
 export function renderPage(site, page, opts = {}) {

@@ -159,3 +159,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .crop-dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--brand), 0 2px 8px rgba(0,0,0,.4); pointer-events: none; }
 .crop-frame { overflow: hidden; border-radius: 8px; background: #eee; }
 .crop-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.share-prev { aspect-ratio: 1200 / 630; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; overflow: hidden; background: #f4f5f8; margin-bottom: 10px; padding: 8px; text-align: center; }
+.share-prev img { width: 100%; height: 100%; object-fit: cover; }
