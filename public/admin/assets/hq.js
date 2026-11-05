@@ -2,104 +2,14 @@
 // bring you to approve.
 import { h, api, toast, timeAgo, confirmDialog } from "./ui.js";
 import { SITE_DESIGNS } from "/admin/shared/site-designs.js";
+import { createOffice } from "./hq-office.js";
 
 const app = document.getElementById("app");
 const ORDER = ["support", "builder", "account", "ops", "marketing"];
-const LOOKS = {
-  support: { skin: "#f1c7a0", hair: "#3b2416" },
-  builder: { skin: "#c68a5a", hair: "#111827" },
-  account: { skin: "#f5d6bc", hair: "#b45309" },
-  ops: { skin: "#8d5a3b", hair: "#1f2937" },
-  marketing: { skin: "#e8b48e", hair: "#7c2d12" },
-};
 let data = null;
 let filter = "";
 let timer = null;
 const cards = new Map(); // task id → { stamp, el }
-const SVG = "http://www.w3.org/2000/svg";
-
-function s(tag, attrs = {}, ...kids) {
-  const el = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null && v !== false) el.setAttribute(k, v);
-  for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) el.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  return el;
-}
-const r = (x, y, w, hgt, fill, extra = {}) => s("rect", { x, y, width: w, height: hgt, fill, ...extra });
-
-// ---- the office ------------------------------------------------------------
-
-function deskStatus(a) {
-  const c = data.counts[a];
-  if (!c.on) return { cls: "off", bubble: "OFF", fill: "#6b7280", ink: "#fff" };
-  if (c.alerts) return { cls: c.working ? "working" : "", bubble: `${c.alerts}!`, fill: "#dc2626", ink: "#fff" };
-  if (c.waiting) return { cls: c.working ? "working" : "", bubble: `${c.waiting}`, fill: "#facc15", ink: "#1f2937" };
-  if (c.working) return { cls: "working", bubble: "...", fill: "#fff", ink: "#1f2937" };
-  return { cls: "", bubble: "z", fill: "#e5e7eb", ink: "#6b7280" };
-}
-
-function desk(a, i) {
-  const x = 14 + i * 78;
-  const ag = data.agents[a];
-  const look = LOOKS[a];
-  const st = deskStatus(a);
-  const px = x + 12; // the person
-  const g = s("g", { class: `desk ${st.cls}${filter === a ? " picked" : ""}`, tabindex: 0, role: "button", "aria-label": `${ag.name}, ${ag.role}: ${describe(a)}` },
-    s("title", {}, `${ag.name} (${ag.role}): ${describe(a)}`),
-    // chair
-    r(px - 2, 64, 24, 24, "#374151"), r(px, 66, 20, 20, "#4b5563"),
-    // person
-    s("g", { class: "person" },
-      r(px + 3, 50, 14, 14, look.skin), // head
-      r(px + 3, 48, 14, 5, look.hair), r(px + 2, 50, 2, 7, look.hair), r(px + 16, 50, 2, 7, look.hair),
-      r(px + 6, 56, 2, 2, "#1f2937"), r(px + 12, 56, 2, 2, "#1f2937"), r(px + 8, 60, 4, 1, "#9a3412"),
-      r(px + 1, 64, 18, 16, ag.colour), r(px + 8, 64, 4, 3, "#fff", { opacity: 0.7 }),
-    ),
-    s("g", { class: "hands" }, r(px - 1, 79, 5, 4, look.skin), r(px + 16, 79, 5, 4, look.skin)),
-    // desk
-    r(x, 82, 66, 5, "#b7824a"), r(x, 87, 66, 16, "#8a5a2e"), r(x + 2, 89, 62, 1, "#a06a38"),
-    r(x + 2, 103, 4, 12, "#6b4422"), r(x + 60, 103, 4, 12, "#6b4422"),
-    // computer, mug and papers
-    r(x + 38, 64, 24, 16, "#1f2937"), r(x + 40, 66, 20, 12, st.cls === "off" ? "#1f2937" : "#94a3b8", { class: "screen" }),
-    r(x + 48, 80, 4, 2, "#1f2937"), r(x + 44, 81, 12, 1, "#374151"),
-    r(x + 4, 78, 7, 4, "#f8fafc"), r(x + 30, 77, 5, 5, "#e11d48"), r(x + 35, 78, 1, 3, "#e11d48"),
-    // name plate
-    r(x + 9, 118, 48, 13, "#f5f0e1", { class: "plate", rx: 1 }),
-    s("text", { x: x + 33, y: 128, "text-anchor": "middle", "font-size": 8, fill: "#3b2f20" }, ag.name.toUpperCase()),
-    // speech bubble
-    s("g", { class: "bubble" },
-      r(px - 4, 28, 28, 14, st.fill, { rx: 2 }), r(px + 6, 42, 4, 3, st.fill),
-      s("text", { x: px + 10, y: 38.5, "text-anchor": "middle", "font-size": 9, fill: st.ink }, st.bubble),
-    ),
-  );
-  const pick = () => { filter = filter === a ? "" : a; render(); };
-  g.addEventListener("click", pick);
-  g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
-  return g;
-}
-
-function describe(a) {
-  const c = data.counts[a];
-  if (!c.on) return "switched off";
-  const bits = [];
-  if (c.working) bits.push("working on something");
-  if (c.waiting) bits.push(`${c.waiting} waiting for you`);
-  if (c.alerts) bits.push(`${c.alerts} alert${c.alerts === 1 ? "" : "s"}`);
-  return bits.join(", ") || "all caught up";
-}
-
-function office() {
-  const wall = [r(0, 0, 400, 70, "#3d3560"), ...Array.from({ length: 20 }, (_, i) => r(i * 20, 0, 1, 70, "#463d6e")), r(0, 66, 400, 4, "#2b2540")];
-  const floor = [];
-  for (let y = 70; y < 140; y += 10) for (let x = 0; x < 400; x += 10) floor.push(r(x, y, 10, 10, (x + y) % 20 ? "#6e5a43" : "#7a654c"));
-  const win = (x) => [r(x, 8, 46, 30, "#2a2342"), r(x + 2, 10, 42, 26, "#7dd3fc"), r(x + 2, 26, 42, 10, "#38bdf8"), r(x + 22, 10, 2, 26, "#2a2342"), r(x + 2, 22, 42, 2, "#2a2342"), r(x + 6, 14, 8, 3, "#f0f9ff")];
-  const plant = (x) => [r(x, 46, 12, 14, "#b45309"), r(x - 2, 44, 16, 3, "#92400e"), r(x + 2, 32, 4, 12, "#16a34a"), r(x + 6, 28, 4, 16, "#22c55e"), r(x - 2, 36, 5, 4, "#15803d"), r(x + 9, 34, 5, 4, "#15803d")];
-  const sign = [r(166, 10, 68, 20, "#1e1a2e"), r(168, 12, 64, 16, "#4f46e5"), s("text", { x: 200, y: 24, "text-anchor": "middle", "font-size": 10, fill: "#fff" }, "EKA HQ")];
-  const clock = [r(260, 12, 14, 14, "#f8fafc", { rx: 7 }), r(266, 14, 2, 6, "#1f2937"), r(266, 19, 5, 2, "#1f2937")];
-  return s("svg", { class: "office", viewBox: "0 0 400 140", role: "img", "aria-label": "The HQ office" },
-    wall, win(30), win(310), sign, clock, plant(110), plant(374), floor,
-    ORDER.map(desk),
-  );
-}
 
 // ---- the queue ---------------------------------------------------------------
 
@@ -310,7 +220,13 @@ function render() {
   }
   shell.notices.replaceChildren(...notices());
   const working = ORDER.filter((a) => data.counts[a].working).map((a) => data.agents[a].name);
-  shell.office.replaceChildren(office(),
+  if (!shell.view) {
+    shell.view = createOffice({ agents: data.agents, onPick: (a) => { filter = filter === a ? "" : a; render(); } });
+    shell.bar = h("div");
+    shell.office.replaceChildren(shell.view.el, shell.bar);
+  }
+  shell.view.update(data, filter);
+  shell.bar.replaceChildren(
     h("div", { class: "office-bar" },
       h("span", { class: "grow" }, n ? `${n} thing${n === 1 ? "" : "s"} waiting for you` : "Nothing waiting for you", working.length ? ` · ${working.join(", ")} working` : "", data.openTickets ? ` · ${data.openTickets} open customer message${data.openTickets === 1 ? "" : "s"}` : ""),
       filter ? h("button", { class: "btn btn-sm", onclick: () => { filter = ""; render(); } }, `Showing ${data.agents[filter].name}'s work · show all`) : h("span", { class: "small" }, "Click a desk to see that person's work"),

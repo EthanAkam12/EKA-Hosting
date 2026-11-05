@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ctext x='16' y='21' font-size='11' font-weight='800' text-anchor='middle' fill='white' font-family='sans-serif'%3EEKA%3C/text%3E%3C/svg%3E">
 <title>HQ · EKA Hosting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
 <link rel="stylesheet" href="/admin/assets/admin.css">
 <style>
   .top { background: var(--panel); border-bottom: 1px solid var(--line); }
@@ -21,22 +23,30 @@
 
   /* The pixel office */
   .office-wrap { padding: 0; overflow: hidden; background: #2b2540; }
-  .office { display: block; width: 100%; height: auto; image-rendering: pixelated; shape-rendering: crispEdges; }
-  .office .desk { cursor: pointer; }
-  .office .desk:focus { outline: none; }
-  .office .desk:focus-visible .plate, .office .desk:hover .plate { fill: #fff7d6; }
-  .office .desk.picked .plate { fill: #fde68a; }
-  .office text { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; }
-  .office .off .person { opacity: 0; }
-  .office .off .screen { fill: #1f2937; }
-  .office .working .person { animation: hq-bob .6s steps(2) infinite; }
-  .office .working .screen { animation: hq-flicker 1.2s steps(3) infinite; }
+  .office { display: block; width: 100%; height: auto; shape-rendering: crispEdges; }
+  .office text { shape-rendering: auto; }
+  .office .station { cursor: pointer; }
+  .office .station:focus { outline: none; }
+  .office .station:focus-visible rect:first-of-type { outline: 2px solid #fde68a; }
+  .office .working .hands { animation: hq-type .28s steps(2) infinite; }
+  .office .working .sit { animation: hq-bob 1.2s steps(2) infinite; }
+  .office .screen.on { animation: hq-flicker 1.4s steps(3) infinite; }
+  .office .code { animation: hq-code 1.2s steps(4) infinite; }
+  .office .code.c2 { animation-delay: .3s; } .office .code.c3 { animation-delay: .6s; }
   .office .bubble { animation: hq-float 1.6s steps(2) infinite; }
-  .office .working .hands { animation: hq-type .3s steps(2) infinite; }
+  .office .flow { animation: hq-flow .6s linear infinite; }
+  .office .led { animation: hq-blink 1s steps(2) infinite; }
+  .office .led1 { animation-delay: .33s; } .office .led2 { animation-delay: .66s; }
+  .office .steam { animation: hq-float 1.2s steps(2) infinite; }
+  .office .dots { animation: hq-blink 1s steps(2) infinite; }
+  .office .idle .stand { animation: hq-bob 2.4s steps(2) infinite; }
   @keyframes hq-bob { 50% { transform: translateY(-1px); } }
   @keyframes hq-float { 50% { transform: translateY(-2px); } }
   @keyframes hq-type { 50% { transform: translateY(1px); } }
-  @keyframes hq-flicker { 0% { fill: #60a5fa; } 33% { fill: #93c5fd; } 66% { fill: #3b82f6; } }
+  @keyframes hq-flicker { 0% { fill: #60a5fa; } 33% { fill: #7cb7fb; } 66% { fill: #3b82f6; } }
+  @keyframes hq-code { 0% { width: 4px; } 100% { width: 22px; } }
+  @keyframes hq-flow { to { stroke-dashoffset: -8; } }
+  @keyframes hq-blink { 50% { opacity: .25; } }
   @media (prefers-reduced-motion: reduce) { .office * { animation: none !important; } }
   .office-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 16px; background: #1e1a2e; color: #e9e5ff; font-size: 13.5px; }
   .office-bar .grow { flex: 1; }
