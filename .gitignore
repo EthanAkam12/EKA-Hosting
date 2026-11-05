@@ -5,3 +5,6 @@ data/
 settings.txt
 backups/
 dist/
+hq-data/
+hq-settings.txt
+hq-help.txt

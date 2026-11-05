@@ -1,0 +1,21 @@
+WEB HOSTING HELP (EKA Hosting)
+
+Client area: customers log in at the client area (the WHMCS address) to see their services, pay invoices, open tickets and change their password. "Forgot password?" on the login page sends a reset link.
+
+Control panel: each hosting account has a control panel (cPanel). Log in from the client area: Services, choose the hosting, then "Log in to cPanel". Email accounts, files, databases and domains are all managed there.
+
+Email accounts: in cPanel, Email Accounts, then Create. To read email on a phone or in Outlook: in cPanel, Email Accounts, then "Connect Devices" shows the exact incoming and outgoing server settings (use the secure SSL/TLS ports: IMAP 993, SMTP 465). Webmail is at the domain with /webmail on the end.
+
+Domains and DNS: a domain registered with us points here automatically. A domain registered elsewhere needs its nameservers changed (at the company it was bought from) to the nameservers in the hosting welcome email. Changes can take a few hours (occasionally up to 48 hours) to work everywhere.
+
+SSL (the padlock): free SSL certificates are added automatically once the domain points to our servers. If a site shows "not secure" more than a few hours after the domain was connected, ask us to check.
+
+Website builder: customers with a builder plan log in to the builder from the client area (the "Website builder" button on the service) and don't need cPanel for their website.
+
+Moving a website to us: we move websites for free. The customer opens a ticket with the old host's details (or a backup), and we do it.
+
+Backups: hosting accounts are backed up daily. To restore files or a database, open a ticket saying what and from which day.
+
+Billing: invoices are emailed and shown in the client area, where they can be paid by card. Plans can be upgraded in the client area (Services, choose the service, Upgrade/Downgrade). Cancellations are requested in the client area too (Services, choose the service, Request Cancellation).
+
+Slow or down websites: check whether it's just one device (try mobile data), then open a ticket with the website address and the time it happened.

@@ -1,0 +1,51 @@
+# EKA HQ settings (the program that runs the business, separate from the builder).
+# Edit this file in Notepad, save it, then close and re-open HQ.
+
+# The password you use to log in to HQ. Leave it empty and one is made for you.
+HQ_PASSWORD=
+
+# Your name (Henry uses it) and the business name.
+OWNER_NAME=Ethan
+BUSINESS_NAME=EKA Hosting
+# HQ's own address once it's on a server (used in the links Henry sends you), e.g. https://hq.ekahosting.co.uk
+HQ_URL=
+TIME_ZONE=Europe/London
+
+# --- AI (for HQ's staff) ---
+# Your Claude API key (from console.anthropic.com). Or one of the other AI services, see below.
+ANTHROPIC_API_KEY=
+# Free alternatives: AI_PROVIDER=gemini (key from aistudio.google.com) or groq (console.groq.com).
+AI_PROVIDER=
+AI_API_KEY=
+
+# --- The website builder ---
+# Its address and its "host API key" (on the builder's Customers page, or HOST_API_KEY in its settings.txt).
+BUILDER_URL=http://localhost:3000
+BUILDER_API_KEY=
+
+# --- WHMCS (billing, hosting accounts and support tickets) ---
+# In WHMCS: Configuration > System Settings > API Credentials > Generate New API Credential.
+WHMCS_URL=
+WHMCS_IDENTIFIER=
+WHMCS_SECRET=
+# The WHMCS admin username replies are posted as (optional).
+WHMCS_ADMIN_USER=
+
+# --- Messages to your phone when you're not in HQ ---
+# Easiest: install the free "ntfy" app, subscribe to a topic name only you know
+# (e.g. eka-hq-7f3k2q9), and put the same name here.
+NTFY_TOPIC=
+# Or Telegram: a bot token from @BotFather and your chat id (HQ's Settings tab finds it).
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+# Or email (uses the SMTP settings below).
+OWNER_EMAIL=
+
+# --- Email (for emails HQ sends that don't go through WHMCS) ---
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=
+
+HQ_PORT=3100

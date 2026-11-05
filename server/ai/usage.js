@@ -21,6 +21,9 @@ const PRICES = {
   "claude-fable-5-1": [10, 50, 0.25],
 };
 
+/** Prices for other providers' models (US$ per million tokens; free tiers are 0). */
+export function setModelPrice(model, input = 0, output = 0) { PRICES[model] = [input, output, input]; }
+
 export function estimateCost(model, usage = {}) {
   const [inp, out, read] = PRICES[model] || PRICES["claude-opus-5-5"];
   const m = 1e6;

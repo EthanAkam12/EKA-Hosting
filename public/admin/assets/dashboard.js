@@ -52,7 +52,6 @@ function setupHeader() {
   top.dataset.ready = "1";
   const logout = document.getElementById("logout");
   if (me.role === "admin") {
-    logout.before(h("a", { class: "btn btn-ghost", href: "/admin/hq", title: "EKA HQ: your AI staff" }, "HQ", me.hqWaiting ? h("span", { class: "hq-count", title: `${me.hqWaiting} waiting for you` }, String(me.hqWaiting)) : null));
     logout.before(h("a", { class: "btn btn-ghost", href: "/admin/customers" }, "Customers"));
   }
   if (me.account) {

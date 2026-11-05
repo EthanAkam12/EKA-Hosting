@@ -113,9 +113,18 @@ From then on **Publish** uploads the site straight to the host. Only changed fil
 - **For Google and sharing**: every page gets an icon and share picture, the home page carries the business details (LocalBusiness), and live sites serve a sitemap.
 - **Phone contact button**: an optional floating Call / WhatsApp button on phones.
 
-## EKA HQ (AI staff, for the administrator)
+## EKA HQ (runs the business; a separate program)
 
-`/admin/hq` is a pixel-art office with five AI staff who do the groundwork and bring it to you for approval: **Sam** drafts replies to customers' support messages (sent from `/support`), **Bea** builds done-for-you websites from a short brief and returns a review link, **Alex** writes monthly check-in emails, **Otto** checks backups, disk, licence, email, failed builds, unanswered form messages and domains every hour, and **Mia** writes weekly social posts, a blog post for your own site and replies to its enquiries. Nothing is sent until you approve it. Work is kept in `DATA_DIR/hq/`. AI work is charged to the administrator, not to customers' allowances. HQ's rounds run only while the builder is running.
+EKA HQ (`hq/`) is the main interface for running EKA Hosting, separate from the website builder. It's a full-screen pixel-art office with six AI staff, and tabs for what they're doing, things to approve, the numbers (revenue, recurring revenue, customers, websites), customers (with their hosting, invoices, tickets and websites), meetings and marketing.
+
+- **Henry (boss):** a morning briefing, a weekly team meeting where everyone reports and suggests improvements, and messages to your phone (ntfy, Telegram or email) when something needs you and you're not in HQ.
+- **Sam (support):** drafts replies to WHMCS tickets; you approve and they're posted to the ticket.
+- **Bea (web designer):** builds done-for-you websites in the builder (from a WHMCS order or a form) and brings you a review link.
+- **Alex (accounts):** welcome emails, friendly notes about overdue invoices, monthly check-ins with website customers.
+- **Otto (operations):** new orders to accept, hosting servers, builder backups, disk, licence, failed builds, unanswered form messages, domains, and suspending long-unpaid services (with your approval).
+- **Mia (marketing):** a marketing plan and ideas board, weekly social posts, blog posts for your own website, replies to enquiries, new ideas monthly.
+
+Nothing reaches a customer or costs money until you approve it. Start it with `npm run hq` (or `start-hq-windows.bat`) and open http://localhost:3100; settings go in `hq-settings.txt` (see `hq-settings.example.txt`). HQ talks to the builder through its host API (`BUILDER_URL`, `BUILDER_API_KEY` = the builder's `HOST_API_KEY`) and to WHMCS through its API. To keep it running all the time, put it on a server: see [SERVER-SETUP.md](SERVER-SETUP.md).
 
 ## Help, support and the public demo
 

@@ -10,6 +10,7 @@ import { createAnthropicProvider } from "./anthropic.js";
 import { applyChanges } from "./changes.js";
 import { partialDesign } from "./partial.js";
 import { createDemoProvider } from "./demo.js";
+import { createOpenAiCompatibleProvider, PRESETS } from "./openai-compatible.js";
 import { GENERATE_SYSTEM, EDIT_SYSTEM, CONCEPT_SYSTEM, BUILD_SYSTEM, PAGE_SYSTEM, POST_SYSTEM, STARTER_POSTS_SYSTEM, SECTION_SYSTEM, IDEAS_SYSTEM, SEO_SYSTEM, generatePrompt, editPrompt, conceptPrompt, buildPrompt, pagePrompt, postPrompt, starterPostsPrompt, sectionPrompt, ideasPrompt, seoPrompt, localPagePrompt, describeLayout, describePage } from "./prompts.js";
 
 function pickProvider() {
@@ -22,7 +23,8 @@ function pickProvider() {
       effort: process.env.AI_EFFORT || "medium",
     });
   }
-  throw new Error(`Unknown AI_PROVIDER "${choice}". Use "claude" or "demo".`);
+  if (PRESETS[choice]) return createOpenAiCompatibleProvider({ kind: choice });
+  throw new Error(`Unknown AI_PROVIDER "${choice}". Use "claude", ${Object.keys(PRESETS).map((k) => `"${k}"`).join(", ")} or "demo".`);
 }
 
 // `provider` can be injected (used by the tests); normally it comes from env.
@@ -33,7 +35,7 @@ export function createAi({ provider = pickProvider() } = {}) {
   const conceptEffort = process.env.AI_CONCEPT_EFFORT || "high";
   // New sites use the strongest model; changes use a faster, cheaper one.
   const generateModel = process.env.AI_MODEL || provider.model;
-  const editModel = process.env.AI_EDIT_MODEL || (provider.name === "claude" ? "claude-sonnet-5-5" : provider.model);
+  const editModel = process.env.AI_EDIT_MODEL || (provider.name === "claude" ? "claude-sonnet-5-5" : provider.editModel || provider.model);
 
   return {
     provider: provider.name,
