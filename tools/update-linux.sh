@@ -45,6 +45,7 @@ tar -C "$NEW" --exclude=./node_modules --exclude=./data --exclude=./.git --exclu
 cd "$APP"
 npm ci --omit=dev --no-audit --no-fund
 systemctl start eka-builder
+systemctl restart eka-hq 2>/dev/null || true
 
 # 4. Check it started; if not, put the old version back.
 PORT="$(grep -E '^PORT=' settings.txt | tail -1 | cut -d= -f2- | tr -d '\r')"; PORT="${PORT:-3000}"
