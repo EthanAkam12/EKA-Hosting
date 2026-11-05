@@ -727,6 +727,30 @@ host.get("/hq/domains", async (req, res) => {
   }
   res.json({ checked: !!BASE_DOMAIN, sites: out });
 });
+// A whole website from HQ (e.g. EKA Hosting's own site): { name, site, images: { "file.webp": base64 } }.
+app.post("/api/host/hq/import", express.json({ limit: "16mb" }), async (req, res, next) => {
+  try {
+    if (!hostAuthed(req, res)) return;
+    if (!req.body?.site || typeof req.body.site !== "object") return res.status(400).json({ error: "No website sent." });
+    const name = String(req.body.name || req.body.site.name || "Website").slice(0, 120);
+    const meta = await store.create({ name, prompt: String(req.body.prompt || "").slice(0, 2000) });
+    const dir = store.mediaDir(meta.id);
+    await fs.mkdir(dir, { recursive: true });
+    let json = JSON.stringify(req.body.site);
+    for (const [file, data] of Object.entries(req.body.images || {})) {
+      if (!/^[\w-]+\.(webp|png|jpe?g)$/.test(file) || typeof data !== "string") continue;
+      await fs.writeFile(path.join(dir, file), Buffer.from(data, "base64"));
+      json = json.split(`hq-image:${file}`).join(`/_m/${meta.id}/${file}`);
+    }
+    const site = normalizeSite(JSON.parse(json));
+    site.name = name;
+    ensurePrivacyPage(site);
+    await fillImages(site, { dir, urlPrefix: `/_m/${meta.id}/`, brief: { name, description: req.body.prompt || "" } });
+    await store.saveDraft(meta.id, site, { version: "Imported from EKA HQ" });
+    await store.updateMeta(meta.id, { status: "ready", error: null, formEmail: String(req.body.formEmail || "").slice(0, 200) });
+    res.json({ site: hqSite(store.getMeta(meta.id)), editor: `${publicBase(req)}/admin/sites/${meta.id}` });
+  } catch (err) { next(err); }
+});
 app.use("/api/host", host);
 
 // ---- customer review (public, by link) ----------------------------------------

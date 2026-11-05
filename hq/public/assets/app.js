@@ -357,6 +357,14 @@ function pageSettings() {
   const num = (a, k, label, min, max) => { const i = h("input", { class: "input", type: "number", min, max, value: S.settings[a][k], style: "width:90px", onchange: () => save({ [a]: { [k]: Number(i.value) } }) }); return h("label", { class: "row small", style: "gap:8px;margin:6px 0" }, label, i); };
   const testBtn = h("button", { class: "btn", onclick: () => busyBtn(testBtn, async () => { const r = await api("/notify/test", { method: "POST", body: {} }); toast(`Sent by ${r.sent.join(", ")}. Check your phone!`); }) }, "Send a test message to my phone");
   const tgBtn = h("button", { class: "btn ghost", onclick: () => busyBtn(tgBtn, async () => { const r = await api("/notify/telegram-id"); toast(`Your Telegram chat id is ${r.chatId}. Put it in TELEGRAM_CHAT_ID.`); }) }, "Find my Telegram chat id");
+  const siteBtn = h("button", { class: "pxbtn", onclick: () => busyBtn(siteBtn, async () => {
+    if (S.settings.marketing.siteId && !confirm("You already have a website set for Mia. Make a fresh copy of the EKA Hosting website in the builder anyway?")) return;
+    const r = await api("/website/create", { method: "POST", body: {} });
+    S.settings.marketing.siteId = r.siteId;
+    toast("Done! Opening it in the builder…");
+    window.open(r.editor, "_blank", "noopener");
+    render(true);
+  }) }, "CREATE OUR WEBSITE IN THE BUILDER");
   const about = h("textarea", { class: "textarea", style: "min-height:80px", onchange: () => save({ marketing: { about: about.value } }) }, S.settings.marketing.about || "");
   const siteId = h("input", { class: "input", value: S.settings.marketing.siteId || "", placeholder: "e.g. 3f2a9c1d7b6e4a58", style: "max-width:260px", onchange: () => save({ marketing: { siteId: siteId.value.trim() } }) });
   return h("div", { class: "page" },
@@ -377,7 +385,7 @@ function pageSettings() {
         h("h2", { style: "margin-top:14px" }, "SAM"), check("support", "autoSend", "Post replies Sam is sure about without asking me (off is safest)"),
         h("h2", { style: "margin-top:14px" }, "ALEX"), check("account", "welcome", "Welcome emails for new customers"), check("account", "overdue", "Friendly notes about overdue invoices"), check("account", "checkins", "Monthly check-ins with website customers"),
         h("h2", { style: "margin-top:14px" }, "OTTO"), num("ops", "suspendAfterDays", "Suggest suspending hosting after an invoice is overdue for (days)", 1, 120),
-        h("h2", { style: "margin-top:14px" }, "MIA"), h("label", { class: "f" }, "Our own website in the builder (its id, from the address bar when you edit it: /admin/sites/<id>)", siteId), h("label", { class: "f", style: "margin-top:8px" }, "About the business (Mia uses this)", about))));
+        h("h2", { style: "margin-top:14px" }, "MIA"), h("p", { class: "small muted" }, "The EKA Hosting website (home, website builder, hosting, web design, pricing, blog and contact pages) is ready-made: one click adds it to the builder for you to check, change and publish."), siteBtn, h("label", { class: "f" }, "Our own website in the builder (its id, from the address bar when you edit it: /admin/sites/<id>)", siteId), h("label", { class: "f", style: "margin-top:8px" }, "About the business (Mia uses this)", about))));
 }
 
 // ---- start -----------------------------------------------------------------------------

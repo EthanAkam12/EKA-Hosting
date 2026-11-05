@@ -27,5 +27,6 @@ export function createBuilder({ url, key, fetchImpl = fetch } = {}) {
     writePost: (id, topic) => call("POST", `/hq/sites/${id}/write-post`, { topic }),
     domains: () => call("GET", "/hq/domains"),
     account: (body) => call("POST", "/accounts", body),
+    importSite: (body) => call("POST", "/hq/import", body),
   };
 }

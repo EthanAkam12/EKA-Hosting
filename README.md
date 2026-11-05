@@ -124,6 +124,8 @@ EKA HQ (`hq/`) is the main interface for running EKA Hosting, separate from the 
 - **Otto (operations):** new orders to accept, hosting servers, builder backups, disk, licence, failed builds, unanswered form messages, domains, and suspending long-unpaid services (with your approval).
 - **Mia (marketing):** a marketing plan and ideas board, weekly social posts, blog posts for your own website, replies to enquiries, new ideas monthly.
 
+EKA Hosting's own website (home, website builder, hosting, web design, pricing, blog and contact pages, with the packages and prices) is ready-made: HQ → Settings → **Create our website in the builder** adds it to the builder to edit and publish (`shared/eka-website.js`).
+
 Nothing reaches a customer or costs money until you approve it. Start it with `npm run hq` (or `start-hq-windows.bat`) and open http://localhost:3100; settings go in `hq-settings.txt` (see `hq-settings.example.txt`). HQ talks to the builder through its host API (`BUILDER_URL`, `BUILDER_API_KEY` = the builder's `HOST_API_KEY`) and to WHMCS through its API. To keep it running all the time, put it on a server: see [SERVER-SETUP.md](SERVER-SETUP.md).
 
 ## Help, support and the public demo

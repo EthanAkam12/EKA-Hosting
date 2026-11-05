@@ -122,3 +122,24 @@ test("host API for EKA HQ: overview, building a site, review links, site details
   assert.equal((await hostApi("POST", "/hq/build", { design: "nope", brief: {} })).status, 400);
   assert.equal((await hostApi("POST", `/hq/sites/${built.body.site.id}/write-post`, { topic: "x" })).status, 400, "posts need AI");
 });
+
+test("EKA Hosting's own website imports into the builder and renders", async () => {
+  const { ekaWebsite } = await import("../shared/eka-website.js");
+  const site = ekaWebsite({ name: "EKA Hosting", images: { editor: "hq-image:shot.webp" } });
+  assert.deepEqual(site.pages.filter((p) => !p.post).map((p) => p.slug), ["index", "website-builder", "web-hosting", "web-design", "pricing", "blog", "contact"]);
+  const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const res = await fetch(`${BASE}/api/host/hq/import`, { method: "POST", headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "EKA Hosting", site, images: { "shot.webp": tinyPng, "../evil.webp": tinyPng } }) });
+  const out = await res.json();
+  assert.equal(res.status, 200, JSON.stringify(out));
+  const info = (await hostApi("GET", `/hq/sites/${out.site.id}`)).body;
+  assert.equal(info.posts.length, 1);
+  const admin = client();
+  await admin("POST", "/api/login", { password: "admin-pass-1" });
+  const page = await admin("GET", `/admin/preview/${out.site.id}/pricing/`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Builder Business/);
+  assert.match(page.text, /£299/);
+  const home = await admin("GET", `/admin/preview/${out.site.id}/`);
+  assert.match(home.text, new RegExp(`/_m/${out.site.id}/shot\\.webp`), "screenshots are added to the site's images");
+  assert.equal((await fetch(`${BASE}/api/host/hq/import`, { method: "POST", headers: { Authorization: "Bearer nope", "Content-Type": "application/json" }, body: "{}" })).status, 401);
+});
