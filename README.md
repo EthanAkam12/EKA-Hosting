@@ -130,6 +130,20 @@ EKA Hosting's own website (home, website builder, hosting, web design, pricing, 
 
 Nothing reaches a customer or costs money until you approve it. Start it with `npm run hq` (or `start-hq-windows.bat`) and open http://localhost:3100; settings go in `hq-settings.txt` (see `hq-settings.example.txt`). HQ talks to the builder through its host API (`BUILDER_URL`, `BUILDER_API_KEY` = the builder's `HOST_API_KEY`) and to WHMCS through its API. To keep it running all the time, put it on a server: see [SERVER-SETUP.md](SERVER-SETUP.md).
 
+## JARVIS (a voice assistant for your PC; a separate program)
+
+Talk to your computer and have it do things, Iron Man style. Say *"Jarvis, open Spotify and play something"*, *"what's taking up space in my Downloads?"*, *"turn the volume down"*, *"what's this error on my screen?"* or *"remind me in 20 minutes to call Sam"*, and Jarvis answers out loud and does it.
+
+1. Double-click **start-jarvis-windows.bat**. The first time it creates **jarvis-settings.txt**: open it in Notepad and paste your Claude API key (or leave it empty if the key is already in the builder's `settings.txt`). Then double-click the .bat again.
+2. Jarvis opens at http://localhost:3200. Use **Chrome or Edge** and allow the microphone.
+3. Click the glowing reactor (or press Space) and speak, or type. Turn on **Always listening** to just say "Jarvis, …" at any time while the page is open.
+
+What it can do: run any PowerShell command, open apps, websites, files and folders, type and press keyboard shortcuts, take a screenshot to see your screen, control volume and music, check CPU/memory/battery/disk, read and write files, use the clipboard, set reminders, search the web, and remember things about you between conversations (see **Memory**; click × to make it forget something).
+
+**Safety:** running commands, writing files and starting programs show an **Approve / Deny** card first, with the exact command. Only set `JARVIS_AUTO_APPROVE=yes` if you trust it completely. Jarvis only accepts requests from its own page on this computer, not from other websites or other machines.
+
+Good to know: voice recognition uses your browser's built-in speech service (Chrome sends audio to Google, Edge to Microsoft). Each request costs a little Claude API usage, more when it looks at screenshots; set `JARVIS_EFFORT=low` for quicker, cheaper answers, and click **New chat** now and then so old conversation isn't resent. Jarvis's memory is kept in the `jarvis-data` folder. On a Mac or Linux, run `npm run jarvis`; typing and key presses are Windows-only.
+
 ## Help, support and the public demo
 
 - **Help pages** are at `/help` and a **Support** page at `/support` (both public). Set `SUPPORT_EMAIL` to show your support address; the Support page fills in a ready-made email with the user's system details.

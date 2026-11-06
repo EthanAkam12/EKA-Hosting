@@ -26,10 +26,12 @@ try {
   if (Test-Path (Join-Path $here 'settings.txt')) { Copy-Item (Join-Path $here 'settings.txt') $backup -Force }
   if (Test-Path (Join-Path $here 'hq-data')) { Copy-Item (Join-Path $here 'hq-data') $backup -Recurse -Force }
   if (Test-Path (Join-Path $here 'hq-settings.txt')) { Copy-Item (Join-Path $here 'hq-settings.txt') $backup -Force }
+  if (Test-Path (Join-Path $here 'jarvis-data')) { Copy-Item (Join-Path $here 'jarvis-data') $backup -Recurse -Force }
+  if (Test-Path (Join-Path $here 'jarvis-settings.txt')) { Copy-Item (Join-Path $here 'jarvis-settings.txt') $backup -Force }
 
   Write-Host '  Installing the new version (your sites and settings are kept)...'
   # robocopy merges folders properly; these are never touched:
-  robocopy $src.FullName $here /E /NFL /NDL /NJH /NJS /NP /XD data hq-data node_modules backups /XF settings.txt hq-settings.txt hq-help.txt | Out-Null
+  robocopy $src.FullName $here /E /NFL /NDL /NJH /NJS /NP /XD data hq-data jarvis-data node_modules backups /XF settings.txt hq-settings.txt hq-help.txt jarvis-settings.txt | Out-Null
   if ($LASTEXITCODE -ge 8) { throw "Copying the new files failed (robocopy code $LASTEXITCODE)." }
 
   Set-Location $here

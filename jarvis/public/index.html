@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<style>
+  :root {
+    --bg: #04080f;
+    --panel: #0a1422;
+    --line: #15314d;
+    --text: #d6ecff;
+    --muted: #6f8ba6;
+    --glow: #36d1ff;
+    --glow-soft: rgba(54, 209, 255, 0.18);
+    --warn: #ffb347;
+    --bad: #ff6b6b;
+    --good: #5eea9b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #0b1d33 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  header {
+    width: 100%; max-width: 860px; padding: 14px 16px 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .brand { letter-spacing: 0.35em; font-weight: 600; color: var(--glow); font-size: 14px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  button {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--glow); }
+  button.on { border-color: var(--glow); color: var(--glow); box-shadow: 0 0 12px var(--glow-soft); }
+
+  /* The arc reactor */
+  .reactor-wrap { padding: 18px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .reactor {
+    width: 150px; height: 150px; border-radius: 50%; position: relative; cursor: pointer;
+    border: none; padding: 0; background: transparent;
+  }
+  .reactor .ring, .reactor .core { position: absolute; border-radius: 50%; inset: 0; }
+  .reactor .ring { border: 2px solid var(--glow); opacity: 0.35; }
+  .reactor .ring.r2 { inset: 14px; border-style: dashed; opacity: 0.55; animation: spin 18s linear infinite; }
+  .reactor .ring.r3 { inset: 30px; border-width: 3px; border-color: transparent var(--glow) transparent var(--glow); opacity: 0.8; animation: spin 6s linear infinite reverse; }
+  .reactor .core {
+    inset: 48px; background: radial-gradient(circle, #fff 0%, #9be9ff 25%, var(--glow) 55%, transparent 75%);
+    box-shadow: 0 0 30px var(--glow), 0 0 80px var(--glow-soft); transition: transform 0.15s;
+  }
+  .state-listening .core { animation: pulse 1.1s ease-in-out infinite; }
+  .state-thinking .r3 { animation-duration: 1.2s; }
+  .state-thinking .r2 { animation-duration: 4s; }
+  .state-speaking .core { animation: pulse 0.45s ease-in-out infinite; }
+  .state-waiting { --glow: var(--warn); --glow-soft: rgba(255, 179, 71, 0.2); }
+  .state-off { --glow: #3f5873; --glow-soft: transparent; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { transform: scale(1.18); } }
+  .status { color: var(--muted); font-size: 13px; min-height: 20px; text-align: center; padding: 0 16px; }
+  .heard { color: var(--glow); font-style: italic; }
+
+  main { width: 100%; max-width: 860px; flex: 1; overflow-y: auto; padding: 8px 16px 16px; }
+  .msg { margin: 10px 0; display: flex; flex-direction: column; }
+  .msg .who { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); margin-bottom: 2px; }
+  .msg .body { white-space: pre-wrap; word-wrap: break-word; padding: 10px 14px; border-radius: 12px; max-width: 92%; }
+  .msg.user { align-items: flex-end; }
+  .msg.user .body { background: #12263d; }
+  .msg.jarvis .body { background: var(--panel); border: 1px solid var(--line); }
+  .msg.error .body { border-color: var(--bad); color: #ffc9c9; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; max-width: 92%; }
+  .chip { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .chip.running { color: var(--glow); border-color: var(--glow); }
+  .chip.done { color: var(--good); }
+  .chip.failed, .chip.denied { color: var(--bad); }
+
+  .confirm {
+    margin-top: 8px; border: 1px solid var(--warn); border-radius: 12px; padding: 10px 14px;
+    background: rgba(255, 179, 71, 0.06); max-width: 92%;
+  }
+  .confirm .q { color: var(--warn); font-weight: 600; }
+  .confirm pre {
+    margin: 8px 0; padding: 8px 10px; background: #050b14; border-radius: 8px; overflow-x: auto;
+    font: 13px/1.4 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap; max-height: 260px;
+  }
+  .confirm .actions { display: flex; gap: 8px; }
+  .confirm .approve { border-color: var(--good); color: var(--good); }
+  .confirm .deny { border-color: var(--bad); color: var(--bad); }
+
+  form {
+    width: 100%; max-width: 860px; padding: 10px 16px 16px; display: flex; gap: 8px;
+  }
+  form input {
+    flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; outline: none;
+  }
+  form input:focus { border-color: var(--glow); }
+  .hint { color: var(--muted); font-size: 12px; text-align: center; padding: 0 16px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">J.A.R.V.I.S.</div>
+  <div class="controls">
+    <button id="wakeBtn" title="Listen all the time and answer when you say the wake word">Always listening</button>
+    <button id="voiceBtn" class="on" title="Speak replies out loud">Voice on</button>
+    <button id="memoryBtn" title="What Jarvis remembers about you">Memory</button>
+    <button id="newBtn" title="Start a new conversation">New chat</button>
+  </div>
+</header>
+
+<div class="reactor-wrap">
+  <button class="reactor state-idle" id="reactor" title="Click to talk (or press Space)">
+    <span class="ring"></span><span class="ring r2"></span><span class="ring r3"></span><span class="core"></span>
+  </button>
+  <div class="status" id="status">Online.</div>
+</div>
+
+<main id="log"></main>
+
+<form id="form">
+  <input id="input" placeholder="Type a command, or click the reactor and speak…" autocomplete="off">
+  <button type="submit">Send</button>
+  <button type="button" id="stopBtn" hidden>Stop</button>
+</form>
+<div class="hint" id="hint"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const log = $("log"), statusEl = $("status"), reactor = $("reactor"), input = $("input");
+let info = { callMe: "sir", wakeWord: "jarvis", voice: "" };
+let busy = false;
+let waitingConfirm = false;
+let voiceOn = true;
+let wakeMode = false;
+
+// ---------- small helpers ----------
+function setState(state, text) {
+  reactor.className = `reactor state-${state}`;
+  if (text !== undefined) statusEl.textContent = text;
+}
+function addMsg(kind, text) {
+  const el = document.createElement("div");
+  el.className = `msg ${kind}`;
+  el.innerHTML = `<div class="who">${kind === "user" ? "YOU" : "JARVIS"}</div><div class="body"></div><div class="tools"></div>`;
+  el.querySelector(".body").textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+async function post(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  return res;
+}
+
+// ---------- speaking ----------
+let voice = null;
+function pickVoice() {
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) return;
+  const wanted = info.voice.toLowerCase();
+  voice =
+    (wanted && voices.find((v) => v.name.toLowerCase().includes(wanted))) ||
+    voices.find((v) => /UK English Male|Ryan|George|Daniel|Thomas|Arthur/i.test(v.name) && /en-GB/i.test(v.lang)) ||
+    voices.find((v) => /en-GB/i.test(v.lang)) ||
+    voices.find((v) => /^en/i.test(v.lang)) ||
+    voices[0];
+}
+speechSynthesis.onvoiceschanged = pickVoice;
+
+let speaking = 0;
+function say(text) {
+  text = text.replace(/[*_#`>]/g, "").replace(/https?:\/\/\S+/g, "the link").trim();
+  if (!voiceOn || !text) return;
+  const u = new SpeechSynthesisUtterance(text);
+  if (voice) { u.voice = voice; u.lang = voice.lang; }
+  u.rate = 1.05;
+  u.pitch = 0.95;
+  speaking++;
+  pauseListening();
+  setState("speaking");
+  const end = () => {
+    speaking = Math.max(0, speaking - 1);
+    if (!speaking) {
+      restState();
+      resumeListening();
+    }
+  };
+  u.onend = end;
+  u.onerror = end;
+  speechSynthesis.speak(u);
+}
+function shutUp() {
+  speechSynthesis.cancel();
+  speaking = 0;
+}
+function idleState() { return wakeMode ? "listening" : "idle"; }
+function idleText() { return wakeMode ? `Say “${cap(info.wakeWord)}” to wake me.` : "Online."; }
+// What the reactor shows when nothing else (speaking, listening) is going on.
+function restState() {
+  if (waitingConfirm) setState("waiting", "Waiting for your approval.");
+  else if (busy) setState("thinking");
+  else setState(idleState(), idleText());
+}
+
+// ---------- listening ----------
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+let recRunning = false;
+let paused = false;
+let pushToTalk = false; // one utterance, then stop
+let awaitingCommand = 0; // time until which we take anything said as a command (after "Jarvis?")
+
+if (!Recognition) {
+  $("hint").textContent = "Voice input needs Chrome or Edge. You can still type.";
+  $("wakeBtn").disabled = true;
+} else {
+  rec = new Recognition();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = navigator.language || "en-GB";
+  rec.onstart = () => { recRunning = true; };
+  rec.onend = () => {
+    recRunning = false;
+    if (pushToTalk) { pushToTalk = false; if (!speaking) restState(); }
+    if (wakeMode && !paused) setTimeout(startRec, 250);
+  };
+  rec.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      wakeMode = false; $("wakeBtn").classList.remove("on");
+      setState("idle", "Microphone blocked. Allow it in the address bar, then try again.");
+    }
+  };
+  rec.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      const text = r[0].transcript.trim();
+      if (!r.isFinal) { interim += text + " "; continue; }
+      handleHeard(text);
+    }
+    if (interim && (pushToTalk || awaitingCommand > Date.now() || hasWake(interim))) {
+      statusEl.innerHTML = `<span class="heard">${escapeHtml(interim)}</span>`;
+    }
+  };
+}
+function startRec() {
+  if (!rec || recRunning || paused) return;
+  try { rec.start(); } catch {}
+}
+function pauseListening() {
+  paused = true;
+  if (rec && recRunning) rec.abort();
+}
+function resumeListening() {
+  paused = false;
+  if (wakeMode) setTimeout(startRec, 300);
+}
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+function hasWake(text) { return text.toLowerCase().includes(info.wakeWord); }
+
+function handleHeard(text) {
+  if (!text) return;
+  if (pushToTalk) {
+    pushToTalk = false;
+    rec.stop();
+    send(text);
+    return;
+  }
+  if (!wakeMode) return;
+  const lower = text.toLowerCase();
+  const at = lower.indexOf(info.wakeWord);
+  if (at === -1) {
+    if (awaitingCommand > Date.now()) { awaitingCommand = 0; send(text); }
+    return;
+  }
+  const command = text.slice(at + info.wakeWord.length).replace(/^[\s,.!?]+/, "").trim();
+  if (busy) {
+    if (/^(stop|cancel|never ?mind|abort)/i.test(command)) stopRequest();
+    return;
+  }
+  if (command) send(command);
+  else {
+    awaitingCommand = Date.now() + 8000;
+    say(`Yes, ${info.callMe}?`);
+    statusEl.textContent = "Listening…";
+  }
+}
+
+function talkOnce() {
+  if (!rec) { input.focus(); return; }
+  shutUp();
+  if (busy) return;
+  if (wakeMode) { awaitingCommand = Date.now() + 8000; setState("listening", "Listening…"); return; }
+  pushToTalk = true;
+  paused = false;
+  setState("listening", "Listening…");
+  startRec();
+}
+
+// ---------- talking to Jarvis ----------
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  shutUp();
+  busy = true;
+  $("stopBtn").hidden = false;
+  addMsg("user", text);
+  const msg = addMsg("jarvis", "");
+  const body = msg.querySelector(".body");
+  const tools = msg.querySelector(".tools");
+  const chips = {};
+  let spoken = "";   // text not yet sent to the voice
+  let full = "";
+  let afterTool = false; // the next text starts a new line
+  setState("thinking", "Working on it…");
+
+  const flushSpeech = (all) => {
+    // Speak whole sentences as soon as they're complete.
+    const m = all ? [spoken, spoken] : spoken.match(/^[\s\S]*[.!?…](?=\s)/);
+    if (m && m[0].trim()) { say(m[0]); spoken = spoken.slice(m[0].length); }
+  };
+
+  try {
+    const res = await post("/api/chat", { text });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        const ev = JSON.parse(line);
+        if (ev.type === "delta") {
+          // Separate text from before and after a tool call.
+          if (afterTool && /\S$/.test(full)) { full += "\n"; spoken += " "; }
+          afterTool = false;
+          full += ev.text; spoken += ev.text;
+          body.textContent = full;
+          flushSpeech(false);
+          log.scrollTop = log.scrollHeight;
+        } else if (ev.type === "status") {
+          if (ev.state === "thinking" && !speaking) setState("thinking", "Working on it…");
+        } else if (ev.type === "tool") {
+          flushSpeech(true);
+          afterTool = true;
+          let chip = chips[ev.id];
+          if (!chip) { chip = chips[ev.id] = document.createElement("span"); tools.appendChild(chip); }
+          chip.className = `chip ${ev.status}`;
+          chip.textContent = ev.summary;
+          if (ev.status === "running" && !speaking) setState("thinking", ev.summary + "…");
+        } else if (ev.type === "confirm") {
+          flushSpeech(true);
+          showConfirm(msg, ev);
+        } else if (ev.type === "error") {
+          msg.classList.add("error");
+          full += (full ? "\n" : "") + ev.message;
+          body.textContent = full;
+          say(ev.message);
+        }
+      }
+    }
+    flushSpeech(true);
+    if (!full.trim()) body.textContent = Object.keys(chips).length ? "Done." : "…";
+  } catch (err) {
+    msg.classList.add("error");
+    body.textContent = err.message;
+    say(err.message);
+  } finally {
+    busy = false;
+    $("stopBtn").hidden = true;
+    msg.querySelectorAll(".confirm").forEach((c) => c.remove());
+    waitingConfirm = false;
+    if (!speaking) restState();
+  }
+}
+
+function showConfirm(msg, ev) {
+  waitingConfirm = true;
+  setState("waiting", "Waiting for your approval.");
+  if (!speaking) say(`I need your go-ahead for that, ${info.callMe}.`);
+  const box = document.createElement("div");
+  box.className = "confirm";
+  box.innerHTML = `<div class="q"></div>${ev.detail ? "<pre></pre>" : ""}<div class="actions"><button class="approve">Approve (Enter)</button><button class="deny">Deny (Esc)</button></div>`;
+  box.querySelector(".q").textContent = ev.summary;
+  if (ev.detail) box.querySelector("pre").textContent = ev.detail;
+  msg.appendChild(box);
+  log.scrollTop = log.scrollHeight;
+  const answer = async (approve) => {
+    document.removeEventListener("keydown", onKey, true);
+    box.remove();
+    waitingConfirm = false;
+    setState("thinking", approve ? "On it…" : "Cancelled.");
+    await post("/api/confirm", { id: ev.id, approve });
+  };
+  const onKey = (e) => {
+    if (e.key === "Enter" && document.activeElement !== input) { e.preventDefault(); answer(true); }
+    if (e.key === "Escape") { e.preventDefault(); answer(false); }
+  };
+  document.addEventListener("keydown", onKey, true);
+  box.querySelector(".approve").onclick = () => answer(true);
+  box.querySelector(".deny").onclick = () => answer(false);
+  box.querySelector(".approve").focus();
+}
+
+async function stopRequest() {
+  shutUp();
+  await post("/api/stop");
+}
+
+// ---------- reminders ----------
+function listenForEvents() {
+  const es = new EventSource("/api/events");
+  es.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === "reminder") {
+      addMsg("jarvis", `⏰ ${ev.message}`);
+      say(`Pardon the interruption, ${info.callMe}. ${ev.message}`);
+      if ("Notification" in window && Notification.permission === "granted") new Notification("JARVIS", { body: ev.message });
+    }
+  };
+}
+
+// ---------- buttons ----------
+$("form").onsubmit = (e) => { e.preventDefault(); const t = input.value; input.value = ""; send(t); };
+$("stopBtn").onclick = stopRequest;
+reactor.onclick = talkOnce;
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && document.activeElement === document.body) { e.preventDefault(); talkOnce(); }
+});
+$("voiceBtn").onclick = () => {
+  voiceOn = !voiceOn;
+  if (!voiceOn) shutUp();
+  $("voiceBtn").classList.toggle("on", voiceOn);
+  $("voiceBtn").textContent = voiceOn ? "Voice on" : "Voice off";
+  try { localStorage.setItem("jarvis-voice", voiceOn ? "1" : "0"); } catch {}
+};
+$("wakeBtn").onclick = () => {
+  wakeMode = !wakeMode;
+  $("wakeBtn").classList.toggle("on", wakeMode);
+  try { localStorage.setItem("jarvis-wake", wakeMode ? "1" : "0"); } catch {}
+  if (wakeMode) {
+    paused = false; startRec();
+    setState("listening", idleText());
+  } else {
+    if (rec && recRunning) rec.abort();
+    setState("idle", "Online.");
+  }
+};
+$("newBtn").onclick = async () => {
+  if (busy) return;
+  const res = await post("/api/reset");
+  if (res.ok) { log.innerHTML = ""; setState(idleState(), "New conversation."); }
+};
+$("memoryBtn").onclick = async () => {
+  const { facts } = await (await fetch("/api/memory")).json();
+  const msg = addMsg("jarvis", facts.length ? "Here's what I remember (click × to forget one):" : "I don't remember anything about you yet. Tell me things and I'll keep them.");
+  const list = document.createElement("div");
+  facts.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.style.margin = "4px 0";
+    row.innerHTML = `<button style="padding:0 8px;margin-right:8px">×</button><span></span>`;
+    row.querySelector("span").textContent = f;
+    row.querySelector("button").onclick = async () => {
+      await post("/api/memory/forget", { index: i });
+      msg.remove();
+      $("memoryBtn").click();
+    };
+    list.appendChild(row);
+  });
+  msg.querySelector(".body").appendChild(list);
+};
+
+// ---------- start ----------
+(async () => {
+  try { info = { ...info, ...(await (await fetch("/api/info")).json()) }; } catch {}
+  pickVoice();
+  try {
+    if (localStorage.getItem("jarvis-voice") === "0") $("voiceBtn").click();
+    if (localStorage.getItem("jarvis-wake") === "1" && rec) $("wakeBtn").click();
+  } catch {}
+  if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+  listenForEvents();
+  $("hint").textContent ||= `Click the reactor or press Space to talk. Turn on “Always listening” and just say “${cap(info.wakeWord)}, …”.`;
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  addMsg("jarvis", `${greet}, ${info.callMe}. All systems online. How can I help?`);
+})();
+</script>
+</body>
+</html>
