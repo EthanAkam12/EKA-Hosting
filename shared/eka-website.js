@@ -261,11 +261,13 @@ export function ekaWebsite({ name = "EKA Hosting", images = {} } = {}) {
       { label: "Email", type: "email", required: true, options: "" },
       { label: "Address", type: "text", required: false, options: "" },
       { label: "Facebook or Instagram links (optional)", type: "text", required: false, options: "" },
+      { label: "Your logo (optional)", type: "file", required: false, options: "" },
+      { label: "Photos of your business or your work (optional, up to 6)", type: "file", required: false, options: "" },
       { label: "Which style do you like?", type: "select", required: false, options: "Modern, Elegant, Bold, Minimal, Playful, Luxury, Natural, Warm & friendly, Corporate, Fresh" },
       { label: "I'm happy to be contacted about my website", type: "checkbox", required: true, options: "" },
     ], submitText: "Build my website", successMessage: "Thank you! We've started on your website and will email you a link to check it.", confirmEmail: true })], [
       card("clock", "What happens next", "We start building straight away. You'll get an email with a link to your new website to check, usually within a few days.", { style: "surface" }),
-      card("image", "Photos and logo", "Got a logo or photos? Reply to our email with them and we'll add them.", { style: "surface" }),
+      card("image", "Photos and logo", "Add your logo and a few photos to the form: we'll use your logo's colours and put your photos on the website. No photos? We'll use suitable professional ones.", { style: "surface" }),
       card("tag", "Prices", "Done-for-you websites start at £299 (Launch) or £599 (Growth). We'll confirm which one suits you.", { style: "surface", linkText: "See the packages", href: "/web-design#done-for-you" }),
     ]]),
   ]);

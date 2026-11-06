@@ -143,3 +143,33 @@ test("EKA Hosting's own website imports into the builder and renders", async () 
   assert.match(home.text, new RegExp(`/_m/${out.site.id}/shot\\.webp`), "screenshots are added to the site's images");
   assert.equal((await fetch(`${BASE}/api/host/hq/import`, { method: "POST", headers: { Authorization: "Bearer nope", "Content-Type": "application/json" }, body: "{}" })).status, 401);
 });
+
+test("forms take photos: pictures are checked, kept privately and passed to a new website", async () => {
+  const { ekaWebsite } = await import("../shared/eka-website.js");
+  const sharp = (await import("sharp")).default;
+  const imp = await (await fetch(`${BASE}/api/host/hq/import`, { method: "POST", headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Uploads test", site: ekaWebsite() }) })).json();
+  const admin = client();
+  await admin("POST", "/api/login", { password: "admin-pass-1" });
+  await admin("POST", `/api/sites/${imp.site.id}/publish`, {});
+  const html = await (await fetch(`${BASE}/s/${imp.site.slug}/website-brief/`)).text();
+  assert.match(html, /enctype="multipart\/form-data"/);
+  const block = html.match(/name="_block" value="([^"]+)"/)[1];
+  const fd = new FormData();
+  fd.set("_block", block); fd.set("_page", "website-brief");
+  fd.set("field_0", "Rosie's Bakes"); fd.set("field_1", "Cakes in Leeds."); fd.set("field_9", "rosie@example.test"); fd.set("field_15", "Yes");
+  fd.append("field_12", new Blob([await sharp({ create: { width: 120, height: 60, channels: 3, background: "#c2410c" } }).png().toBuffer()], { type: "image/png" }), "logo.png");
+  fd.append("field_13", new Blob([Buffer.from("not a picture")], { type: "image/jpeg" }), "evil.jpg");
+  assert.equal((await fetch(`${BASE}/_forms/${imp.site.id}`, { method: "POST", body: fd, redirect: "manual" })).status, 303);
+  const sub = (await hostApi("GET", `/hq/sites/${imp.site.id}`)).body.submissions[0];
+  assert.equal(sub.files["Your logo (optional)"].length, 1);
+  assert.equal(sub.files["Photos of your business or your work (optional, up to 6)"], undefined, "not a real picture, so not kept");
+  const file = sub.files["Your logo (optional)"][0];
+  assert.equal((await admin("GET", `/api/sites/${imp.site.id}/uploads/${file}`)).status, 200);
+  assert.equal((await fetch(`${BASE}/api/sites/${imp.site.id}/uploads/${file}`)).status, 401, "private");
+  const built = await hostApi("POST", "/hq/build", { design: "restaurant", fill: false, brief: { name: "Rosie's Bakes", description: "Cakes made to order." }, uploads: { siteId: imp.site.id, logo: [file], photos: [] } });
+  let info;
+  for (let i = 0; i < 80; i++) { info = (await hostApi("GET", `/hq/sites/${built.body.site.id}`)).body; if (info.site.status === "ready") break; await new Promise((r) => setTimeout(r, 250)); }
+  const page = await admin("GET", `/admin/preview/${built.body.site.id}/`);
+  assert.match(page.text, new RegExp(`/_m/${built.body.site.id}/[a-f0-9]+\\.webp`), "the logo is on the new website");
+  assert.doesNotMatch(page.text, /Book a table/, "no restaurant wording for a cake maker");
+});

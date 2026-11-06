@@ -961,7 +961,8 @@ export function createPanels({ state, canvas, root, tabs, pickImage, onMetaChang
             h("div", { class: "row", style: { gap: "10px" } },
               email ? h("a", { class: "btn btn-sm", href: `mailto:${email}?subject=${encodeURIComponent(`Re: your ${(KINDS[sub.kind] || "message").toLowerCase()}`)}` }, "Reply") : null,
               h("label", { class: "check small" }, done, "Done"))),
-          Object.entries(sub.fields).filter(([, v]) => String(v).trim()).map(([k, v]) => h("div", {}, h("strong", {}, `${k}: `), h("span", { style: { whiteSpace: "pre-wrap" } }, v))));
+          Object.entries(sub.fields).filter(([, v]) => String(v).trim()).map(([k, v]) => h("div", {}, h("strong", {}, `${k}: `), h("span", { style: { whiteSpace: "pre-wrap" } }, v),
+            sub.files?.[k]?.length ? h("div", { class: "row", style: { gap: "6px", flexWrap: "wrap", marginTop: "4px" } }, sub.files[k].map((f) => h("a", { href: `/api/sites/${siteId}/uploads/${f}`, target: "_blank", rel: "noopener", title: "Open the full picture" }, h("img", { src: `/api/sites/${siteId}/uploads/${f}`, alt: k, style: { width: "72px", height: "72px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e3e6ec" } })))) : null)));
       }) : [h("p", { class: "muted" }, submissions.length ? "Nothing here." : "No messages yet. They'll appear here when visitors use a form on the live site.")]));
     };
     paint();

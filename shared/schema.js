@@ -88,7 +88,7 @@ export const BG_EFFECT_LABELS = ["Fade in", "Slow zoom (Ken Burns)", "Zoom out a
 
 const ALIGN = { type: "select", options: ["left", "center", "right"] };
 export const FORM_KINDS = ["contact", "enquiry", "booking"];
-export const FORM_FIELD_TYPES = ["text", "email", "tel", "textarea", "date", "time", "number", "select", "checkbox"];
+export const FORM_FIELD_TYPES = ["text", "email", "tel", "textarea", "date", "time", "number", "select", "checkbox", "file"];
 
 export const BLOCKS = {
   heading: {
@@ -291,7 +291,7 @@ export const BLOCKS = {
       { key: "kind", label: "What it's for", type: "select", options: FORM_KINDS, labels: ["Contact message", "Enquiry / quote request", "Booking request"] },
       { key: "fields", label: "Fields", type: "list", itemLabel: "label", itemDefaults: () => ({ label: "Phone", type: "tel", required: false, options: "" }), itemFields: [
         { key: "label", label: "Label", type: "text" },
-        { key: "type", label: "Type", type: "select", options: FORM_FIELD_TYPES, labels: ["Short text", "Email", "Phone", "Long text", "Date", "Time", "Number", "Drop-down list", "Tick box"] },
+        { key: "type", label: "Type", type: "select", options: FORM_FIELD_TYPES, labels: ["Short text", "Email", "Phone", "Long text", "Date", "Time", "Number", "Drop-down list", "Tick box", "Photos (up to 6 pictures)"] },
         { key: "options", label: "Choices for a drop-down (comma separated)", type: "text" },
         { key: "required", label: "Required", type: "checkbox" },
       ] },

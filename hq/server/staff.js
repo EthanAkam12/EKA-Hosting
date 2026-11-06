@@ -45,13 +45,13 @@ const money = (v) => { const m = String(v ?? "").replace(/,/g, "").match(/-?\d+(
 export function guessDesign(text) {
   const t = String(text || "").toLowerCase();
   const rules = [
-    [/restaurant|caf[eé]|coffee|bakery|pub|bistro|takeaway|food|bar\b/, "restaurant"],
+    [/restaurant|caf[eé]|coffee|bakery|bakes?\b|baking|cakes?\b|patisser|deli\b|catering|pub\b|bistro|takeaway|food|\bbar\b/, "restaurant"],
     [/plumb|electric|build|roof|joiner|carpent|clean|garden|landscap|decorat|handyman|heating|locksmith|removal/, "trades"],
     [/salon|beauty|hair|nail|barber|spa|massage|lash|brow|aesthetic/, "salon"],
     [/gym|fitness|personal train|yoga|pilates|coach|boxing|martial/, "fitness"],
     [/shop|boutique|store|gift|jewel|clothing|fashion|candle|crafts/, "boutique"],
     [/account|solicitor|lawyer|legal|consult|financ|mortgage|insurance|agency|architect/, "professional"],
-    [/photo|videograph|design|artist|illustrat|studio|wedding/, "portfolio"],
+    [/photograph|videograph|\bdesigner\b|graphic design|web design|artist|illustrat|\bstudio\b|wedding photo/, "portfolio"],
     [/b&b|bed and breakfast|cottage|holiday|guest house|hotel|glamping|camping/, "bnb"],
     [/charity|community|club|church|school|volunteer|association|society/, "community"],
   ];
@@ -232,7 +232,7 @@ ${help}`;
       let account;
       if (sendTo) { await builder.account({ email: sendTo, name: brief.name, account: input.clientId ? `whmcs:${input.clientId}` : undefined }).catch(() => null); account = sendTo; }
       const useAi = ai.enabled && settings.builder.useAi;
-      const { site, editor } = await builder.build({ design, brief, email: account, fill: useAi });
+      const { site, editor } = await builder.build({ design, brief, email: account, fill: useAi, ...(input.uploads ? { uploads: input.uploads } : {}) });
       update(task, { data: { ...task.data, siteId: site.id, editor }, summary: useAi ? "Writing every page for the business…" : "Putting their details into the design…" });
       for (let i = 0; ; i++) {
         const info = await builder.site(site.id).catch(() => null);
@@ -245,11 +245,11 @@ ${help}`;
       const left = task.data.advice || [];
       update(task, {
         status: "waiting",
-        summary: `Ready for you to check before it goes to the customer.${left.length ? ` Still to do: ${left.slice(0, 3).join("; ")}.` : ""}`,
+        summary: `Ready for you to check before it goes to the customer.${left.length ? ` Still to do: ${left.slice(0, 4).join("; ")}` : ""}`,
         data: { ...task.data, review: url },
         draft: { to: sendTo, subject: `Your new website is ready to look at: ${brief.name}`, text: `Hello,\n\nYour new website for ${brief.name} is ready for you to look at:\n${url}\n\nClick anything on the page to leave a comment about what you'd like changed, or press Approve when you're happy.\n\n${business}` },
       });
-      log("builder", `Finished ${brief.name}'s website and sent it to Henry for checking.`);
+      log("builder", `Finished ${brief.name}${/s$/i.test(brief.name) ? "'" : "'s"} website and sent it to Henry for checking.`);
     });
     return task;
   }
@@ -284,7 +284,11 @@ ${help}`;
         addTask("builder", { kind: "note", key, status: "done", title: `Website brief from ${brief.name || brief.email || "a visitor"}`, summary: "Bea started building straight away." });
         if (!brief.name) { log("builder", "Got a website brief without a business name; skipped it."); continue; }
         n++;
-        await newMission({ ...brief, sendTo: brief.email });
+        // Their logo and photos, if they attached any.
+        const files = Object.entries(sub.files || {});
+        const logo = files.filter(([label]) => /logo/i.test(label)).flatMap(([, f]) => f);
+        const photos = files.filter(([label]) => !/logo/i.test(label)).flatMap(([, f]) => f);
+        await newMission({ ...brief, sendTo: brief.email, uploads: files.length ? { siteId: settings.marketing.siteId, logo, photos } : undefined });
         await builder.markDone(settings.marketing.siteId, sub.id).catch(() => {});
       }
     });

@@ -35,6 +35,9 @@ import { deploy, testConnection } from "./deploy.js";
 import { createMailer } from "./mailer.js";
 import { ownerEmail, visitorEmail } from "./form-mail.js";
 import yazl from "yazl";
+import busboy from "busboy";
+import sharp from "sharp";
+import { paletteFromPixels } from "../shared/style-kits.js";
 import { renderPage, renderSpecialPage, pageUrl, pageAtPath, sitemapXml } from "../shared/render.js";
 import { STYLE_CHOICES } from "./ai/prompts.js";
 import { createEmptySite, normalizeSite, normalizePage, normalizeSection, findNode, slugify } from "../shared/schema.js";
@@ -363,11 +366,37 @@ app.get("/_m/:siteId/:file", async (req, res) => {
 
 const mailer = createMailer();
 const formHits = new Map();
+// Forms with a photos field arrive as multipart: fields, plus up to 6 pictures per field.
+function readMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const body = {}, files = {};
+    let bb;
+    try { bb = busboy({ headers: req.headers, limits: { fileSize: 8 * 1024 * 1024, files: 18, fields: 60, fieldSize: 20000 } }); } catch (err) { return reject(err); }
+    bb.on("field", (name, value) => { body[name] = value; });
+    bb.on("file", (name, stream, info) => {
+      const chunks = [];
+      stream.on("data", (c) => chunks.push(c));
+      stream.on("end", () => {
+        if (stream.truncated || !/^image\/(jpeg|png|webp|gif)$/.test(info.mimeType) || !chunks.length) return;
+        (files[name] ||= []).push(Buffer.concat(chunks));
+      });
+    });
+    bb.on("close", () => resolve({ body, files }));
+    bb.on("error", reject);
+    req.pipe(bb);
+  });
+}
+const uploadsDir = (siteId) => path.join(store.dir(siteId), "uploads");
+
 app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" }), async (req, res) => {
   const meta = store.getMeta(req.params.siteId);
   const site = meta && (await store.getPublished(meta.id));
   if (!site) return res.sendStatus(404);
 
+  let upload = { files: {} };
+  if (req.is("multipart/form-data")) {
+    try { upload = await readMultipart(req); req.body = upload.body; } catch { return res.status(400).type("html").send(simplePage("Something went wrong", "That form couldn't be read. Please try again.")); }
+  }
   const body = req.body || {};
   const page = pageAtPath(site, String(body._page || "")) || site.pages[0];
   const pagePath = pageUrl(page, "/").slice(1);
@@ -396,8 +425,26 @@ app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" 
     await store.addSubmission(meta.id, { id: crypto.randomBytes(6).toString("hex"), at: new Date().toISOString(), page: page.slug, kind: "newsletter", fields: { Email: email } });
     return backTo(`#sent-${encodeURIComponent(found.node.id)}`);
   }
+  const subId = crypto.randomBytes(6).toString("hex");
+  const files = {};
   if (formBlock) {
+    for (const [i, f] of formBlock.props.fields.entries()) {
+      if (f.type !== "file") continue;
+      const saved = [];
+      for (const [k, buf] of (upload.files[`field_${i}`] || []).slice(0, 6).entries()) {
+        // Re-encoded, so only real pictures are kept (and nothing else that was uploaded).
+        try {
+          const out = await sharp(buf, { limitInputPixels: 60_000_000 }).rotate().resize({ width: 2400, height: 2400, fit: "inside", withoutEnlargement: true }).webp({ quality: 85 }).toBuffer();
+          await fs.mkdir(uploadsDir(meta.id), { recursive: true });
+          const file = `${subId}-${i}-${k}.webp`;
+          await fs.writeFile(path.join(uploadsDir(meta.id), file), out);
+          saved.push(file);
+        } catch { /* not a picture */ }
+      }
+      if (saved.length) files[f.label || `Field ${i + 1}`] = saved;
+    }
     formBlock.props.fields.forEach((f, i) => {
+      if (f.type === "file") { const n = files[f.label || `Field ${i + 1}`]?.length || 0; fields[f.label || `Field ${i + 1}`] = n ? `${n} picture${n === 1 ? "" : "s"} attached` : ""; return; }
       const value = String(body[`field_${i}`] ?? "").slice(0, 5000);
       fields[f.label || `Field ${i + 1}`] = value;
       if (!visitor && f.type === "email" && /^[^\s@<>",;]+@[^\s@<>",;]+\.[a-z]{2,}$/i.test(value.trim())) visitor = value.trim();
@@ -406,7 +453,7 @@ app.post("/_forms/:siteId", express.urlencoded({ extended: false, limit: "64kb" 
   if (!Object.values(fields).some((v) => v.trim())) return backTo(`#f-${encodeURIComponent(body._block || "")}`);
 
   const kind = formBlock.props.kind || "contact";
-  await store.addSubmission(meta.id, { id: crypto.randomBytes(6).toString("hex"), at: new Date().toISOString(), page: page.slug, kind, fields });
+  await store.addSubmission(meta.id, { id: subId, at: new Date().toISOString(), page: page.slug, kind, fields, ...(Object.keys(files).length ? { files } : {}) });
   backTo(`#sent-${encodeURIComponent(formBlock.id)}`);
 
   // Email the owner (and the visitor a copy, if the form asks) after answering.
@@ -693,7 +740,20 @@ host.post("/hq/build", async (req, res) => {
   if (!SITE_DESIGNS.some((d) => d.id === design)) return res.status(400).json({ error: "Unknown design." });
   const owner = (req.body?.account || req.body?.email) ? findHostCustomer(req.body) : null;
   if ((req.body?.account || req.body?.email) && !owner) return res.status(404).json({ error: "No builder account for that customer yet. Create one first (POST /api/host/accounts)." });
-  const { meta } = await buildFromDesign({ user: { role: "admin" }, owner: owner?.id, design, brief: cleanBrief(req.body?.brief || {}), fill: ai.enabled && req.body?.fill !== false });
+  const brief = cleanBrief(req.body?.brief || {});
+  // Pictures the client attached to a form on another site (e.g. our own "Get started" form).
+  const up = req.body?.uploads;
+  if (up && /^[a-f0-9]{16}$/.test(up.siteId || "") && store.getMeta(up.siteId)) {
+    const take = async (file) => {
+      if (!/^[a-f0-9]{12}-\d+-\d+\.webp$/.test(String(file))) return "";
+      const name = `${crypto.randomBytes(8).toString("hex")}.webp`;
+      try { await fs.mkdir(TMP_MEDIA, { recursive: true }); await fs.copyFile(path.join(uploadsDir(up.siteId), file), path.join(TMP_MEDIA, name)); return `/_tmp/${name}`; } catch { return ""; }
+    };
+    const logo = await take((up.logo || [])[0]);
+    if (logo) brief.logoUrl = logo;
+    for (const f of (up.photos || []).slice(0, 12)) { const url = await take(f); if (url) brief.photos.push({ url, note: "" }); }
+  }
+  const { meta } = await buildFromDesign({ user: { role: "admin" }, owner: owner?.id, design, brief, fill: ai.enabled && req.body?.fill !== false });
   res.json({ site: hqSite(store.getMeta(meta.id)), editor: `${publicBase(req)}/admin/sites/${meta.id}` });
 });
 host.post("/hq/sites/:id/review", async (req, res) => {
@@ -1432,8 +1492,17 @@ async function buildFromDesign({ user, owner, demo, design, brief, fill }) {
         site = normalizeSite(site);
       } else {
         // No AI: the client's own words and details go where they belong.
-        const filled = fillFromBrief(site, brief);
+        const filled = fillFromBrief(site, brief, { photos: stock.enabled });
         site = filled.site;
+        // Their logo's colours, so the website matches their brand.
+        if (brief.logoUrl) {
+          try {
+            const { data } = await sharp(path.join(TMP_MEDIA, path.basename(brief.logoUrl))).resize(64, 64, { fit: "inside" }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+            const pal = paletteFromPixels(data);
+            if (pal) Object.assign(site.theme.colors, pal);
+          } catch { /* keep the design's colours */ }
+          filled.todo = filled.todo.filter((t) => !/logo/i.test(t));
+        }
         await store.updateMeta(meta.id, { todo: filled.todo });
       }
       ensurePrivacyPage(site);
@@ -1945,6 +2014,14 @@ api.get("/sites/:id/submissions", async (req, res) => {
 });
 
 // Mark a message, enquiry or booking as dealt with (or not).
+// Pictures visitors attached to a form (private: only the site's owner and the administrator).
+api.get("/sites/:id/uploads/:file", (req, res) => {
+  const meta = siteOr404(req, res);
+  if (!meta) return;
+  if (!/^[a-f0-9]{12}-\d+-\d+\.webp$/.test(req.params.file)) return res.sendStatus(404);
+  res.sendFile(path.join(uploadsDir(meta.id), req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+});
+
 api.patch("/sites/:id/submissions/:sid", async (req, res) => {
   const meta = siteOr404(req, res);
   if (!meta) return;

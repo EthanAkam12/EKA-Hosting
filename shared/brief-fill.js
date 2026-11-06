@@ -78,7 +78,9 @@ function replaceStrings(value, fn) {
   return value;
 }
 
-export function fillFromBrief(input, rawBrief = {}) {
+// photos: stock photos are available (the builder has a Pixabay/Pexels key), so
+// picture-led layouts (service photos) are used instead of icons.
+export function fillFromBrief(input, rawBrief = {}, { photos = false } = {}) {
   const site = structuredClone(input);
   const b = Object.fromEntries(Object.entries(rawBrief).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]));
   const name = b.name || site.name;
@@ -285,7 +287,121 @@ export function fillFromBrief(input, rawBrief = {}) {
     home.sections.splice(Math.max(1, home.sections.length - 1), 0, ...add);
   }
 
-  // 3. Footer links to their social media, and the look they asked for.
+  // 3. Example wording made true for this business (or taken out).
+  const serviceList = services.slice(0, 5).map((sv) => sv.title.toLowerCase());
+  const listText = serviceList.length > 1 ? `${serviceList.slice(0, -1).join(", ")} and ${serviceList.at(-1)}` : serviceList[0] || "";
+  const REWRITE = {
+    "Made fresh every day with local ingredients.": listText ? `Some of what we serve: ${listText}.` : "",
+    "V vegetarian · VG vegan · GF gluten free. Please tell us about any allergies.": "Please tell us about any allergies when you order.",
+    "Prices include VAT. Ask us for a tailored quote.": "Every job is different: ask us for a quote.",
+    "Tell us about the job and we'll get back to you the same day.": "Tell us about the job and we'll get back to you as soon as we can.",
+    "Everything we do, done properly.": `Everything ${name} offers${inArea}.`,
+    "A few recent jobs we're proud of.": `Some of ${name}'s recent work.`,
+    "Something for everyone; ask us for advice.": `Everything we offer at ${name}. Not sure what you need? Just ask.`,
+    "Nothing to pay now.": "",
+    "Small groups, big results.": `What's on at ${name}.`,
+    "No pressure, just a chat and a workout.": "No pressure: get in touch and we'll find a time that suits you.",
+    "A friendly introduction to what you offer.": desc[0] || "",
+    "A short description of why it's special.": "",
+    "Clear advice, fixed fees, no jargon.": `How ${name} can help${inArea}.`,
+    "From the first call to the finishing touches, we look after it all.": desc.slice(0, 2).join(" "),
+    "Your first call is free.": "Tell us what you need and we'll arrange a time to talk.",
+    "A little about me and how I work.": desc.join(" "),
+    "All rooms are en suite, with breakfast included.": "Get in touch for prices and availability.",
+    "Our favourite walks, beaches and places to eat.": area ? `There's plenty to see and do around ${area}.` : "",
+    "Send us your dates and we'll reply within a few hours.": "Send us your dates and we'll reply as soon as we can.",
+    "Don't wait: limited spaces this month": "",
+    "Order online; we'll wrap it beautifully.": "Order online, or get in touch with any questions.",
+    "A short story of how the business grew.": desc.join(" "),
+    "Quick, friendly and no obligation.": "Tell us what you need and we'll be in touch.",
+    "Experienced people, great materials and real attention to detail.": "Real care and attention to detail on every job.",
+  };
+  const plain = (h) => String(h || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  for (const page of site.pages) for (const sec of page.sections) for (const bl of blocksOf(sec)) {
+    if (bl.type === "text" && plain(bl.props.html) in REWRITE) { const v = REWRITE[plain(bl.props.html)]; bl.props.html = v ? `<p>${esc(v)}</p>` : ""; }
+    if (bl.type === "card" && bl.props.text in REWRITE) bl.props.text = REWRITE[bl.props.text];
+    for (const k of ["note"]) if (typeof bl.props[k] === "string" && bl.props[k] in REWRITE) bl.props[k] = REWRITE[bl.props[k]];
+    if (bl.type === "products") {
+      if (prices.length) bl.props.items = prices.slice(0, 12).map((p) => ({ image: "", name: p.name, price: p.price, text: p.description, buttonText: "Ask about this", href: "#contact", soldOut: false }));
+      else todo.push(`Add their real products and prices on the ${page.title} page.`);
+    }
+    if (bl.type === "offer") bl.props.title = "";
+  }
+  for (const page of site.pages) page.sections = page.sections.filter((sec) => !(blocksOf(sec).length && blocksOf(sec).every((x) => (x.type === "text" && !plain(x.props.html)) || (x.type === "offer" && !x.props.title))));
+
+  // Restaurant wording for businesses that aren't one (e.g. a cake maker on the café design).
+  if (!/table|restaurant|dine|dining|reservation|eat in|sit in/i.test(`${b.description} ${b.services}`)) {
+    for (const page of site.pages) for (const sec of page.sections) for (const bl of blocksOf(sec)) {
+      if (bl.type === "buttons") for (const it of bl.props.items) if (/book a table/i.test(it.text)) Object.assign(it, { text: "Get in touch", href: site.pages.some((p) => p.slug === "contact") ? "/contact" : "#contact" });
+      if (bl.type === "heading" && /^book a table$/i.test(bl.props.text)) bl.props.text = "Get in touch";
+    }
+  }
+
+  // 4. Richer home page: an About section with a photo, and where they work.
+  const home = site.pages.find((p) => p.slug === "index") || site.pages[0];
+  const homeText = JSON.stringify(home.sections);
+  const photoAlt = `${site.business?.keywords || name}`.split(" ").slice(0, 5).join(" ");
+  const insertAt = () => Math.max(1, home.sections.length - 1);
+  if (desc.length >= 2 && !/About|Our story|Who we are|Meet/i.test(homeText)) {
+    home.sections.splice(Math.min(home.sections.length - 1, 3), 0, { ...createSection({ layout: "1-1", valign: "center", padding: "lg" }, [
+      [createBlock("image", { alt: photoAlt, ratio: "4:3", rounded: true, frame: "shadow" })],
+      [createBlock("heading", { text: `About ${name}`, level: 2 }), createBlock("text", { html: paras(b.description) }), createBlock("buttons", { items: [{ text: "Get in touch", href: "#contact", style: "primary", icon: "none" }] })],
+    ]) });
+  }
+  if (area && !/Where we work|areas we cover/i.test(homeText)) {
+    const towns = area.split(/,|\band\b|&/).map((t) => t.trim()).filter(Boolean);
+    home.sections.splice(insertAt(), 0, createSection({ layout: "1-1", valign: "center", padding: "lg" }, [
+      [createBlock("heading", { text: "Where we work", level: 2 }), createBlock("text", { html: `<p>${esc(`${name} covers ${area}.${b.address ? ` You'll find us at ${b.address}.` : ""}`)}</p>` }), ...(towns.length > 1 ? [createBlock("list", { items: towns, icon: "symbol", symbol: "i:map-pin" })] : []), ...(b.phone ? [createBlock("buttons", { items: [{ text: `Call ${b.phone}`, href: `tel:${phoneDigits}`, style: "primary", icon: "i:phone" }] })] : [])],
+      [createBlock("map", { address: b.address || area, height: 340, onClick: true })],
+    ]));
+  }
+
+  // 5. A finishing touch: photos or icons, depth, rhythm and movement.
+  site.theme.layout = { ...site.theme.layout, motion: site.theme.layout?.motion && site.theme.layout.motion !== "none" ? site.theme.layout.motion : "fade-up" };
+  site.theme.buttons = { ...site.theme.buttons, hover: site.theme.buttons?.hover && site.theme.buttons.hover !== "none" ? site.theme.buttons.hover : "lift", shadow: true };
+  for (const page of site.pages) {
+    page.sections.forEach((sec, i) => {
+      const bl = blocksOf(sec);
+      // The first section: a bold, animated headline over a photo or colour.
+      if (i === 0) {
+        const h1 = bl.find((x) => x.type === "heading");
+        if (h1 && page.slug === "index") h1.style = { ...(h1.style || {}), textEffect: h1.style?.textEffect || "words-up" };
+        if (sec.props.background === "image") sec.style = { tintDir: "diagonal", tint2: site.theme.colors.primary, tintOpacity: 62, ...(sec.style || {}), ...(sec.style?.shapeBottom ? {} : { shapeBottom: "wave", shapeH: 56 }) };
+        else if (["dark", "primary"].includes(sec.props.background)) sec.style = { bg: site.theme.colors.dark, bg2: site.theme.colors.primary, bgAnimate: true, ...(sec.style || {}), ...(sec.style?.shapeBottom ? {} : { shapeBottom: "curve", shapeH: 50 }) };
+        return;
+      }
+      // Call-to-action bands: a moving gradient and a soft wave edge.
+      if (["dark", "primary"].includes(sec.props.background) && bl.some((x) => x.type === "buttons") && !has(sec, "form")) {
+        sec.style = { bg: site.theme.colors.dark, bg2: site.theme.colors.primary, bgAnimate: true, ...(sec.style || {}), ...(sec.style?.shapeTop ? {} : { shapeTop: "waves", shapeH: 40 }) };
+      }
+      // Cards lift when you point at them; services get a photo each when there are photos to use.
+      for (const card of bl.filter((x) => x.type === "card")) {
+        card.props.style = card.props.style === "plain" || card.props.style === "outline" ? card.props.style : "shadow";
+        card.style = { hover: "lift", ...(card.style || {}) };
+        if (photos && services.some((sv) => sv.title === card.props.title)) card.props.icon = "";
+      }
+    });
+    // Alternate plain and tinted backgrounds so sections don't run together (a title stays with what follows it).
+    let tint = false;
+    page.sections.forEach((sec, i) => {
+      if (i === 0 || i === page.sections.length - 1 && sec.props.background !== "default") return;
+      if (!["default", "surface"].includes(sec.props.background)) { tint = false; return; }
+      const prev = page.sections[i - 1];
+      const joined = prev && onlyTitle(prev) && i - 1 > 0 && ["default", "surface"].includes(prev.props.background);
+      if (!joined) tint = !tint;
+      sec.props.background = tint ? "surface" : "default";
+    });
+    // Titles sit close to the cards under them.
+    page.sections.forEach((sec, i) => {
+      const next = page.sections[i + 1];
+      if (i > 0 && onlyTitle(sec) && next && next.props.background === sec.props.background && !sec.style?.shapeBottom) {
+        sec.style = { ...(sec.style || {}), padding: { d: { b: 8 }, t: { b: 8 }, m: { b: 8 } } };
+        next.style = { ...(next.style || {}), padding: { d: { t: 24 }, t: { t: 20 }, m: { t: 16 } } };
+      }
+    });
+  }
+
+  // 6. Footer links to their social media, and the look they asked for.
   const socials = String(b.socials || "").split(/[\s,]+/).filter((l) => /\w+\.\w+\//.test(l)).map((l) => (l.startsWith("http") ? l : `https://${l}`));
   for (const url of socials.slice(0, 5)) {
     const label = (url.match(/facebook|instagram|linkedin|tiktok|youtube|twitter|x\.com/i)?.[0] || "Social").replace(/^./, (c) => c.toUpperCase()).replace("X.com", "X");
@@ -295,7 +411,8 @@ export function fillFromBrief(input, rawBrief = {}) {
   site.name = name;
   if (!b.phone && !b.email) todo.push("Add a phone number or email address so customers can reach them.");
   if (!desc.length) todo.push("Write a few lines about the business for the home page.");
-  todo.push("Add their logo and some real photos if they have them.");
+  if (!b.logoUrl) todo.push("Add their logo if they have one.");
+  if (!(b.photos || []).length) todo.push(photos ? "The photos are stock photos: swap in their own if they have some." : "Add some photos (or a free Pixabay key in settings.txt, so websites get stock photos).");
   return { site: normalizeSite(site), todo: [...new Set(todo)] };
 }
 
@@ -321,7 +438,7 @@ export function briefFromAnswers(answers = {}) {
   for (const [label, value] of Object.entries(answers)) {
     const l = String(label).toLowerCase();
     const v = String(value ?? "").trim();
-    if (!v || /^(on|yes|true)$/i.test(v)) continue;
+    if (!v || /^(on|yes|true)$/i.test(v) || /^\d+ pictures? attached$/.test(v)) continue;
     const hit = FIELD_MAP.find(([, re]) => re.test(l));
     if (!hit) continue;
     const key = hit[0];

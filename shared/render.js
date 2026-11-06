@@ -349,6 +349,7 @@ const renderers = {
         const label = `<label for="${id}">${esc(f.label)}${f.required ? " *" : ""}</label>`;
         if (f.type === "checkbox") return `<label class="eka-check" for="${id}"><input id="${id}" name="${name}" type="checkbox" value="Yes"${req}><span>${esc(f.label)}${f.required ? " *" : ""}</span></label>`;
         if (f.type === "textarea") return `${label}<textarea id="${id}" name="${name}" rows="5"${req}></textarea>`;
+        if (f.type === "file") return `${label}<input id="${id}" name="${name}" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple${req}><small class="eka-file-hint">Up to 6 pictures, 8MB each.</small>`;
         if (f.type === "select") {
           const options = String(f.options || "").split(",").map((o) => o.trim()).filter(Boolean);
           return `${label}<select id="${id}" name="${name}"${req}><option value="">${esc(words(ctx.site.lang).choose)}</option>${options.map((o) => `<option>${esc(o)}</option>`).join("")}</select>`;
@@ -360,7 +361,7 @@ const renderers = {
       .join("");
     const action = ctx.editor ? "#" : esc(ctx.formAction || "#");
     const deposit = /^https:\/\//.test(p.depositLink || "") ? ` <a class="eka-btn btn-primary eka-deposit" href="${esc(p.depositLink)}" target="_blank" rel="noopener">${esc(p.depositText || "Pay the deposit")}</a>` : "";
-    return `<div class="eka-form-wrap"><div id="sent-${block.id}" class="eka-form-ok" role="status">${esc(p.successMessage)}${deposit}</div><form class="eka-form" method="post" action="${action}" id="${fid}"><input type="hidden" name="_block" value="${esc(block.id)}"><input type="hidden" name="_page" value="${esc(ctx.page.post ? `blog/${ctx.page.slug}` : ctx.page.slug)}"><div class="eka-hp" aria-hidden="true"><label>Leave empty<input name="website" tabindex="-1" autocomplete="off"></label></div>${fields}<button class="eka-btn btn-primary" type="submit">${esc(p.submitText)}</button></form></div>`;
+    return `<div class="eka-form-wrap"><div id="sent-${block.id}" class="eka-form-ok" role="status">${esc(p.successMessage)}${deposit}</div><form class="eka-form" method="post" action="${action}" id="${fid}"${p.fields.some((f) => f.type === "file") ? ' enctype="multipart/form-data"' : ""}><input type="hidden" name="_block" value="${esc(block.id)}"><input type="hidden" name="_page" value="${esc(ctx.page.post ? `blog/${ctx.page.slug}` : ctx.page.slug)}"><div class="eka-hp" aria-hidden="true"><label>Leave empty<input name="website" tabindex="-1" autocomplete="off"></label></div>${fields}<button class="eka-btn btn-primary" type="submit">${esc(p.submitText)}</button></form></div>`;
   },
 
   products(p, ctx) {
@@ -1035,6 +1036,7 @@ ol.eka-list{counter-reset:n}ol.eka-list li{counter-increment:n}ol.eka-list li::b
 .eka-form label{font-weight:600;font-size:.92rem;margin-top:6px}
 .eka-form input,.eka-form textarea,.eka-form select{width:100%;font:inherit;padding:12px 14px;border-radius:var(--r);border:1px solid color-mix(in srgb,var(--c-text) 22%,transparent);background:var(--c-bg);color:var(--c-text)}
 .eka-form input:focus,.eka-form textarea:focus,.eka-form select:focus{outline:2px solid var(--c-primary);outline-offset:1px;border-color:transparent}
+.eka-form input[type=file]{padding:10px;background:var(--c-surface);cursor:pointer}.eka-file-hint{display:block;opacity:.7;font-size:.85rem;margin-top:-4px}
 .eka-form .eka-check{display:flex;gap:10px;align-items:flex-start;font-weight:400;cursor:pointer}.eka-form .eka-check input{width:20px;height:20px;flex:none;margin:2px 0 0;accent-color:var(--c-primary)}
 .eka-products,.eka-posts{display:grid;grid-template-columns:repeat(var(--pc),minmax(0,1fr));gap:28px}
 @media (max-width:1000px){.eka-products,.eka-posts{grid-template-columns:repeat(min(var(--pc),2),minmax(0,1fr))}}
