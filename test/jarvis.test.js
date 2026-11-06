@@ -106,6 +106,7 @@ test("a whole request: tool call, approval, result, answer", { skip: process.pla
   const port = 32000 + Math.floor(Math.random() * 1000);
   const jarvis = await startJarvis({
     ANTHROPIC_API_KEY: "sk-ant-test",
+    JARVIS_BRAIN: "api",
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${claude.port}`,
     JARVIS_PORT: String(port),
     JARVIS_DATA: dataDir,
@@ -157,4 +158,77 @@ test("a whole request: tool call, approval, result, answer", { skip: process.pla
   assert.match(toolResult.content, /hello-from-jarvis/);
   // The reply was kept whole (text + tool call) in the history.
   assert.deepEqual(claude.requests[1].messages[1].content.map((b) => b.type), ["text", "tool_use"]);
+});
+
+// ---------- through Claude Code (the user's Claude plan, no API key) ----------
+
+async function chat(base, origin, text, approve) {
+  const res = await fetch(`${base}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: JSON.stringify({ text }) });
+  assert.equal(res.status, 200);
+  const events = [];
+  const decoder = new TextDecoder();
+  let buf = "";
+  for await (const chunk of res.body) {
+    buf += decoder.decode(chunk, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const ev = JSON.parse(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
+      events.push(ev);
+      if (ev.type === "confirm") {
+        await fetch(`${base}/api/confirm`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: JSON.stringify({ id: ev.id, approve }) });
+      }
+    }
+  }
+  return events;
+}
+
+test("Claude Code: permission prompts become approval cards, Jarvis tools work, the conversation resumes", { skip: process.platform === "win32" }, async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "jarvis-cc-"));
+  const logFile = path.join(dataDir, "claude-args.log");
+  const port = 33000 + Math.floor(Math.random() * 1000);
+  const jarvis = await startJarvis({
+    ANTHROPIC_API_KEY: "",
+    JARVIS_BRAIN: "claude-code",
+    JARVIS_CLAUDE_PATH: path.resolve("test/fixtures/fake-claude.mjs"),
+    FAKE_CLAUDE_LOG: logFile,
+    JARVIS_PORT: String(port),
+    JARVIS_DATA: dataDir,
+    JARVIS_AUTO_APPROVE: "no",
+  });
+  t.after(async () => {
+    jarvis.kill();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  const base = `http://127.0.0.1:${port}`;
+  const origin = `http://localhost:${port}`;
+
+  // The helper's private door is shut to everyone else.
+  const denied = await fetch(`${base}/api/internal/call`, { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Token": "guess" }, body: '{"name":"system_status"}' });
+  assert.equal(denied.status, 403);
+
+  const info = await (await fetch(`${base}/api/info`)).json();
+  assert.equal(info.brain, "claude-code");
+
+  let events = await chat(base, origin, "hello there", true);
+  const confirm = events.find((e) => e.type === "confirm");
+  assert.equal(confirm.summary, "Say hi");
+  assert.equal(confirm.detail, "echo hi");
+  assert.equal(events.filter((e) => e.type === "delta").map((e) => e.text).join(""), "You said: hello there. Ran it.");
+  assert.ok(events.some((e) => e.type === "tool" && e.summary === "Remember: Likes tea" && e.status === "done"));
+  assert.equal(events.at(-1).type, "done");
+  const memoryFile = JSON.parse(await fs.readFile(path.join(dataDir, "memory.json"), "utf8"));
+  assert.deepEqual(memoryFile, [{ fact: "Likes tea" }]);
+
+  events = await chat(base, origin, "again", false);
+  assert.match(events.filter((e) => e.type === "delta").map((e) => e.text).join(""), /Skipped it\.$/);
+
+  const runs = (await fs.readFile(logFile, "utf8")).trim().split("\n").map((l) => JSON.parse(l));
+  assert.equal(runs.length, 2);
+  assert.ok(!runs[0].includes("--resume"));
+  assert.equal(runs[1][runs[1].indexOf("--resume") + 1], "sess-123");
+  assert.equal(runs[0][runs[0].indexOf("--permission-prompt-tool") + 1], "mcp__jarvis__approve");
+  // What Jarvis knows about the user is passed along to Claude Code.
+  const personaFile = runs[1][runs[1].indexOf("--append-system-prompt-file") + 1];
+  assert.match(await fs.readFile(personaFile, "utf8"), /Likes tea/);
 });

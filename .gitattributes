@@ -2,3 +2,4 @@
 *.ps1 -text
 settings.example.txt -text
 jarvis-settings.example.txt -text
+*.vbs -text

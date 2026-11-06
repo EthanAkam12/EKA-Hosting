@@ -134,15 +134,18 @@ Nothing reaches a customer or costs money until you approve it. Start it with `n
 
 Talk to your computer and have it do things, Iron Man style. Say *"Jarvis, open Spotify and play something"*, *"what's taking up space in my Downloads?"*, *"turn the volume down"*, *"what's this error on my screen?"* or *"remind me in 20 minutes to call Sam"*, and Jarvis answers out loud and does it.
 
-1. Double-click **start-jarvis-windows.bat**. The first time it creates **jarvis-settings.txt**: open it in Notepad and paste your Claude API key (or leave it empty if the key is already in the builder's `settings.txt`). Then double-click the .bat again.
-2. Jarvis opens at http://localhost:3200. Use **Chrome or Edge** and allow the microphone.
-3. Click the glowing reactor (or press Space) and speak, or type. Turn on **Always listening** to just say "Jarvis, …" at any time while the page is open.
+**No API key needed.** Jarvis talks to Claude through [Claude Code](https://code.claude.com) logged in to your Claude account, so it's like talking to Claude directly: it uses your Claude Pro or Max plan's usage, with no separate bill. (An API key works too; see `JARVIS_BRAIN` in jarvis-settings.txt.)
 
-What it can do: run any PowerShell command, open apps, websites, files and folders, type and press keyboard shortcuts, take a screenshot to see your screen, control volume and music, check CPU/memory/battery/disk, read and write files, use the clipboard, set reminders, search the web, and remember things about you between conversations (see **Memory**; click × to make it forget something).
+1. Double-click **start-jarvis-windows.bat**. If Claude Code isn't installed, it offers to install it and opens a window to log in to your Claude account. Do that once.
+2. Jarvis opens in its own window at http://localhost:3200 (Edge or Chrome). Allow the microphone.
+3. Click the glowing reactor (or press Space) and speak, or type. Turn on **Always listening** to just say "Jarvis, …" at any time.
+4. **Start with Windows:** double-click **jarvis-autostart.bat**. From then on Jarvis starts quietly when you log in and opens its window, with no black window to keep open. Double-click it again to turn that off.
 
-**Safety:** running commands, writing files and starting programs show an **Approve / Deny** card first, with the exact command. Only set `JARVIS_AUTO_APPROVE=yes` if you trust it completely. Jarvis only accepts requests from its own page on this computer, not from other websites or other machines.
+What it can do: run commands (PowerShell), open apps, websites, files and folders, type and press keyboard shortcuts, take a screenshot to see your screen, control volume and music, check CPU/memory/battery/disk, read and write files, use the clipboard, set reminders, search the web, and remember things about you between conversations (see **Memory**; click × to make it forget something).
 
-Good to know: voice recognition uses your browser's built-in speech service (Chrome sends audio to Google, Edge to Microsoft). Each request costs a little Claude API usage, more when it looks at screenshots; set `JARVIS_EFFORT=low` for quicker, cheaper answers, and click **New chat** now and then so old conversation isn't resent. Jarvis's memory is kept in the `jarvis-data` folder. On a Mac or Linux, run `npm run jarvis`; typing and key presses are Windows-only.
+**Safety:** running commands, changing files and starting programs show an **Approve / Deny** card first, with the exact command. Only set `JARVIS_AUTO_APPROVE=yes` if you trust it completely. Jarvis only accepts requests from its own page on this computer, not from other websites or other machines.
+
+Good to know: voice recognition uses your browser's built-in speech service (Chrome sends audio to Google, Edge to Microsoft). Requests count towards your Claude plan's usage limits, more so with screenshots; click **New chat** now and then so long conversations don't use more than they need. Jarvis's memory and log (`jarvis.log`, when started with Windows) are in the `jarvis-data` folder. On a Mac or Linux, run `npm run jarvis`; typing and key presses are Windows-only.
 
 ## Help, support and the public demo
 

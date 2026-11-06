@@ -1,8 +1,14 @@
 # JARVIS settings
 # Edit this file in Notepad, save it, then close and re-open Jarvis.
 
-# Your Claude API key (starts with sk-ant-). Get one at https://platform.claude.com
-# If it's already in the builder's settings.txt you can leave this empty.
+# How Jarvis talks to Claude:
+#   auto         Claude Code if it's installed (recommended), otherwise the API key below
+#   claude-code  Claude Code, logged in to your Claude account. Uses your Claude
+#                Pro/Max plan's usage; no API key, no extra bill.
+#   api          the Claude API with ANTHROPIC_API_KEY (billed per use)
+JARVIS_BRAIN=auto
+
+# Only for JARVIS_BRAIN=api: your Claude API key (starts with sk-ant-).
 ANTHROPIC_API_KEY=
 
 # What Jarvis calls you, and your name.
@@ -16,14 +22,16 @@ JARVIS_WAKE_WORD=jarvis
 # Empty picks a British voice if your PC has one.
 JARVIS_VOICE=
 
-# Commands, file writes and starting programs wait for you to click Approve.
+# Commands, file changes and starting programs wait for you to click Approve.
 # Set this to yes to let Jarvis do them without asking. Only do that if you
 # trust it completely: it can then run anything on this computer.
 JARVIS_AUTO_APPROVE=no
 
-# Which Claude model, and how hard it thinks: low (fastest), medium, high.
-JARVIS_MODEL=claude-opus-5-5
-JARVIS_EFFORT=medium
+# Optional: which Claude model (e.g. opus, sonnet, haiku) and how hard it thinks
+# (low is fastest; medium, high). Empty uses Claude Code's own setting
+# (with the API: claude-opus-5-5 and medium).
+JARVIS_MODEL=
+JARVIS_EFFORT=
 
 # The address Jarvis runs at: http://localhost:3200
 JARVIS_PORT=3200
