@@ -76,6 +76,9 @@ export function createWhmcs({ url, identifier, secret, accessKey = "", adminUser
     },
     acceptOrder(orderId) { return call("AcceptOrder", { orderid: orderId, autosetup: true, sendemail: true }); },
     stats() { return call("GetStats"); },
+    async productsList() { const d = await call("GetProducts"); return d.products?.product || []; },
+    async paymentMethods() { const d = await call("GetPaymentMethods"); return d.paymentmethods?.paymentmethod || []; },
+    async tldPricing() { const d = await call("GetTLDPricing", { currencyid: 1 }); return d.pricing || {}; },
     async servers() {
       const d = await call("GetServers", { fetchStatus: true });
       return d.servers || [];

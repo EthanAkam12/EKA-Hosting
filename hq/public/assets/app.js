@@ -46,7 +46,7 @@ const view = document.getElementById("view");
 let S = null; // latest state from the server
 let tab = location.pathname.replace(/^\//, "") || "office";
 let office = null, officeEl = null, drawer = null, filter = "";
-const TABS = [["office", "Office"], ["approvals", "To check"], ["activity", "Team"], ["numbers", "Numbers"], ["customers", "Customers"], ["meetings", "Meetings"], ["marketing", "Marketing"], ["settings", "Settings"]];
+const TABS = [["office", "Office"], ["setup", "Setup"], ["approvals", "To check"], ["activity", "Team"], ["numbers", "Numbers"], ["customers", "Customers"], ["meetings", "Meetings"], ["marketing", "Marketing"], ["settings", "Settings"]];
 const waiting = () => S.open.filter((t) => t.status === "waiting" || t.status === "alert").length;
 
 function nav() {
@@ -71,7 +71,7 @@ async function render(fresh = false) {
   office?.stop(); office = null; officeEl = null;
   if (!fresh && typing()) return; // don't redraw under someone typing
   if (!fresh && !["approvals", "activity"].includes(tab)) return; // other pages refresh on demand
-  const builders = { approvals: pageApprovals, activity: pageTeam, numbers: pageNumbers, customers: pageCustomers, meetings: pageMeetings, marketing: pageMarketing, settings: pageSettings };
+  const builders = { setup: pageSetup, approvals: pageApprovals, activity: pageTeam, numbers: pageNumbers, customers: pageCustomers, meetings: pageMeetings, marketing: pageMarketing, settings: pageSettings };
   const scroll = scrollY;
   const el = await builders[tab]();
   view.replaceChildren(el);
@@ -162,6 +162,7 @@ function taskCard(t) {
     else if (k === "blog") acts.push(btn("Write it (as a draft)", act("approve", () => ({ draft: current() }), "Mia is writing it."), "primary"));
     else if (k === "social") acts.push(btn("Copy", async () => { try { await navigator.clipboard.writeText(text.value); toast("Copied."); } catch { text.select(); } }), btn("Mark as posted", act("approve", () => ({ draft: current() })), "primary"));
     else if (k === "action") acts.push(btn("Agree, let's do it", act("approve", null, "Added to the to-do list."), "primary"));
+    else if (k === "website") acts.push(btn("Done, I've checked it", act("approve"), "primary"));
     if (text || subject || to) acts.push(btn("Save changes", act("draft", () => ({ draft: current() }), "Saved.")));
   }
   if (t.status === "alert") acts.push(btn("Mark as sorted", act("approve"), "primary"));
@@ -358,6 +359,26 @@ async function pageMarketing() {
         h("section", { class: "panel" }, h("h2", {}, "SOCIAL MEDIA SET-UP"), h("ol", { class: "small setup", style: "padding-left:18px;margin:0" }, d.social.map((x) => h("li", {}, x)))))));
 }
 
+// ---- Setup: the launch checklist -----------------------------------------------------------
+async function pageSetup() {
+  const d = await api("/setup").catch((err) => ({ error: err.message }));
+  if (d.error) return h("div", { class: "page" }, h("div", { class: "panel" }, d.error));
+  const pct = Math.round((d.done / d.total) * 100);
+  const groups = [...new Set(d.items.map((i) => i.group))];
+  const recheck = h("button", { class: "btn", onclick: () => busyBtn(recheck, () => render(true)) }, "Check again");
+  return h("div", { class: "page" },
+    h("div", { class: "row", style: "justify-content:space-between" }, h("div", {}, h("h1", {}, "GETTING READY TO SELL"), h("p", { class: "sub" }, `Otto checks what he can by himself; tick the rest off as you do them. ${d.done} of ${d.total} done.`)), recheck),
+    h("div", { class: "panel", style: "padding:10px 14px" }, h("div", { style: "height:14px;background:#0f0d1a;border:2px solid #000" }, h("div", { style: `height:100%;width:${pct}%;background:var(--brand)` }))),
+    groups.map((g) => h("section", { class: "panel" }, h("h2", {}, g.toUpperCase()),
+      d.items.filter((i) => i.group === g).map((i) => {
+        const tick = i.manual ? h("input", { type: "checkbox", checked: i.ok, "aria-label": `${i.title} done`, onchange: async (e) => { try { await api(`/setup/${i.id}`, { method: "POST", body: { done: e.target.checked } }); render(true); } catch (err) { toast(err.message, { error: true }); } } }) : null;
+        return h("div", { class: "agent-card", style: "padding:10px 0;border-bottom:1px solid var(--line)" },
+          i.manual ? h("label", { style: "padding-top:2px" }, tick) : h("span", { class: `badge ${i.ok ? "ok" : "warn"}`, style: "min-width:62px;text-align:center" }, i.ok ? "✓ Done" : "To do"),
+          h("div", { style: "flex:1;min-width:0" }, h("strong", { style: i.ok ? "text-decoration:line-through;opacity:.7" : "" }, i.title), i.detail ? h("div", { class: "small muted" }, i.detail) : null, !i.ok && i.how ? h("div", { class: "small", style: "margin-top:4px" }, "How: ", i.how) : null));
+      }))),
+    h("p", { class: "small muted" }, "The full step-by-step guide is HOSTING-SETUP.md, next to HQ's files."));
+}
+
 // ---- Settings ------------------------------------------------------------------------------
 function pageSettings() {
   const c = S.connections;
@@ -368,13 +389,12 @@ function pageSettings() {
   const testBtn = h("button", { class: "btn", onclick: () => busyBtn(testBtn, async () => { const r = await api("/notify/test", { method: "POST", body: {} }); toast(`Sent by ${r.sent.join(", ")}. Check your phone!`); }) }, "Send a test message to my phone");
   const tgBtn = h("button", { class: "btn ghost", onclick: () => busyBtn(tgBtn, async () => { const r = await api("/notify/telegram-id"); toast(`Your Telegram chat id is ${r.chatId}. Put it in TELEGRAM_CHAT_ID.`); }) }, "Find my Telegram chat id");
   const siteBtn = h("button", { class: "pxbtn", onclick: () => busyBtn(siteBtn, async () => {
-    if (S.settings.marketing.siteId && !confirm("You already have a website set for Mia. Make a fresh copy of the EKA Hosting website in the builder anyway?")) return;
+    if (S.settings.marketing.siteId && !confirm("You already have a website set for Mia. Ask Bea to make a fresh copy of the EKA Hosting website anyway?")) return;
     const r = await api("/website/create", { method: "POST", body: {} });
-    S.settings.marketing.siteId = r.siteId;
-    toast("Done! Opening it in the builder…");
-    window.open(r.editor, "_blank", "noopener");
-    render(true);
-  }) }, "CREATE OUR WEBSITE IN THE BUILDER");
+    S = { ...S, ...r.state };
+    toast("Bea's on it. Watch her desk: she'll bring it to you when it's ready.");
+    go("office");
+  }) }, "ASK BEA TO MAKE OUR WEBSITE");
   const about = h("textarea", { class: "textarea", style: "min-height:80px", onchange: () => save({ marketing: { about: about.value } }) }, S.settings.marketing.about || "");
   const siteId = h("input", { class: "input", value: S.settings.marketing.siteId || "", placeholder: "e.g. 3f2a9c1d7b6e4a58", style: "max-width:260px", onchange: () => save({ marketing: { siteId: siteId.value.trim() } }) });
   return h("div", { class: "page" },

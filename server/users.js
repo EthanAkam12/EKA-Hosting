@@ -10,9 +10,10 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 const DEFAULT_PLANS = [
+  // EKA Hosting's builder plans (shared/eka-plans.js); hosts can change them on the Customers page.
   { id: "starter", name: "Starter", sites: 1, aiMonthly: 1 },
-  { id: "business", name: "Business", sites: 5, aiMonthly: 5 },
-  { id: "agency", name: "Agency", sites: 25, aiMonthly: 25 },
+  { id: "business", name: "Business", sites: 1, aiMonthly: 3 },
+  { id: "pro", name: "Pro", sites: 3, aiMonthly: 8 },
 ];
 
 const EMAIL = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;

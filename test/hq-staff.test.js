@@ -146,3 +146,27 @@ test("Bea builds straight away from the Get started form and from done-for-you o
   assert.match(ready[0].summary, /Add their logo/);
   assert.equal(ready[1].draft.to, "dev@example.test");
 });
+
+test("Otto's launch checklist: what's set up in WHMCS and what's left", async () => {
+  const { PLANS, whmcsPrices } = await import("../shared/eka-plans.js");
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hq-"));
+  const f = fakes();
+  f.whmcs.servers = async () => [{ id: 1, name: "web1" }];
+  f.whmcs.paymentMethods = async () => [{ module: "stripe", displayname: "Card" }];
+  f.whmcs.tldPricing = async () => ({ "co.uk": {}, uk: {}, com: {} });
+  f.whmcs.productsList = async () => PLANS.map((p, i) => ({ pid: i, name: p.name, pricing: { GBP: { annually: String(p.name === "Hosting Pro" ? 99 : whmcsPrices(p).annually), asetupfee: String(p.setup) } }, customfields: { customfield: p.customFields ? [{ name: "Business name" }, { name: "What does your business do?" }] : [] } }));
+  const staff = createStaff({ dataDir: dir, ...f, now: () => new Date() });
+  await staff.init();
+  const d = await staff.setupCheck();
+  const item = (id) => d.items.find((i) => i.id === id);
+  assert.equal(item("products").ok, true);
+  assert.equal(item("prices").ok, false);
+  assert.match(item("prices").detail, /Hosting Pro \(should be £155\.88 a year\)/);
+  assert.equal(item("dfy-questions").ok, true);
+  assert.equal(item("payments").ok, true);
+  assert.equal(item("domains").ok, true);
+  assert.equal(item("ico").ok, false);
+  staff.setSetupDone("ico", true);
+  assert.equal((await staff.setupCheck()).items.find((i) => i.id === "ico").ok, true);
+  assert.throws(() => staff.setSetupDone("nope", true));
+});

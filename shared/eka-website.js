@@ -6,6 +6,7 @@
 // billing about 20% more). Change anything in the builder afterwards.
 
 import { createEmptySite, createPage, createBlock as b, createSection, normalizeSite } from "./schema.js";
+import { priceBoxes, ADDONS } from "./eka-plans.js";
 
 const sec = (props, columns, style) => ({ ...createSection(props, columns), ...(style ? { style } : {}) });
 const H = (text, level = 2, align = "left", style) => ({ ...b("heading", { text, level, align }), ...(style ? { style } : {}) });
@@ -26,27 +27,11 @@ const pageHero = (kicker, title, intro, buttons, image) => sec(
 const cta = (title, text, buttons) => sec({ background: "dark", padding: "xl", width: "narrow", align: "center" }, [[H(title, 2, "center"), T(text, "center", { color: "#c7cdf5" }), btns(buttons, "center")]], { bg: "#312e81", bg2: "#0f766e", bgAnimate: true, shapeTop: "waves", shapeH: 40 });
 const shot = (src, alt) => b("image", { src, alt, ratio: "auto", rounded: true, frame: "shadow" });
 
-// The plans (keep in step with WHMCS and the builder's plans).
-const BUILDER_PLANS = [
-  ["Builder Starter", "£8", "/month", ["1 website, designed by AI", "Booking & enquiry forms", "Free SSL and an email address", "Free domain connection help", "UK support"], false],
-  ["Builder Business", "£15", "/month", ["Everything in Starter", "Online shop and blog", "Newsletter sign-ups and pop-ups", "More AI help each month", "5 email addresses", "Visitor statistics"], true],
-  ["Builder Pro", "£24", "/month", ["3 websites", "The most AI help each month", "Brand kits and local area pages", "Priority support"], false],
-];
-const HOSTING_PLANS = [
-  ["Starter", "£3.99", "/month", ["1 website", "10GB space", "Free SSL", "5 email addresses", "Daily backups"], false],
-  ["Business", "£6.99", "/month", ["5 websites", "50GB space", "Unlimited email", "Daily backups", "Staging sites"], true],
-  ["Pro", "£12.99", "/month", ["Unlimited websites", "100GB space", "Unlimited email", "Priority support"], false],
-];
-const DFY_PLANS = [
-  ["Launch", "£299", " one-off", ["Up to 5 pages", "Your design, words and photos", "Domain connected", "Google listing set up", "Then Builder Business at £15/month"], false],
-  ["Growth", "£599", " one-off", ["Up to 10 pages", "Online shop, blog or bookings", "Brand colours and brand kit", "3 local area pages", "1 round of changes", "Then Builder Business at £15/month"], true],
-  ["Care plan", "+£25", "/month", ["Up to 30 minutes of changes a month", "A monthly check-up", "A monthly visitors report", "Add it to any website"], false],
-];
-const HOST_LICENCES = [
-  ["Starter", "£29", "/month per server", ["Up to 100 customer accounts", "Your brand, not ours", "cPanel, DirectAdmin & WHMCS plugins", "14-day free trial"], false],
-  ["Growth", "£59", "/month per server", ["Up to 500 customer accounts", "Everything in Starter", "Priority support"], true],
-  ["Unlimited", "£99", "/month per server", ["Unlimited customer accounts", "Everything in Growth", "2 months free on yearly licences"], false],
-];
+// The plans: from shared/eka-plans.js (the same list Otto checks WHMCS against).
+const BUILDER_PLANS = priceBoxes("Website Builder");
+const HOSTING_PLANS = priceBoxes("Web Hosting");
+const DFY_PLANS = priceBoxes("Done-for-you Websites");
+const HOST_LICENCES = priceBoxes("For Hosting Companies");
 const priceRow = (plans, href) => sec({ layout: "1-1-1", padding: "md", width: "normal" }, plans.map(([n, p, per, f, featured]) => [price(n, p, per, f, featured ? "Choose this plan" : "Get started", href, featured)]));
 const BILLING_NOTE = "Prices are per month on a yearly plan; paying monthly costs about 20% more. The price you see is the price you renew at.";
 
@@ -196,7 +181,7 @@ export function ekaWebsite({ name = "EKA Hosting", images = {} } = {}) {
     priceRow(DFY_PLANS, "/contact"),
     sec({ layout: "1", padding: "lg", align: "center", width: "narrow", background: "surface" }, [head("For hosting companies", "EKA website builder licences", "Your brand, your plans, your AI key. 14-day free trial; 2 months free on yearly licences.")]),
     { ...priceRow(HOST_LICENCES, "/contact"), props: { ...priceRow(HOST_LICENCES, "/contact").props, background: "surface" } },
-    sec({ layout: "1-1", padding: "xl", width: "normal" }, [[eyebrow("Add-ons"), H("Extras when you need them", 2), b("list", { items: ["Domain names: .co.uk £9.99 a year, .com £13.99 a year", "Extra AI help: £5 for a top-up", "An extra website on a builder plan: £4 a month", "A professional logo: £49", "Moving your website to us: free"], icon: "symbol", symbol: "i:plus" })], [b("faq", { items: [
+    sec({ layout: "1-1", padding: "xl", width: "normal" }, [[eyebrow("Add-ons"), H("Extras when you need them", 2), b("list", { items: ADDONS, icon: "symbol", symbol: "i:plus" })], [b("faq", { items: [
       { q: "Why are prices shown per month on a yearly plan?", a: "It's the best value. You can pay monthly instead, for about 20% more." },
       { q: "Do prices go up when I renew?", a: "No. The price you see is the price you renew at." },
       { q: "Do you take a cut of my shop sales?", a: "No. Payments go straight to your Stripe or PayPal account." },

@@ -27,7 +27,7 @@ function res() {
 
 test("customers log in with email and password; the admin with the password alone", async () => {
   const { dir, users, auth } = await setup();
-  assert.deepEqual(users.plans().map((p) => p.name), ["Starter", "Business", "Agency"], "default plans");
+  assert.deepEqual(users.plans().map((p) => p.name), ["Starter", "Business", "Pro"], "default plans");
   const { user, password } = await users.create({ email: "Sam@Shop.test", name: "Sam's Shop", plan: "business" });
   assert.equal(user.email, "sam@shop.test");
   assert.match(password, /^[\w]{4}-[\w]{4}-[\w]{4}-[\w]{4}$/);

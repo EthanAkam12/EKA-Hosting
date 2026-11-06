@@ -241,21 +241,24 @@ api.post("/notify/test", wrap(async (req, res) => {
 }));
 // EKA Hosting's own website, made in the builder so it can be edited there.
 api.post("/website/create", wrap(async (req, res) => {
-  if (!builder.enabled) return res.status(400).json({ error: "Connect the builder first." });
   const { ekaWebsite } = await import("../../shared/eka-website.js");
-  const images = {};
-  for (const f of ["builder-editor.webp", "builder-wizard.webp"]) {
-    try { images[f] = (await fs.readFile(path.join(HQ_ROOT, "website", f))).toString("base64"); } catch { /* optional */ }
-  }
-  const site = ekaWebsite({ name: BUSINESS, images: { editor: images["builder-editor.webp"] ? "hq-image:builder-editor.webp" : "", wizard: images["builder-wizard.webp"] ? "hq-image:builder-wizard.webp" : "" } });
-  const out = await builder.importSite({ name: BUSINESS, site, images, prompt: "UK web hosting company with an AI website builder, done-for-you websites and the builder for other hosting companies", formEmail: env.OWNER_EMAIL || "" });
-  staff.setSettings({ marketing: { siteId: out.site.id } });
-  res.json({ editor: out.editor, siteId: out.site.id });
+  const task = staff.ownWebsite(async () => {
+    const images = {};
+    for (const f of ["builder-editor.webp", "builder-wizard.webp"]) {
+      try { images[f] = (await fs.readFile(path.join(HQ_ROOT, "website", f))).toString("base64"); } catch { /* optional */ }
+    }
+    const site = ekaWebsite({ name: BUSINESS, images: { editor: images["builder-editor.webp"] ? "hq-image:builder-editor.webp" : "", wizard: images["builder-wizard.webp"] ? "hq-image:builder-wizard.webp" : "" } });
+    const out = await builder.importSite({ name: BUSINESS, site, images, prompt: "UK web hosting company with an AI website builder, done-for-you websites and the builder for other hosting companies", formEmail: env.OWNER_EMAIL || "" });
+    return { siteId: out.site.id, editor: out.editor };
+  });
+  res.json({ task, state: staff.overview() });
 }));
+api.get("/setup", wrap(async (req, res) => res.json(await staff.setupCheck())));
+api.post("/setup/:id", wrap(async (req, res) => { staff.setSetupDone(req.params.id, req.body?.done === true); res.json(await staff.setupCheck()); }));
 api.get("/notify/telegram-id", wrap(async (req, res) => res.json({ chatId: await notifier.telegramChatId() })));
 
 app.use("/api", api);
-app.get(["/", "/office", "/approvals", "/activity", "/numbers", "/customers", "/meetings", "/marketing", "/settings"], (req, res) => res.sendFile(path.join(HQ_ROOT, "public/index.html")));
+app.get(["/", "/office", "/setup", "/approvals", "/activity", "/numbers", "/customers", "/meetings", "/marketing", "/settings"], (req, res) => res.sendFile(path.join(HQ_ROOT, "public/index.html")));
 
 // ---- schedule ---------------------------------------------------------------------
 setTimeout(() => staff.tick(), 20_000).unref?.();

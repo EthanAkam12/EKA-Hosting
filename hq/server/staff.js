@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 import { monthlyAmount } from "./whmcs.js";
 import { IDEAS } from "./marketing-plan.js";
 import { briefFromAnswers } from "../../shared/brief-fill.js";
+import { PLANS, ORDER_QUESTIONS, DOMAINS, whmcsPrices } from "../../shared/eka-plans.js";
 
 export const AGENTS = {
   boss: { name: "Henry", role: "Boss", colour: "#0f766e" },
@@ -645,6 +646,84 @@ ${help}`;
     }).catch((err) => { meetingLive = null; throw err; });
   }
 
+  // ---- Bea: our own website -------------------------------------------------------------
+  // create() adds the ready-made EKA Hosting website to the builder and returns { siteId, editor }.
+  function ownWebsite(create) {
+    if (!builder.enabled) throw new Error("Connect the builder first.");
+    const task = addTask("builder", { kind: "website", title: "Build our own website", summary: `Putting the ${business} website together…` });
+    log("builder", `Started on ${business}'s own website.`);
+    work("builder", task, "Building our website", async () => {
+      const out = await create();
+      settings.marketing.siteId = out.siteId;
+      save();
+      const { url } = await builder.reviewLink(out.siteId).catch(() => ({ url: "" }));
+      update(task, { status: "waiting", summary: "Our website is ready to check: home, website builder, hosting, web design, pricing, blog, contact and the Get started form. Change anything you like in the builder, then publish it.", data: { siteId: out.siteId, editor: out.editor, review: url } });
+      log("builder", `Finished ${business}'s website and sent it to Henry for checking.`);
+    });
+    return task;
+  }
+
+  // ---- Otto: the launch checklist (what's set up, what's left) -----------------------------
+  const MANUAL_STEPS = [
+    ["reseller", "Buy reseller hosting", "A UK cPanel reseller plan that includes a WHMCS licence (from about £11 a month). See HOSTING-SETUP.md."],
+    ["nameservers", "Your own nameservers", "Ask your reseller for private nameservers (ns1/ns2.yourdomain) so customers see your name, not theirs."],
+    ["whmcs-mail", "WHMCS emails work", "WHMCS → System Settings → Mail: use your email provider's SMTP, then send yourself a test email."],
+    ["legal", "Terms of service and privacy policy", "Publish them on the website and link them in WHMCS (System Settings → General Settings → Ordering → Terms of Service)."],
+    ["ico", "Register with the ICO", "UK businesses that keep customers' details pay the ICO data protection fee (about £50 a year): ico.org.uk/fee."],
+    ["bank", "A business bank account", "So customers' payments (Stripe pays out to it) are kept separate from your own money."],
+    ["test-order", "Place a test order", "Order Builder Starter yourself with a 100% discount code: check the account is set up, the welcome email arrives and the website builder opens from the client area."],
+  ];
+  const norm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  async function setupCheck() {
+    const items = [];
+    const add = (id, group, title, ok, detail, how = "") => items.push({ id, group, title, ok, detail, how, manual: false });
+    let o = null;
+    if (builder.enabled) o = await builder.overview().catch(() => null);
+    add("builder", "Website builder", "HQ is connected to the builder", !!o, o ? `Version ${o.version}, ${o.sites.length} websites.` : builder.enabled ? "The builder isn't answering. Is it running?" : "Start the builder once, then restart HQ.");
+    add("builder-online", "Website builder", "The builder is on a server, with HTTPS", !!o && /^https:\/\//.test(o.builderUrl), o ? (/^https:/.test(o.builderUrl) ? o.builderUrl : `It's at ${o.builderUrl}, so customers can't reach it yet.`) : "", "Follow SERVER-SETUP.md (about an hour).");
+    const siteId = settings.marketing.siteId;
+    const own = siteId && builder.enabled ? await builder.site(siteId).catch(() => null) : null;
+    add("website", "Website builder", "Our website is made", !!own, own ? `${own.site.name}${own.site.publishedAt ? ", published" : ", not published yet"}.` : "Ask Bea: Settings → Ask Bea to make our website.");
+    add("website-live", "Website builder", "Our website is published", !!own?.site.publishedAt, own?.site.url || "", "Check it in the builder, then press Publish (and add your domain in its Site tab → Address).");
+    add("whmcs", "WHMCS", "HQ is connected to WHMCS", whmcs.enabled, whmcs.enabled ? whmcs.adminUrl : "Add WHMCS_URL, WHMCS_IDENTIFIER and WHMCS_SECRET to hq-settings.txt.");
+    if (whmcs.enabled) {
+      const tryIt = async (fn) => { try { return await fn(); } catch (err) { return { error: err.message }; } };
+      const servers = await tryIt(() => whmcs.servers());
+      add("whmcs-server", "WHMCS", "Your hosting servers are added to WHMCS", Array.isArray(servers) && servers.length > 0, servers.error || (servers.length ? servers.map((x) => x.name).join(", ") : "None yet."), "WHMCS → System Settings → Servers: add your reseller's WHM (cPanel module) and the builder (EKA Website Builder module).");
+      const pay = await tryIt(() => whmcs.paymentMethods());
+      add("payments", "WHMCS", "Customers can pay (a payment gateway)", Array.isArray(pay) && pay.length > 0, pay.error || (pay.length ? pay.map((x) => x.displayname || x.module).join(", ") : "None yet."), "WHMCS → System Settings → Payment Gateways: activate Stripe and enter your Stripe keys.");
+      const tlds = await tryIt(() => whmcs.tldPricing());
+      const missingTlds = tlds.error ? [] : DOMAINS.filter(([t]) => !tlds[t]).map(([t]) => `.${t}`);
+      add("domains", "WHMCS", "Domain names on sale", !tlds.error && !missingTlds.length, tlds.error || (missingTlds.length ? `Missing: ${missingTlds.join(", ")}.` : "Domain prices are set."), `WHMCS → System Settings → Domain Pricing: ${DOMAINS.map(([t, pr]) => `.${t} £${pr}`).join(", ")} a year, with your reseller's registrar module.`);
+      const products = await tryIt(() => whmcs.productsList());
+      if (Array.isArray(products)) {
+        const find = (p) => products.find((x) => norm(x.name) === norm(p.name));
+        const missing = [], wrong = [];
+        for (const p of PLANS) {
+          const x = find(p);
+          if (!x) { missing.push(p.name); continue; }
+          const want = whmcsPrices(p);
+          const price = Object.values(x.pricing || {})[0] || {};
+          const yearly = Number(price.annually), setup = Number(price.asetupfee || price.msetupfee || 0);
+          if ((yearly > 0 && Math.abs(yearly - want.annually) > 0.01) || (p.setup && Math.abs(setup - p.setup) > 0.01)) wrong.push(`${p.name} (should be £${want.annually.toFixed(2)} a year${p.setup ? ` + £${p.setup} setup` : ""})`);
+        }
+        add("products", "WHMCS", "All our plans are in WHMCS", !missing.length, missing.length ? `Missing ${missing.length}: ${missing.join(", ")}.` : `All ${PLANS.length} plans are there.`, "WHMCS → System Settings → Products/Services: create each one with the names and prices in HOSTING-SETUP.md.");
+        add("prices", "WHMCS", "Prices match the website", !wrong.length && !missing.length, wrong.length ? `Different: ${wrong.join("; ")}.` : missing.length ? "Add the missing plans first." : "They match.", "Yearly price = 12 × the website's price; monthly about 20% more (licences and the care plan: monthly as shown, yearly = 10 months).");
+        const dfy = PLANS.filter((p) => p.customFields).map(find).filter(Boolean);
+        const noQuestions = dfy.filter((x) => { const b = briefFromAnswers(Object.fromEntries((x.customfields?.customfield || []).map((f) => [f.name, "x"]))); return !(b.name && b.description); });
+        add("dfy-questions", "WHMCS", "Done-for-you orders ask about the business", dfy.length > 0 && !noQuestions.length, !dfy.length ? "Add the done-for-you products first." : noQuestions.length ? `${noQuestions.map((x) => x.name).join(", ")} ${noQuestions.length === 1 ? "doesn't" : "don't"} ask the questions Bea needs yet.` : "Bea will get everything she needs.", `On each done-for-you product → Custom Fields (tick "Show on Order Form"): ${ORDER_QUESTIONS.map(([q]) => q).join("; ")}.`);
+      } else add("products", "WHMCS", "All our plans are in WHMCS", false, products.error);
+    }
+    add("phone", "HQ", "Henry can message your phone", notifier.enabled, notifier.enabled ? `By ${notifier.channels.join(", ")}.` : "Not yet.", "Install the free ntfy app, subscribe to a secret topic name and put it in NTFY_TOPIC.");
+    for (const [id, title, how] of MANUAL_STEPS) items.push({ id, group: "Business", title, ok: !!state.setupDone?.[id], detail: "", how, manual: true });
+    return { items, done: items.filter((i) => i.ok).length, total: items.length };
+  }
+  function setSetupDone(id, value) {
+    if (!MANUAL_STEPS.some(([x]) => x === id)) throw new Error("Unknown step.");
+    state.setupDone = { ...(state.setupDone || {}), [id]: !!value };
+    save();
+  }
+
   // ---- approving -----------------------------------------------------------------------
   async function approve(id, { draft, manual = false } = {}) {
     const task = tasks.find((t) => t.id === id);
@@ -690,6 +769,9 @@ ${help}`;
       summary = "Agreed. It's on the to-do list.";
       ideas.push({ id: newId(), title: task.title.replace(/^From the meeting: /, ""), text: task.summary, channel: "Meeting", effort: "", status: "doing", by: task.data.owner, at: now().toISOString() });
       log("boss", `You agreed: ${task.title.replace(/^From the meeting: /, "")}.`);
+    } else if (task.kind === "website") {
+      summary = "Checked.";
+      log("builder", "You've checked our website.");
     } else if (task.status === "alert") {
       summary = "Marked as sorted.";
     }
@@ -785,7 +867,7 @@ ${help}`;
 
   return {
     init, tick, overview, stats, newMission, approve, dismiss, saveDraft, retry, setSettings,
-    checkTickets, websiteBriefs, buildForOrder, opsCheck, accountRound, marketingWeek, marketingDaily, newIdeas, briefing, meeting, sendNotes,
+    checkTickets, websiteBriefs, buildForOrder, setupCheck, setSetupDone, ownWebsite, opsCheck, accountRound, marketingWeek, marketingDaily, newIdeas, briefing, meeting, sendNotes,
     seen: () => { lastSeen = now().getTime(); },
     activityLog: (limit = 300) => activity.slice(-limit).reverse(),
     meetings: () => meetings.slice().reverse(),
