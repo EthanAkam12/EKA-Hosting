@@ -177,6 +177,7 @@ api.get("/designs", wrap(async (req, res) => res.json({ designs: builder.enabled
 api.post("/run/:what", wrap(async (req, res) => {
   const runs = {
     support: () => staff.checkTickets(), ops: () => staff.opsCheck({ domains: true }), account: () => staff.accountRound(),
+    briefs: () => staff.websiteBriefs(),
     marketing: async () => (await staff.marketingWeek()) + (await staff.marketingDaily()), ideas: () => staff.newIdeas(),
     briefing: () => staff.briefing(), meeting: () => staff.meeting(),
   };

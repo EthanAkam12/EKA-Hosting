@@ -65,6 +65,7 @@ export function ekaWebsite({ name = "EKA Hosting", images = {} } = {}) {
       { text: "Web Hosting", href: "/web-hosting" },
       { text: "Web Design", href: "/web-design" },
       { text: "Done-for-you websites", href: "/web-design#done-for-you", sub: true },
+      { text: "Get your website built", href: "/website-brief", sub: true },
       { text: "For hosting companies", href: "/web-design#for-hosts", sub: true },
       { text: "Pricing", href: "/pricing" },
       { text: "Blog", href: "/blog" },
@@ -164,7 +165,7 @@ export function ekaWebsite({ name = "EKA Hosting", images = {} } = {}) {
   ]);
 
   const design = page("Web Design", "web-design", "Done-for-you small business websites from £299, built with our AI website builder and finished by a person. Plus the EKA website builder for hosting companies.", [
-    pageHero("Web design", "We'll build it for you", "Done-for-you websites for small businesses, and our website builder for hosting companies who want to offer it under their own name.", [["Done-for-you websites", "#done-for-you", "primary"], ["For hosting companies", "#for-hosts", "light"]]),
+    pageHero("Web design", "We'll build it for you", "Done-for-you websites for small businesses, and our website builder for hosting companies who want to offer it under their own name.", [["Get your website built", "/website-brief", "primary"], ["For hosting companies", "#for-hosts", "light"]]),
     sec({ layout: "1", padding: "lg", align: "center", width: "narrow", anchor: "done-for-you" }, [head("Done-for-you websites", "A professional website, without lifting a finger", "We use our AI website builder to do the groundwork, then a person finishes it to a high standard. Freelancers often charge £1,500 or more for this.")]),
     sec({ layout: "1", padding: "md", width: "narrow" }, [[b("timeline", { items: [
       { date: "Day 1", title: "Tell us about your business", text: "A short form or a 15-minute call: what you do, who for, and any words, photos or logo you have." },
@@ -172,7 +173,7 @@ export function ekaWebsite({ name = "EKA Hosting", images = {} } = {}) {
       { date: "Day 5", title: "You check it", text: "You get a link to the finished website. Click anything to leave a comment, or press Approve." },
       { date: "Go live", title: "We publish it", text: "We connect your domain and set up your Google listing. You can still change anything yourself afterwards." },
     ] })]]),
-    priceRow(DFY_PLANS, "/contact"),
+    priceRow(DFY_PLANS, "/website-brief"),
     sec({ layout: "1", padding: "md", width: "narrow", align: "center" }, [[b("offer", { badge: "Nothing to pay upfront", title: "£0 setup on a 12-month plan at £39 a month", text: "The Launch website and Builder Business hosting together, spread over the year.", buttonText: "Ask about it", href: "/contact", countdown: false, style: "primary", align: "center" })]]),
     sec({ layout: "1", padding: "xl", align: "center", width: "narrow", background: "dark", anchor: "for-hosts" }, [[eyebrow("For hosting companies", "center"), H("Offer an AI website builder under your own name", 2, "center"), T("Give your customers the EKA website builder with your brand on it. It plugs into cPanel, DirectAdmin and WHMCS, customers sign in with one click, and you set the plans.", "center", { color: "#c7cdf5" })]], { bg: "#0b1020", bg2: "#134e4a", shapeTop: "curve", shapeH: 50 }),
     sec({ layout: "1-1-1", padding: "lg", background: "surface" }, [
@@ -245,7 +246,31 @@ export function ekaWebsite({ name = "EKA Hosting", images = {} } = {}) {
     ]]),
   ]);
 
-  site.pages = [home, builder, hosting, design, pricing, blog, contact, post];
+  const brief = page("Get your website built", "website-brief", "Tell us about your business and we'll build your website for you, ready for you to check within days.", [
+    pageHero("Done-for-you websites", "Tell us about your business", "Fill this in and we'll start building your website straight away. The more you tell us, the more of it will be your own words; you'll get a link to check it before anything goes live.", null),
+    sec({ layout: "2-1", padding: "xl", width: "normal" }, [[b("form", { kind: "enquiry", fields: [
+      { label: "Business name", type: "text", required: true, options: "" },
+      { label: "What does your business do?", type: "textarea", required: true, options: "" },
+      { label: "Your services (one per line, e.g. Boiler repairs - Same-day fixes)", type: "textarea", required: false, options: "" },
+      { label: "Areas you cover", type: "text", required: false, options: "" },
+      { label: "Opening hours", type: "textarea", required: false, options: "" },
+      { label: "Prices (optional, one per line, e.g. Boiler service - £80)", type: "textarea", required: false, options: "" },
+      { label: "Customer reviews (optional, one per line: the review - their name)", type: "textarea", required: false, options: "" },
+      { label: "Why do customers choose you? (optional, one per line)", type: "textarea", required: false, options: "" },
+      { label: "Phone", type: "tel", required: false, options: "" },
+      { label: "Email", type: "email", required: true, options: "" },
+      { label: "Address", type: "text", required: false, options: "" },
+      { label: "Facebook or Instagram links (optional)", type: "text", required: false, options: "" },
+      { label: "Which style do you like?", type: "select", required: false, options: "Modern, Elegant, Bold, Minimal, Playful, Luxury, Natural, Warm & friendly, Corporate, Fresh" },
+      { label: "I'm happy to be contacted about my website", type: "checkbox", required: true, options: "" },
+    ], submitText: "Build my website", successMessage: "Thank you! We've started on your website and will email you a link to check it.", confirmEmail: true })], [
+      card("clock", "What happens next", "We start building straight away. You'll get an email with a link to your new website to check, usually within a few days.", { style: "surface" }),
+      card("image", "Photos and logo", "Got a logo or photos? Reply to our email with them and we'll add them.", { style: "surface" }),
+      card("tag", "Prices", "Done-for-you websites start at £299 (Launch) or £599 (Growth). We'll confirm which one suits you.", { style: "surface", linkText: "See the packages", href: "/web-design#done-for-you" }),
+    ]]),
+  ]);
+
+  site.pages = [home, builder, hosting, design, pricing, blog, contact, brief, post];
   // Section titles sit close to the cards or prices under them.
   for (const p of site.pages) p.sections.forEach((sct, i) => {
     const blocks = sct.columns.length === 1 ? sct.columns[0].blocks : [];

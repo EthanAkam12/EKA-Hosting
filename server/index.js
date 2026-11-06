@@ -42,6 +42,8 @@ import { ensurePrivacyPage } from "../shared/legal.js";
 import { siteFromDesign, SITE_DESIGNS } from "../shared/site-designs.js";
 import { LANGUAGES } from "../shared/i18n.js";
 import { siteAdvice } from "../shared/advice.js";
+import { fillFromBrief } from "../shared/brief-fill.js";
+import { STYLE_KITS } from "../shared/style-kits.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -643,7 +645,7 @@ const hqSite = (meta) => {
   return {
     id: meta.id, name: meta.name, slug: meta.slug, status: meta.status, error: meta.error || null,
     publishedAt: meta.publishedAt || null, updatedAt: meta.updatedAt, createdAt: meta.createdAt, url: meta.publishedAt ? liveUrl(meta) : null,
-    domains: meta.domains || [], suspended: !!meta.suspended, approval: meta.approval || null, formEmail: meta.formEmail || "",
+    domains: meta.domains || [], suspended: !!meta.suspended, todo: meta.todo || [], approval: meta.approval || null, formEmail: meta.formEmail || "",
     owner: owner ? { id: owner.id, email: owner.email, name: owner.name, account: owner.external || "", plan: users.plan(owner.plan)?.name || "", disabled: !!owner.disabled } : null,
   };
 };
@@ -1166,6 +1168,14 @@ function cleanBrief(input = {}) {
       .filter((p) => p && /^\/_tmp\/[\w.-]+$/.test(p.url || ""))
       .map((p) => ({ url: p.url, note: str(p.note, 140) })).slice(0, 12),
     // A short description per page, by page name ("Home", "About"…).
+    // Extra details for building without AI (one per line): see shared/brief-fill.js.
+    tagline: str(input.tagline, 160),
+    services: str(input.services, 4000),
+    area: str(input.area, 200),
+    reviews: str(input.reviews, 4000),
+    highlights: str(input.highlights, 1000),
+    prices: str(input.prices, 6000),
+    kit: STYLE_KITS.some((k) => k.id === input.kit) ? input.kit : "",
     pageInfo: Object.fromEntries(Object.entries(input.pageInfo && typeof input.pageInfo === "object" ? input.pageInfo : {})
       .map(([k, v]) => [str(k, 40), str(v, 1500)]).filter(([k, v]) => k && v).slice(0, 13)),
   };
@@ -1420,6 +1430,11 @@ async function buildFromDesign({ user, owner, demo, design, brief, fill }) {
           }
         }
         site = normalizeSite(site);
+      } else {
+        // No AI: the client's own words and details go where they belong.
+        const filled = fillFromBrief(site, brief);
+        site = filled.site;
+        await store.updateMeta(meta.id, { todo: filled.todo });
       }
       ensurePrivacyPage(site);
       await fillImages(site, { dir: TMP_MEDIA, urlPrefix: "/_tmp/", brief });

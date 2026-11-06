@@ -126,7 +126,7 @@ test("host API for EKA HQ: overview, building a site, review links, site details
 test("EKA Hosting's own website imports into the builder and renders", async () => {
   const { ekaWebsite } = await import("../shared/eka-website.js");
   const site = ekaWebsite({ name: "EKA Hosting", images: { editor: "hq-image:shot.webp" } });
-  assert.deepEqual(site.pages.filter((p) => !p.post).map((p) => p.slug), ["index", "website-builder", "web-hosting", "web-design", "pricing", "blog", "contact"]);
+  assert.deepEqual(site.pages.filter((p) => !p.post).map((p) => p.slug), ["index", "website-builder", "web-hosting", "web-design", "pricing", "blog", "contact", "website-brief"]);
   const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
   const res = await fetch(`${BASE}/api/host/hq/import`, { method: "POST", headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "EKA Hosting", site, images: { "shot.webp": tinyPng, "../evil.webp": tinyPng } }) });
   const out = await res.json();

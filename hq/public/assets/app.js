@@ -117,7 +117,7 @@ function openDrawer(who, refreshOnly = false) {
   officeEl.querySelector(".drawer")?.remove();
   const ag = S.agents[who], c = S.counts[who];
   const mine = S.activity.filter((a) => a.agent === who).slice(0, 8);
-  const runs = { boss: [["briefing", "Write a briefing now"], ["meeting", "Call a team meeting"]], support: [["support", "Check tickets now"]], ops: [["ops", "Run all checks now"]], account: [["account", "Do the rounds now"]], marketing: [["marketing", "Plan this week now"], ["ideas", "Think up new ideas"]], builder: [] }[who] || [];
+  const runs = { boss: [["briefing", "Write a briefing now"], ["meeting", "Call a team meeting"]], support: [["support", "Check tickets now"]], ops: [["ops", "Run all checks now"]], account: [["account", "Do the rounds now"]], marketing: [["marketing", "Plan this week now"], ["ideas", "Think up new ideas"]], builder: [["briefs", "Check for new website briefs"]] }[who] || [];
   const tasksOf = S.open.filter((t) => t.agent === who);
   const box = h("aside", { class: "drawer pixel-box" },
     h("button", { class: "close", "aria-label": "Close", onclick: () => { drawer = null; box.remove(); } }, "✕"),
@@ -216,6 +216,16 @@ async function pageTeam() {
     f("description", "What they do", { tag: "textarea", rows: 3, maxlength: 6000, style: "min-height:80px" }),
     h("div", { class: "grid g2" }, f("phone", "Phone", { maxlength: 60 }), f("email", "Their email (the review link goes here)", { type: "email", maxlength: 200 })),
     f("address", "Address", { maxlength: 300 }),
+    f("services", "Services, one per line (e.g. \"Boiler repairs - Same-day fixes for all makes\")", { tag: "textarea", rows: 4, maxlength: 4000, style: "min-height:90px" }),
+    h("div", { class: "grid g2" }, f("area", "Areas they cover", { maxlength: 200 }), f("tagline", "Headline (optional)", { maxlength: 160 })),
+    f("hours", "Opening hours, one line each", { tag: "textarea", rows: 3, maxlength: 400, style: "min-height:70px" }),
+    h("details", {}, h("summary", { class: "small", style: "cursor:pointer;margin-bottom:8px" }, "More: prices, reviews, highlights, social media, style"),
+      h("div", { class: "grid" },
+        f("prices", "Prices, one per line (e.g. \"Boiler service - £80\"; a line ending in : starts a group)", { tag: "textarea", rows: 3, maxlength: 6000, style: "min-height:70px" }),
+        f("reviews", "Real customer reviews, one per line (\"Great job! - Sarah, York\")", { tag: "textarea", rows: 3, maxlength: 4000, style: "min-height:70px" }),
+        f("highlights", "Why customers choose them, one per line (e.g. Gas Safe registered)", { tag: "textarea", rows: 2, maxlength: 1000, style: "min-height:60px" }),
+        f("socials", "Social media links", { maxlength: 600 }),
+        h("label", { class: "f" }, "Style", h("select", { class: "select", name: "kit" }, h("option", { value: "" }, "The design's own style"), ["modern|Modern", "elegant|Elegant", "bold|Bold", "minimal|Minimal", "playful|Playful", "luxury|Luxury", "natural|Natural", "friendly|Warm & friendly", "corporate|Corporate", "fresh|Fresh"].map((x) => h("option", { value: x.split("|")[0] }, x.split("|")[1])))))),
     h("label", { class: "f" }, "Design", h("select", { class: "select", name: "design" }, h("option", { value: "auto" }, "Choose one for me"), (designs || []).map((d) => h("option", { value: d.id }, d.name)))),
     h("div", {}, h("button", { class: "pxbtn", type: "submit" }, "ASK BEA TO BUILD IT")));
   return h("div", { class: "page" },
@@ -223,7 +233,7 @@ async function pageTeam() {
     h("div", { class: "grid g3", style: "margin-bottom:18px" }, cardsEl),
     h("div", { class: "grid g2" },
       h("section", { class: "panel" }, h("h2", {}, "ACTIVITY"), h("ul", { class: "log" }, S.activity.map((a) => h("li", {}, h("time", {}, ago(a.at)), h("span", {}, h("strong", { style: `color:${S.agents[a.agent]?.colour}` }, S.agents[a.agent]?.name || a.agent), " ", a.text))))),
-      h("section", { class: "panel" }, h("h2", {}, "A WEBSITE FOR A CUSTOMER"), S.connections.builder.on ? [h("p", { class: "small muted", style: "margin-top:0" }, "Bea builds it in the website builder, writes every page for the business, and brings you a review link to check before it goes to the customer. Done-for-you orders in WHMCS come to her automatically."), form] : h("p", { class: "muted" }, "Connect the builder in Settings first."))));
+      h("section", { class: "panel" }, h("h2", {}, "A WEBSITE FOR A CUSTOMER"), S.connections.builder.on ? [h("p", { class: "small muted", style: "margin-top:0" }, "Bea builds it in the website builder from what you put here: the more you fill in, the fuller the site. She brings you a review link to check before it goes to the customer. Done-for-you orders in WHMCS and the Get started form on our website come to her automatically."), form] : h("p", { class: "muted" }, "Connect the builder in Settings first."))));
 }
 
 // ---- Numbers --------------------------------------------------------------------------
@@ -385,6 +395,8 @@ function pageSettings() {
         h("h2", { style: "margin-top:14px" }, "SAM"), check("support", "autoSend", "Post replies Sam is sure about without asking me (off is safest)"),
         h("h2", { style: "margin-top:14px" }, "ALEX"), check("account", "welcome", "Welcome emails for new customers"), check("account", "overdue", "Friendly notes about overdue invoices"), check("account", "checkins", "Monthly check-ins with website customers"),
         h("h2", { style: "margin-top:14px" }, "OTTO"), num("ops", "suspendAfterDays", "Suggest suspending hosting after an invoice is overdue for (days)", 1, 120),
+        h("h2", { style: "margin-top:14px" }, "BEA"), check("builder", "autoBuild", "Start building straight away when a customer orders a done-for-you website or fills in the Get started form"), check("builder", "useAi", "Use AI to write the pages (better words, costs about 10–30p a site). Off: Bea uses the customer's own words, free"),
+        h("p", { class: "small muted" }, "For WHMCS orders, add custom fields to your done-for-you products (Business name, What does your business do?, Services, Areas you cover, Opening hours, Prices, Customer reviews, Why do customers choose you?, Which style do you like?). Bea reads them automatically. The full list is in the README."),
         h("h2", { style: "margin-top:14px" }, "MIA"), h("p", { class: "small muted" }, "The EKA Hosting website (home, website builder, hosting, web design, pricing, blog and contact pages) is ready-made: one click adds it to the builder for you to check, change and publish."), siteBtn, h("label", { class: "f" }, "Our own website in the builder (its id, from the address bar when you edit it: /admin/sites/<id>)", siteId), h("label", { class: "f", style: "margin-top:8px" }, "About the business (Mia uses this)", about))));
 }
 

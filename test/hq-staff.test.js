@@ -105,3 +105,44 @@ test("WHMCS client and phone messages: request shapes", async () => {
   assert.equal(posts[0].o.headers.Priority, "high");
   assert.equal(posts[0].o.headers.Click, "https://hq.test");
 });
+
+test("Bea builds straight away from the Get started form and from done-for-you orders, without AI", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hq-"));
+  const f = fakes();
+  const built = [];
+  let done = [];
+  f.builder = {
+    enabled: true,
+    site: async (id) => (id === "0a0a0a0a0a0a0a0a"
+      ? { submissions: [{ id: "aaaaaaaaaaaa", page: "website-brief", kind: "enquiry", at: new Date().toISOString(), done: false, fields: { "Business name": "Rosie's Bakes", "What does your business do?": "Celebration cakes in Leeds.", "Your services (one per line, e.g. Boiler repairs - Same-day fixes)": "Wedding cakes\nBirthday cakes", "Email": "rosie@example.test", "Which style do you like?": "Playful" } },
+        { id: "bbbbbbbbbbbb", page: "contact", kind: "enquiry", at: new Date().toISOString(), done: false, fields: { Email: "x@y.test" } }], posts: [], advice: [], site: { status: "ready" } }
+      : { site: { status: "ready", todo: ["Add their logo"] }, advice: [], submissions: [] }),
+    build: async (body) => { built.push(body); return { site: { id: "newsite000000000" }, editor: "http://b/admin/sites/newsite000000000" }; },
+    account: async () => ({}), reviewLink: async () => ({ url: "http://b/review/abc" }), markDone: async (id, sid) => done.push(sid),
+  };
+  f.ai.enabled = false;
+  f.whmcs.client = async () => ({ firstname: "Dev", lastname: "Shah", companyname: "Shah Electrical", email: "dev@example.test", phonenumber: "07700 900456", city: "Hull" });
+  f.whmcs.products = async () => ({ total: 1, products: [{ orderid: 9, name: "Done-for-you website: Launch", status: "Pending", customfields: { customfield: [{ name: "What does your business do?", value: "Electrician in Hull" }, { name: "Services", value: "Rewiring\nEV chargers" }, { name: "Areas you cover", value: "Hull and East Yorkshire" }] } }] });
+  const staff = createStaff({ dataDir: dir, ...f, now: () => new Date() });
+  await staff.init();
+  staff.setSettings({ marketing: { siteId: "0a0a0a0a0a0a0a0a" } });
+
+  assert.equal(await staff.websiteBriefs(), 1);
+  assert.equal(built[0].brief.name, "Rosie's Bakes");
+  assert.equal(built[0].brief.services, "Wedding cakes\nBirthday cakes");
+  assert.equal(built[0].brief.kit, "playful");
+  assert.equal(built[0].fill, false, "no AI");
+  assert.deepEqual(done, ["aaaaaaaaaaaa"], "only the brief is marked done; other messages stay with Mia");
+  assert.equal(await staff.websiteBriefs(), 0, "each brief once");
+
+  await staff.buildForOrder(1, 9);
+  assert.equal(built[1].brief.name, "Shah Electrical");
+  assert.equal(built[1].brief.services, "Rewiring\nEV chargers");
+  assert.equal(built[1].brief.area, "Hull and East Yorkshire");
+  assert.equal(built[1].brief.phone, "07700 900456");
+  for (let i = 0; i < 50 && staff._tasks().filter((t) => t.kind === "build" && t.status === "waiting").length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+  const ready = staff._tasks().filter((t) => t.kind === "build" && t.status === "waiting");
+  assert.equal(ready.length, 2);
+  assert.match(ready[0].summary, /Add their logo/);
+  assert.equal(ready[1].draft.to, "dev@example.test");
+});

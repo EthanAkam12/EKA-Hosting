@@ -16,6 +16,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { monthlyAmount } from "./whmcs.js";
 import { IDEAS } from "./marketing-plan.js";
+import { briefFromAnswers } from "../../shared/brief-fill.js";
 
 export const AGENTS = {
   boss: { name: "Henry", role: "Boss", colour: "#0f766e" },
@@ -30,7 +31,7 @@ export const STAFF = ["support", "builder", "account", "ops", "marketing"];
 const DEFAULT_SETTINGS = {
   boss: { on: true, briefingHour: 8, meetingDay: 1, meetingHour: 9, notifyAway: true },
   support: { on: true, autoSend: false },
-  builder: { on: true },
+  builder: { on: true, autoBuild: true, useAi: false },
   account: { on: true, welcome: true, overdue: true, checkins: true },
   ops: { on: true, suspendAfterDays: 21 },
   marketing: { on: true, siteId: "", about: "" },
@@ -219,7 +220,9 @@ ${help}`;
   // ---- Bea: done-for-you websites ------------------------------------------------------
   async function newMission(input) {
     if (!builder.enabled) throw new Error("Connect the builder first (Settings tab).");
-    const brief = { name: String(input.name || "").trim().slice(0, 120), description: String(input.description || "").trim().slice(0, 6000), phone: String(input.phone || "").slice(0, 60), email: String(input.email || "").slice(0, 200), address: String(input.address || "").slice(0, 300) };
+    const field = (k, max) => String(input[k] || "").trim().slice(0, max);
+    const brief = { name: field("name", 120), description: field("description", 6000), phone: field("phone", 60), email: field("email", 200), address: field("address", 300),
+      tagline: field("tagline", 160), services: field("services", 4000), area: field("area", 200), hours: field("hours", 400), prices: field("prices", 6000), reviews: field("reviews", 4000), highlights: field("highlights", 1000), socials: field("socials", 600), kit: field("kit", 30) };
     if (!brief.name) throw new Error("Give the business a name.");
     const design = input.design && input.design !== "auto" ? input.design : guessDesign(`${brief.name} ${brief.description}`);
     const sendTo = String(input.sendTo || brief.email || "").trim();
@@ -228,11 +231,12 @@ ${help}`;
     work("builder", task, "Building a website", async () => {
       let account;
       if (sendTo) { await builder.account({ email: sendTo, name: brief.name, account: input.clientId ? `whmcs:${input.clientId}` : undefined }).catch(() => null); account = sendTo; }
-      const { site, editor } = await builder.build({ design, brief, email: account });
-      update(task, { data: { ...task.data, siteId: site.id, editor }, summary: ai.enabled ? "Writing every page for the business…" : "Building from the template…" });
+      const useAi = ai.enabled && settings.builder.useAi;
+      const { site, editor } = await builder.build({ design, brief, email: account, fill: useAi });
+      update(task, { data: { ...task.data, siteId: site.id, editor }, summary: useAi ? "Writing every page for the business…" : "Putting their details into the design…" });
       for (let i = 0; ; i++) {
         const info = await builder.site(site.id).catch(() => null);
-        if (info?.site.status === "ready") { task.data.advice = info.advice; break; }
+        if (info?.site.status === "ready") { task.data.advice = [...(info.site.todo || []), ...info.advice]; break; }
         if (info?.site.status === "error") throw new Error(`The build failed: ${info.site.error}`);
         if (i > 400) throw new Error("The build took too long. Open it in the builder to see how far it got.");
         await new Promise((r) => setTimeout(r, 3000));
@@ -248,6 +252,43 @@ ${help}`;
       log("builder", `Finished ${brief.name}'s website and sent it to Henry for checking.`);
     });
     return task;
+  }
+
+  // What the customer told us when they ordered (WHMCS custom fields on the
+  // done-for-you product, e.g. "What does your business do?"), plus their account details.
+  async function buildForOrder(clientId, orderId) {
+    const c = await whmcs.client(clientId);
+    const { products } = await whmcs.products({ clientId });
+    const mine = products.filter((p) => !orderId || Number(p.orderid) === Number(orderId));
+    const answers = Object.fromEntries(mine.flatMap((p) => (p.customfields?.customfield || []).map((f) => [f.name, f.value])));
+    const brief = briefFromAnswers(answers);
+    return newMission({
+      ...brief,
+      name: brief.name || c.companyname || `${c.firstname} ${c.lastname}`,
+      phone: brief.phone || c.phonenumber, email: brief.email || c.email,
+      address: brief.address || [c.address1, c.city, c.postcode].filter(Boolean).join(", "),
+      clientId, sendTo: c.email,
+    });
+  }
+
+  // The "Get started" form on our own website: each brief goes straight to Bea.
+  async function websiteBriefs() {
+    if (!on("builder") || !settings.builder.autoBuild || !builder.enabled || !settings.marketing.siteId) return 0;
+    let n = 0;
+    await run("builder", "Reading new website briefs", async () => {
+      const info = await builder.site(settings.marketing.siteId, 7);
+      for (const sub of info.submissions.filter((x) => x.page === "website-brief" && !x.done && now() - Date.parse(x.at) < 14 * DAY)) {
+        const key = `brief:${sub.id}`;
+        if (has(key)) continue;
+        const brief = briefFromAnswers(sub.fields);
+        addTask("builder", { kind: "note", key, status: "done", title: `Website brief from ${brief.name || brief.email || "a visitor"}`, summary: "Bea started building straight away." });
+        if (!brief.name) { log("builder", "Got a website brief without a business name; skipped it."); continue; }
+        n++;
+        await newMission({ ...brief, sendTo: brief.email });
+        await builder.markDone(settings.marketing.siteId, sub.id).catch(() => {});
+      }
+    });
+    return n;
   }
 
   // ---- Otto: hosting and the builder ----------------------------------------------------
@@ -315,7 +356,12 @@ ${help}`;
             log("ops", `Spotted new order #${o.ordernum} from ${o.name}.`);
             // Done-for-you websites go to Bea too.
             if (/done.?for.?you|web ?design|launch|growth|website package/i.test(items) && on("builder")) {
-              addTask("builder", { kind: "build-offer", key: `dfy:${o.id}`, status: "waiting", title: `Done-for-you website ordered by ${o.name}`, summary: `${items}. Approve and Bea will start building, using what they told us in the order. Check the details first.`, data: { clientId: Number(o.userid), name: o.name, orderId: Number(o.id) } });
+              if (settings.builder.autoBuild) {
+                addTask("builder", { kind: "note", key: `dfy:${o.id}`, status: "done", title: `Done-for-you website ordered by ${o.name}`, summary: "Bea started building straight away." });
+                await buildForOrder(Number(o.userid), Number(o.id)).catch((err) => log("builder", `Couldn't start ${o.name}'s website: ${err.message}`));
+              } else {
+                addTask("builder", { kind: "build-offer", key: `dfy:${o.id}`, status: "waiting", title: `Done-for-you website ordered by ${o.name}`, summary: `${items}. Approve and Bea will start building, using what they told us in the order.`, data: { clientId: Number(o.userid), name: o.name, orderId: Number(o.id) } });
+              }
             }
           }
           const days = settings.ops.suspendAfterDays;
@@ -454,7 +500,7 @@ ${help}`;
     let n = 0;
     await run("marketing", "Answering enquiries", async () => {
       const info = await builder.site(settings.marketing.siteId, 7);
-      for (const sub of info.submissions.filter((x) => !x.done && x.kind !== "newsletter" && now() - Date.parse(x.at) < 14 * DAY)) {
+      for (const sub of info.submissions.filter((x) => !x.done && x.kind !== "newsletter" && x.page !== "website-brief" && now() - Date.parse(x.at) < 14 * DAY)) {
         if (has(`mk:lead:${sub.id}`)) continue;
         const email = Object.values(sub.fields).find((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()));
         if (!email) continue;
@@ -613,8 +659,7 @@ ${help}`;
       summary = manual ? "Sent by hand." : "Sent.";
       log(task.agent, `Sent: ${d.subject}.`);
     } else if (task.kind === "build-offer") {
-      const c = await whmcs.client(task.data.clientId);
-      const t = await newMission({ name: c.companyname || `${c.firstname} ${c.lastname}`, description: d.text || c.notes || "", phone: c.phonenumber, email: c.email, address: [c.address1, c.city, c.postcode].filter(Boolean).join(", "), clientId: task.data.clientId, sendTo: c.email });
+      const t = await buildForOrder(task.data.clientId, task.data.orderId);
       summary = `Bea has started building it (${t.title}).`;
     } else if (task.kind === "order") {
       if (!manual) await whmcs.acceptOrder(task.data.orderId);
@@ -683,6 +728,7 @@ ${help}`;
     const due = (name, every) => now() - (state.last[name] || 0) >= every;
     try {
       if (on("support") && due("tickets", 10 * MIN)) { state.last.tickets = now().getTime(); await checkTickets(); }
+      if (on("builder") && due("briefs", 10 * MIN)) { state.last.briefs = now().getTime(); await websiteBriefs(); }
       if (on("ops") && due("ops", HOUR)) await opsCheck({ domains: due("domains", DAY) });
       if (on("account") && due("accountRound", 6 * HOUR) && lt.hour >= 9 && lt.hour < 18) { state.last.accountRound = now().getTime(); await accountRound(); }
       if (on("marketing")) {
@@ -735,7 +781,7 @@ ${help}`;
 
   return {
     init, tick, overview, stats, newMission, approve, dismiss, saveDraft, retry, setSettings,
-    checkTickets, opsCheck, accountRound, marketingWeek, marketingDaily, newIdeas, briefing, meeting, sendNotes,
+    checkTickets, websiteBriefs, buildForOrder, opsCheck, accountRound, marketingWeek, marketingDaily, newIdeas, briefing, meeting, sendNotes,
     seen: () => { lastSeen = now().getTime(); },
     activityLog: (limit = 300) => activity.slice(-limit).reverse(),
     meetings: () => meetings.slice().reverse(),
