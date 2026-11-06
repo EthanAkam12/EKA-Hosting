@@ -19,7 +19,9 @@ AI_PROVIDER=
 AI_API_KEY=
 
 # --- The website builder ---
-# Its address and its "host API key" (on the builder's Customers page, or HOST_API_KEY in its settings.txt).
+# When HQ and the builder are in the same folder (as they are after you download them),
+# HQ finds the builder's key by itself: just start the builder once. Only fill these in
+# if the builder is somewhere else (its "host API key" is on its Customers page).
 BUILDER_URL=http://localhost:3000
 BUILDER_API_KEY=
 

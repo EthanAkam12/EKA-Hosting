@@ -62,7 +62,21 @@ initUsageLog(DATA_DIR);
 const ai = createAi();
 const mailer = createMailer({ ...env, MAIL_FROM: env.MAIL_FROM || `${BUSINESS} <hello@${(env.BUSINESS_DOMAIN || "localhost")}>` });
 const whmcs = createWhmcs({ url: env.WHMCS_URL, identifier: env.WHMCS_IDENTIFIER, secret: env.WHMCS_SECRET, accessKey: env.WHMCS_ACCESS_KEY, adminUser: env.WHMCS_ADMIN_USER });
-const builder = createBuilder({ url: env.BUILDER_URL, key: env.BUILDER_API_KEY });
+// The builder's key: from hq-settings.txt, or found automatically when the
+// builder is in the same folder (its settings.txt, or the key it made itself).
+const { readFileSync } = await import("node:fs");
+function builderKey() {
+  if (env.BUILDER_API_KEY) return env.BUILDER_API_KEY;
+  let dataDir = path.join(ROOT, "data");
+  try {
+    const text = readFileSync(path.join(ROOT, "settings.txt"), "utf8");
+    const get = (k) => text.match(new RegExp(`^${k}=(.*)$`, "m"))?.[1]?.trim();
+    if (get("HOST_API_KEY")) return get("HOST_API_KEY");
+    if (get("DATA_DIR")) dataDir = path.resolve(ROOT, get("DATA_DIR"));
+  } catch { /* no builder settings here */ }
+  try { return readFileSync(path.join(dataDir, ".host-api-key"), "utf8").trim(); } catch { return ""; }
+}
+const builder = createBuilder({ url: env.BUILDER_URL || "http://localhost:3000", key: builderKey });
 const notifier = createNotifier({ env, mailer });
 
 // What Sam knows: the builder's help pages, your hosting FAQ, and anything in hq-help.txt.

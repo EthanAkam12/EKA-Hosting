@@ -373,7 +373,7 @@ function pageSettings() {
       h("section", { class: "panel" }, h("h2", {}, "CONNECTIONS"),
         conn(c.ai.on, "AI", `Using ${c.ai.provider}.`, "Add ANTHROPIC_API_KEY (or a free AI_PROVIDER) so the team can write."),
         conn(c.whmcs.on, "WHMCS", h("a", { href: c.whmcs.admin, target: "_blank", rel: "noopener" }, c.whmcs.admin), "Add WHMCS_URL, WHMCS_IDENTIFIER and WHMCS_SECRET (WHMCS → System Settings → API Credentials)."),
-        conn(c.builder.on, "Website builder", c.builder.url, "Add BUILDER_URL and BUILDER_API_KEY (the builder's host API key, on its Customers page)."),
+        conn(c.builder.on, "Website builder", c.builder.url, "Start the builder (start-windows.bat) at least once, then restart HQ: it connects by itself. (If the builder is on another computer, put BUILDER_URL and BUILDER_API_KEY in hq-settings.txt.)"),
         conn(c.mail.on, "Email", "HQ can send emails that don't go through WHMCS.", "Optional: SMTP_HOST etc. Emails to WHMCS customers are sent by WHMCS anyway."),
         conn(c.notify.on, "Messages to your phone", `By ${c.notify.channels.join(", ")}.`, "Install the free ntfy app, subscribe to a secret topic name, and put it in NTFY_TOPIC. Or use Telegram."),
         h("div", { class: "row", style: "margin-top:12px" }, testBtn, tgBtn)),
